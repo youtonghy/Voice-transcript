@@ -11,7 +11,7 @@ import openai
 # 创建 OpenAI 客户端实例
 client = openai.OpenAI(
     api_key="",  # 替换为你的 API Key
-    base_url="https://goapi.gptnb.ai/v1"
+    base_url="https://domain.com/v1" # 替换为官方或者你自己的地址,以/v1结尾
 )
 MODEL = "gpt-4o-transcribe"
 DURATION = 5           # 每次录音段落的时长（秒）
