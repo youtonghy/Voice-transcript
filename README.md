@@ -35,11 +35,13 @@ python openai_transcribe.py
 在脚本顶部可以修改以下配置：
 
 **录音配置：**
-- `RECORD_KEY`：录音快捷键（默认：'space'）
 - `SAMPLE_RATE`：采样率（默认：44100Hz）
 - `CHANNELS`：声道数（默认：1，单声道）
 - `OUTPUT_DIR`：输出目录（默认：'recordings'）
-- `AUTO_INPUT_ENABLED`：自动输入功能（默认：True）
+
+**通过 config.json 配置：**
+- `record_key`：录音快捷键（默认：'ctrl+alt'）
+- `device_id`：录音设备ID（null 表示使用默认设备）
 
 **Azure OpenAI 配置（通过 config.json）：**
 - `azure_openai_api_key`：您的 Azure OpenAI API 密钥
@@ -49,23 +51,26 @@ python openai_transcribe.py
 ```json
 {
   "device_id": 1,
+  "record_key": "ctrl+alt",
   "azure_openai_api_key": "your-api-key-here",
   "azure_openai_endpoint": "https://your-resource.openai.azure.com/"
 }
 ```
 
-#### 支持的快捷键格式：
-- 单个键：`'space'`, `'f1'`, `'a'` 等
-- 组合键：`'ctrl+r'`, `'alt+f1'`, `'shift+space'` 等
+#### 支持的快捷键格式（在 config.json 中配置）：
+- 单个键：`"space"`, `"f1"`, `"a"` 等
+- 组合键：`"ctrl+alt"`, `"ctrl+space"`, `"alt+f1"`, `"shift+space"` 等
+- 纯修饰键组合：`"ctrl+alt"`, `"ctrl+shift"`, `"alt+shift"` 等
 
 #### 使用步骤：
 
 **首次使用（配置 Azure OpenAI）：**
 1. 程序首次运行会自动创建 `config.json` 配置文件
-2. 编辑 `config.json` 文件，添加您的 Azure OpenAI 配置：
+2. 编辑 `config.json` 文件，添加您的配置：
    ```json
    {
      "device_id": null,
+     "record_key": "ctrl+alt",
      "azure_openai_api_key": "您的API密钥",
      "azure_openai_endpoint": "https://您的资源名.openai.azure.com/"
    }
@@ -76,7 +81,7 @@ python openai_transcribe.py
 1. 运行脚本后，会自动检查 `config.json` 配置文件
 2. **首次运行**：列出可用设备，选择后自动保存配置
 3. **后续运行**：直接使用保存的设备，无需重新选择
-4. 按住空格键（或自定义快捷键）开始录音，松开停止录音
+4. 按住配置的快捷键（默认 Ctrl+Alt）开始录音，松开停止录音
 5. 录音文件临时保存到 `recordings/` 目录
 6. 如果配置了 Azure OpenAI，录音后会自动转写并显示文字结果
 7. **智能输入**：转写完成后，程序会给您3秒时间切换到目标应用
@@ -116,12 +121,14 @@ python realtime_transcribe.py
 ```json
 {
   "device_id": 1,
+  "record_key": "ctrl+alt",
   "azure_openai_api_key": "your-api-key-here",
   "azure_openai_endpoint": "https://your-resource.openai.azure.com/"
 }
 ```
 
 - `device_id`: 保存的录音设备ID（null 表示使用默认设备）
+- `record_key`: 录音快捷键（支持单键和组合键）
 - `azure_openai_api_key`: Azure OpenAI API 密钥
 - `azure_openai_endpoint`: Azure OpenAI 服务端点
 - 如果设备不再可用，程序会自动重新询问并更新配置
@@ -138,4 +145,4 @@ python realtime_transcribe.py
 **使用技巧：**
 - 录音前先将光标定位到目标位置
 - 转写完成后快速切换到目标应用
-- 如不需要自动输入，可在脚本中设置 `AUTO_INPUT_ENABLED = False`
+- 可在 config.json 中自定义录音快捷键，如改为 `"space"` 或 `"ctrl+r"`

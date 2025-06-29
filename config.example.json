@@ -1,5 +1,6 @@
 {
   "device_id": null,
+  "record_key": "ctrl+alt",
   "azure_openai_api_key": "your-azure-openai-api-key-here",
   "azure_openai_endpoint": "https://your-resource.openai.azure.com/"
 } 
