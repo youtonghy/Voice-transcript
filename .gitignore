@@ -31,4 +31,5 @@ build/
 build.bat
 build.spec
 build.py
+voice_transcript.spec
 dist/
