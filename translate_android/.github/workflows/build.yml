@@ -1,0 +1,40 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.8'
+    
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y python3-pip openjdk-8-jdk build-essential           libffi-dev libssl-dev libsqlite3-dev pkg-config libjpeg-dev
+    
+    - name: Install buildozer
+      run: |
+        pip install --user buildozer cython
+        echo "$HOME/.local/bin" >> $GITHUB_PATH
+    
+    - name: Build APK
+      run: |
+        buildozer android debug
+    
+    - name: Upload APK
+      uses: actions/upload-artifact@v3
+      with:
+        name: voicetranscriber-apk
+        path: bin/*.apk
