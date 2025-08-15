@@ -7,7 +7,13 @@
 
 ## 依赖
 - Python 3.8+
-- 安装依赖：
+- 一键安装：
+
+```bash
+pip install -r requirements.txt
+```
+
+- 也可按需安装：
   - 最少：`pip install openai`
   - 录音脚本需要：`pip install sounddevice soundfile numpy keyboard`
 - 环境变量：`OPENAI_API_KEY=sk-...`（或在 `config.json` 中设置 `openai_api_key`）
