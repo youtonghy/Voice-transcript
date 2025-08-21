@@ -1,123 +1,84 @@
-# 语音转写翻译工具 (Electron版)
+# Voice Transcript (Electron)
 
-一个基于 Electron 和 Python 的桌面应用，提供实时语音录制、转写和翻译功能。
+一个基于 Electron + Python 的跨平台桌面应用：实时录音 → 自动分段 → 语音转写 → 可选翻译，全流程一键完成。
 
-## 功能特性
+> 适用于：会议纪要、直播听写、访谈整理、学习笔记、多语言听读辅助。
 
-- 🎤 **一键录音** - 简单的开始/停止录音操作
-- 🔊 **智能分段** - 自动检测语音和静音，智能分段处理
-- 📝 **实时转写** - 使用 OpenAI gpt-4o-transcribe 模型进行语音转文字
-- 🌐 **多语言翻译** - 支持翻译到多种目标语言
-- 🎨 **现代界面** - 美观的图形界面，实时日志显示
-- ⚙️ **灵活配置** - 可配置 API 密钥、翻译设置等
-- ⌨️ **快捷键支持** - F1开始录音，F2停止录音
+---
+## 功能亮点
+- 🎤 实时录音：支持一键开始/停止，快捷键 F1 / F2
+- ✂️ 智能分段：静音检测 + 最小时长限制，避免半句截断
+- 📝 高质量转写：调用 OpenAI gpt-4o-transcribe（可改自定义基地址）
+- 🌐 自动翻译：可选启用，目标语言可配置（例：中文 / English / 日本語 ...）
+- ⚙️ 自适应配置：阈值、静音时长、翻译、模型、API 地址可动态修改
+- 📜 实时日志：界面中即时显示处理状态与结果
+- 🧩 前后端解耦：Python 独立服务，可单独更新 / 替换
+- 🛠️ 打包免 Python：Windows 下内置 PyInstaller 产物，零依赖运行
+- ⌨️ 快捷键支持：录音控制、设置、退出
 
-## 界面预览
-
-### 主界面
-- 录音控制按钮
-- 实时状态显示
-- 日志输出窗口
-- 转写和翻译结果显示
-
-### 设置界面
-- OpenAI API 配置
-- 翻译语言设置
-- 录音参数调整
-
-## 安装要求
-
-### 系统要求
-- Node.js 16+ 
-- Python 3.8+
-- 支持的操作系统：Windows、macOS、Linux
-
-### Python 依赖
-```bash
-pip install sounddevice soundfile numpy openai
+---
+## 目录速览
+```
+.
+├── main.js                # Electron 主进程
+├── preload.js             # 预加载（安全桥接）
+├── renderer.js            # 主界面逻辑
+├── index.html             # 主界面 UI
+├── settings.html / .js    # 设置页面
+├── transcribe_service.py  # Python 转写/翻译服务
+├── openai_transcribe_translate.py # 可能的模型调用逻辑支持
+├── config.json            # 运行期生成/更新（开发模式）
+├── recordings/            # 临时分段 WAV 文件
+├── dist-python/win/       # 打包后 Python EXE 存放
+└── package.json           # 项目配置与脚本
 ```
 
-### Node.js 依赖
+---
+## 快速开始 (开发模式)
+### 1. 克隆仓库
+```bash
+git clone <your-repo-url>
+cd Voice-transcript/electron
+```
+### 2. 安装 Node 依赖
 ```bash
 npm install
 ```
-
-## 快速开始
-
-### 1. 克隆项目
+### 3. 安装 Python 依赖（开发调试需要）
 ```bash
-git clone <项目地址>
-cd electron
-```
-
-### 2. 安装依赖
-```bash
-# 安装 Node.js 依赖
-npm install
-
-# 安装 Python 依赖
+pip install --upgrade pip
 pip install sounddevice soundfile numpy openai
 ```
-
-### 3. 配置 OpenAI API
-- 启动应用后，点击"设置"按钮
-- 输入您的 OpenAI API 密钥
-- 可选择配置自定义 API 地址（支持兼容 OpenAI API 的服务）
-
 ### 4. 启动应用
 ```bash
-npm start
+npm start       # 普通启动
+# 或
+npm run dev     # 开启开发者工具
 ```
+### 5. 首次配置
+打开应用 → 进入【设置】 → 填写 OpenAI API Key（可选自定义 Base URL）→ 选择翻译语言 → 保存。
 
-## 使用方法
+---
+## 常用脚本 (package.json)
+| 命令 | 说明 |
+|------|------|
+| npm start | 启动应用 |
+| npm run dev | 启动并自动打开 DevTools |
+| npm run build | 仅 Electron 打包（不含安装包差异平台产物定义）|
+| npm run build:py:win | 使用 PyInstaller 打包 Python 服务 (transcribe_service.exe) |
+| npm run dist:win | 先打包 Python，再生成 Windows 安装包 (NSIS) |
 
-### 基本操作
-1. **开始录音**：点击"🎤 开始录音"按钮或按 F1 键
-2. **停止录音**：点击"⏹️ 停止录音"按钮或按 F2 键
-3. **查看结果**：转写和翻译结果会实时显示在日志面板中
+---
+## 配置说明
+开发模式下生成 `config.json`；打包后迁移到系统用户数据目录：
+- Windows: `%AppData%/Voice Transcript/config.json`
+- macOS: `~/Library/Application Support/Voice Transcript/config.json`
+- Linux: `~/.config/Voice Transcript/config.json`
 
-### 设置配置
-1. **打开设置**：点击"⚙️ 设置"按钮或按 Ctrl+, 键
-2. **API 配置**：
-   - 输入 OpenAI API 密钥（必需）
-   - 设置自定义 API 地址（可选）
-   - 测试 API 连接
-3. **翻译设置**：
-   - 启用/禁用自动翻译
-   - 选择目标语言
-4. **录音设置**：
-   - 调整静音检测阈值
-   - 设置自动分段时长
-
-### 快捷键
-- `F1` - 开始录音
-- `F2` - 停止录音  
-- `Ctrl+,` - 打开设置
-- `Ctrl+Q` - 退出程序
-
-## 文件结构
-
-```
-electron/
-├── main.js              # Electron 主进程
-├── preload.js           # 预加载脚本
-├── index.html           # 主界面
-├── renderer.js          # 主界面逻辑
-├── settings.html        # 设置界面
-├── settings.js          # 设置界面逻辑
-├── transcribe_service.py # Python 转写服务
-├── package.json         # Node.js 项目配置
-├── config.json          # 应用配置文件（自动生成）
-└── recordings/          # 临时录音文件目录（自动生成）
-```
-
-## 配置文件说明
-
-应用会在当前目录生成 `config.json` 配置文件：
-
+示例：
 ```json
 {
-  "openai_api_key": "your-api-key",
+  "openai_api_key": "sk-***",
   "openai_base_url": "https://api.openai.com/v1",
   "enable_translation": true,
   "translate_language": "中文",
@@ -125,121 +86,119 @@ electron/
   "min_silence_seconds": 1.0
 }
 ```
+字段说明：
+| 键 | 用途 | 建议范围 / 备注 |
+|----|------|----------------|
+| openai_api_key | OpenAI 或兼容服务密钥 | 必填（除非走本地模型改造） |
+| openai_base_url | API 基地址 | 兼容自托管 / 中转服务 |
+| enable_translation | 是否启用翻译 | false 仅输出原文 |
+| translate_language | 翻译目标语言 | 例：中文 / English |
+| silence_rms_threshold | 静音 RMS 阈值 | 0.005 ~ 0.02 越低越敏感 |
+| min_silence_seconds | 判定分段静音时长 | 0.5 ~ 2.0 之间调优 |
 
-### 配置项说明
-- `openai_api_key`: OpenAI API 密钥
-- `openai_base_url`: API 服务地址
-- `enable_translation`: 是否启用翻译功能
-- `translate_language`: 翻译目标语言
-- `silence_rms_threshold`: 静音检测阈值（0.005-0.02）
-- `min_silence_seconds`: 自动分段的静音时长（秒）
+---
+## 使用指南
+1. F1 或 “开始录音” → 开始捕获麦克风音频
+2. 后台实时缓存并监测音量 → 静音 + 达到最小时长后切分段
+3. 每段发送至 Python 服务 → 调用 OpenAI 转写
+4. 若开启翻译 → 翻译文本合并展示
+5. 界面日志区持续刷新 → 可复制结果
+6. F2 或 “停止录音” → 停止新分段，收尾处理
 
-## 开发模式
+快捷键：
+| 快捷键 | 功能 |
+|--------|------|
+| F1 | 开始录音 |
+| F2 | 停止录音 |
+| Ctrl + , | 打开设置 |
+| Ctrl + Q | 退出应用 |
 
-启动开发模式（会打开开发者工具）：
+---
+## 打包与分发
+### 1. 打包独立 Python 后端 (Windows)
 ```bash
-npm run dev
-```
-
-## 构建打包
-
-本项目已内置基于 electron-builder 的打包配置，并支持将 Python 后端打包为独立可执行文件，从而在 Windows 上无需安装 Python。
-
-### Windows 无 Python 依赖的打包
-
-1) 安装依赖（在 Windows 上操作）
-
-- Node.js 16+
-- Python 3.8+，并安装以下包：
-  ```bash
-  pip install pyinstaller sounddevice soundfile numpy openai
-  ```
-- 安装 Node 依赖（首次）：
-  ```bash
-  npm install
-  ```
-
-2) 打包 Python 服务（生成独立 exe）
-
-方式A：使用 npm 脚本（推荐）
-```bat
 npm run build:py:win
+# 结果: dist-python/win/transcribe_service.exe
 ```
-
-方式B：直接使用 PyInstaller（等价）
-```bat
-pyinstaller --noconsole --onefile --name transcribe_service transcribe_service.py
-if not exist dist-python mkdir dist-python
-if not exist dist-python\win mkdir dist-python\win
-copy /Y dist\transcribe_service.exe dist-python\win\
-```
-
-开发提示：
-- 在 Windows 开发环境中，如果在项目目录存在 `dist\transcribe_service.exe` 或 `dist-python\win\transcribe_service.exe`，Electron 启动时会优先直接运行该 exe，而不会调用系统 Python 解释器。
-
-成功后会生成 `dist-python\win\transcribe_service.exe`，Electron 打包时会将其内置到应用中。
-
-3) 打包 Windows 安装包/便携版
-
+### 2. 生成 Windows 安装包 / 可分发版本
 ```bash
 npm run dist:win
+# 产物: dist/ 下的安装程序 (NSIS)
 ```
-
-构建产物位于 `dist/`，包含安装器（NSIS）或便携包。
-
-注意：如果你在非 Windows 环境打包 Windows 版本，建议在 Windows 主机或 CI 上进行，以确保 PyInstaller 和本地依赖的兼容性。
-
-### 配置文件存放位置（打包后）
-
-- 开发模式：项目目录下 `config.json`
-- 打包后：系统用户数据目录（例如 Windows: `%AppData%/Voice Transcript/config.json`）
-
-
-## 常见问题
-
-### 1. Python 依赖安装失败
-确保 Python 版本 3.8+，并尝试：
+其他平台（需自行补充 PyInstaller 构建脚本）：
 ```bash
-pip install --upgrade pip
-pip install sounddevice soundfile numpy openai
+# 示例（需根据平台调整）
+pyinstaller --noconsole --onefile transcribe_service.py
+npm run build
 ```
+> 跨平台打包包含本地音频库差异，建议在目标平台或对应 CI Runner 上构建。
 
-### 2. 录音设备无法识别
-- 检查系统录音设备权限
-- 在设置中刷新设备列表
-- 确保录音设备驱动正常
+---
+## 工作原理概览
+1. Electron 主进程拉起窗口 + 预加载脚本隔离上下文
+2. Renderer 捕获用户操作，录音（Web Audio / 麦克风）→ 写入临时 WAV
+3. 录音分段触发时，通过子进程/可执行文件调用 Python EXE
+4. Python 使用 soundfile / numpy 读取音频 → 调用 OpenAI 语音模型（gpt-4o-transcribe）
+5. 获得文本后可二次调用文本模型（gpt-4o-mini 或同类）完成翻译
+6. 结果通过 IPC 回传渲染层 → 日志区展示 & 聚合输出
 
-### 3. API 调用失败
-- 检查 API 密钥是否正确
-- 确认网络连接正常
-- 验证 API 地址配置
+---
+## 调优建议
+| 目标 | 可调整项 | 策略 |
+|------|----------|------|
+| 减少误分段 | min_silence_seconds ↑ | 设为 1.2 - 1.5s |
+| 更灵敏开启/结束 | silence_rms_threshold ↓ | 0.008 → 0.006 |
+| 翻译更地道 | 模型/提示词 | 修改 Python 中翻译调用逻辑 |
+| 降低成本 | 关闭翻译 / 减少段数 | 更长分段 + 后处理 |
 
-### 4. 转写结果为空
-- 检查录音音量是否足够
-- 调整静音检测阈值
-- 确保录音时长超过1秒
+---
+## 常见问题 (FAQ)
+Q: 转写为空？
+A: 音量过低 / 段太短，调低阈值或延长讲话；确认麦克风权限。
 
-## 技术架构
+Q: 翻译很慢？
+A: 同段需要两次模型调用，可关闭翻译或改用更快模型。
 
-- **前端**: Electron (HTML/CSS/JavaScript)
-- **后端**: Python 3.8+
-- **通信**: 进程间通信 (IPC) + JSON 消息
-- **录音**: sounddevice + soundfile
-- **转写**: OpenAI gpt-4o-transcribe
-- **翻译**: OpenAI gpt-4o-mini
+Q: Windows 无法录音？
+A: 系统声音设置里授予麦克风权限；确认没有被其他软件独占。
 
+Q: 自定义 API 服务？
+A: 在设置里修改 Base URL，并确保接口遵循 OpenAI 兼容格式。
+
+Q: 如何清理临时音频？
+A: recordings/ 目录可安全删除（运行中删除需谨慎）。
+
+---
+## 安全 & 隐私
+- API Key 仅保存在本地配置文件，不上传
+- 未内置外部遥测 / 埋点
+- 如需企业合规，可将 openai_base_url 指向内网代理
+
+---
+## 未来路线 (Roadmap)
+- [ ] 多模型选择下拉
+- [ ] 批量导出 (TXT / SRT / Markdown)
+- [ ] 自定义热键配置
+- [ ] 段级时间戳同步
+- [ ] 自动更新检查
+- [ ] 翻译缓存与增量提示
+
+欢迎提出 Issue / PR！
+
+---
+## 贡献指南
+1. Fork / 创建分支
+2. 提交规范化 Commit（建议 feat: / fix: / docs: 前缀）
+3. PR 说明动机 & 截图（UI改动）
+4. 确保本地可运行，无严重 Lint / 语法错误
+
+---
 ## 许可证
+MIT © 2025 youtonghy
 
-本项目采用 MIT 许可证，详见 LICENSE 文件。
+---
+## 版本初始说明
+v1.0.0: 基础录音 / 分段 / 转写 / 翻译 / 快捷键 / 设置完成。
 
-## 贡献
-
-欢迎提交 Issue 和 Pull Request 来改进项目。
-
-## 更新日志
-
-### v1.0.0
-- 初始版本
-- 基本录音、转写、翻译功能
-- 图形界面和设置页面
-- 快捷键支持
+---
+> 如果你觉得这个项目有帮助，欢迎 Star 支持 :)
