@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>语音转写翻译工具</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* 固定顶部控制条 */
+        .control-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(33, 150, 243, 0.1);
+            box-shadow: 0 2px 20px rgba(0, 0, 0, 0.1);
+            z-index: 1000;
+            height: 60px;
+        }
+
+        .control-bar-content {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            gap: 20px;
+            padding: 0 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        /* 控制条按钮基础样式 */
+        .control-bar-btn {
+            width: 45px;
+            height: 45px;
+            border: none;
+            border-radius: 50%;
+            font-size: 1.5rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        /* 录音按钮样式 */
+        .record-btn.start {
+            background: linear-gradient(45deg, #2196F3, #1976D2);
+            color: white;
+        }
+
+        .record-btn.start:hover {
+            background: linear-gradient(45deg, #1976D2, #1565C0);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 16px rgba(33, 150, 243, 0.4);
+        }
+
+        .record-btn.stop {
+            background: linear-gradient(45deg, #f44336, #d32f2f);
+            color: white;
+        }
+
+        .record-btn.recording-active {
+            background: linear-gradient(45deg, #f44336, #d32f2f);
+            color: white;
+            animation: pulse-btn 2s infinite;
+        }
+
+        .record-btn.recording-idle {
+            background: linear-gradient(45deg, #f44336, #d32f2f);
+            color: white;
+        }
+
+        .record-btn.disabled {
+            background: linear-gradient(45deg, #bdbdbd, #9e9e9e) !important;
+            color: #757575 !important;
+            cursor: not-allowed !important;
+            animation: none !important;
+        }
+
+        /* 设置按钮样式 */
+        .settings-btn {
+            background: linear-gradient(45deg, #9c27b0, #7b1fa2);
+            color: white;
+        }
+
+        .settings-btn:hover {
+            background: linear-gradient(45deg, #7b1fa2, #6a1b9a);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 16px rgba(156, 39, 176, 0.4);
+        }
+
+        /* 脉冲动画 */
+        @keyframes pulse-btn {
+            0% { box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1), 0 0 0 0 rgba(244, 67, 54, 0.7); }
+            70% { box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1), 0 0 0 15px rgba(244, 67, 54, 0); }
+            100% { box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1), 0 0 0 0 rgba(244, 67, 54, 0); }
+        }
+
+        /* 状态指示器 */
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            background: rgba(255, 255, 255, 0.8);
+            border-radius: 20px;
+            border: 1px solid rgba(33, 150, 243, 0.2);
+            font-size: 0.9rem;
+            color: #1976d2;
+            font-weight: 500;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .status-dot.idle {
+            background: #9e9e9e;
+        }
+
+        .status-dot.recording {
+            background: #f44336;
+            animation: blink 1s infinite;
+        }
+
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0.3; }
+        }
+
+        /* 主内容区域 */
+        .main-content {
+            padding-top: 60px; /* 为固定控制条留出空间 */
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* 日志面板 */
+        .log-panel {
+            height: 100%;
+            background: white;
+            padding: 25px;
+            display: flex;
+            flex-direction: column;
+            box-sizing: border-box;
+        }
+
+        .log-panel h2 {
+            color: #1976d2;
+            margin: 0 0 15px 0;
+            font-weight: 600;
+            font-size: 1.2rem;
+        }
+
+        .log-container {
+            flex: 1;
+            background: #f8f9fa;
+            border: 1px solid #e3f2fd;
+            border-radius: 10px;
+            padding: 15px;
+            overflow-y: auto;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-size: 0.9rem;
+            line-height: 1.4;
+        }
+
+        .log-entry {
+            margin-bottom: 6px;
+            padding: 8px 14px;
+            border-radius: 16px;
+            background: #e3f2fd;
+            color: #333;
+            border: 1px solid #bbdefb;
+            display: block;
+        }
+
+        /* 结果组合气泡：上半部分转写，下半部分翻译 */
+        .result-entry {
+            background: #ffffff;
+            border: 1px solid #e0e7ef;
+            border-radius: 12px;
+            padding: 10px 12px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+        }
+
+        .result-entry .result-part {
+            white-space: pre-wrap;
+            word-break: break-word;
+            color: #1f2937;
+            font-size: 0.95rem;
+            line-height: 1.5;
+        }
+
+        .result-entry .result-part.translation {
+            color: #111827;
+        }
+
+        .result-entry .result-part.translation.pending {
+            color: #9ca3af;
+            font-style: italic;
+            animation: pulse-text 1.5s ease-in-out infinite;
+        }
+
+        @keyframes pulse-text {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+
+        .result-entry .result-separator {
+            border-top: 1px dashed #d1d5db;
+            margin: 8px 0;
+        }
+
+        .timestamp {
+            color: #888;
+            font-size: 0.75rem;
+            margin-right: 8px;
+        }
+
+        .log-controls {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .log-controls button {
+            padding: 6px 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            background: white;
+            color: #333;
+            cursor: pointer;
+            font-size: 0.8rem;
+            transition: all 0.3s ease;
+        }
+
+        .log-controls button:hover {
+            background: #f5f5f5;
+            border-color: #bbb;
+        }
+
+        .clear-btn {
+            background: linear-gradient(45deg, #ff5722, #d84315) !important;
+            color: white !important;
+            border: none !important;
+        }
+
+        .clear-btn:hover {
+            background: linear-gradient(45deg, #d84315, #bf360c) !important;
+        }
+
+        /* 响应式设计 */
+        @media (max-width: 768px) {
+            .control-bar-content {
+                gap: 15px;
+                padding: 0 15px;
+            }
+            
+            .control-bar-btn {
+                width: 40px;
+                height: 40px;
+                font-size: 1.3rem;
+            }
+            
+            .status-indicator {
+                padding: 6px 12px;
+                font-size: 0.8rem;
+            }
+            
+            .status-text {
+                display: none; /* 移动端隐藏状态文本 */
+            }
+        }
+        
+        @media (max-width: 480px) {
+            .control-bar-content {
+                gap: 10px;
+                padding: 0 10px;
+            }
+            
+            .control-bar-btn {
+                width: 35px;
+                height: 35px;
+                font-size: 1.2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- 固定顶部控制条 -->
+    <div class="control-bar">
+        <div class="control-bar-content">
+            <!-- 录音控制 -->
+            <button class="control-bar-btn record-btn start" id="recordButton" title="开始录音">
+                🎤
+            </button>
+            
+            <!-- 状态指示器 -->
+            <div class="status-indicator" title="服务状态">
+                <div class="status-dot idle" id="statusDot"></div>
+                <span class="status-text" id="statusText">就绪</span>
+            </div>
+            
+            <!-- 设置按钮 -->
+            <button class="control-bar-btn settings-btn" onclick="openSettings()" title="设置">
+                ⚙️
+            </button>
+        </div>
+    </div>
+
+    <!-- 主内容区域 -->
+    <div class="main-content">
+        <div class="log-panel">
+            <h2>实时日志</h2>
+            <div class="log-container" id="logContainer"></div>
+            <div class="log-controls">
+                <button onclick="exportLogs()">导出日志</button>
+                <button onclick="copyLastResult()">复制最新结果</button>
+                <button class="clear-btn" onclick="clearLogs()">清空日志</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="renderer.js"></script>
+</body>
+</html>

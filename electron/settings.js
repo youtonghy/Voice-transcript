@@ -1,0 +1,305 @@
+let currentConfig = {};
+let autoSaveTimeout = null; // 防抖定时器
+
+document.addEventListener('DOMContentLoaded', () => {
+    loadCurrentConfig();
+    setupEventListeners();
+});
+
+function setupEventListeners() {
+    // 表单提交
+    document.getElementById('settingsForm').addEventListener('submit', saveSettings);
+    
+    // 翻译开关
+    document.getElementById('enableTranslation').addEventListener('change', toggleTranslationSettings);
+    document.getElementById('enableTranslation').addEventListener('change', autoSave);
+    
+    // 剧场模式开关
+    document.getElementById('theaterMode').addEventListener('change', autoSave);
+    
+    // 语言选项
+    document.querySelectorAll('.language-option').forEach(option => {
+        option.addEventListener('click', selectLanguage);
+    });
+    
+    // 实时验证API密钥格式并触发主页面检测
+    document.getElementById('apiKey').addEventListener('input', (event) => {
+        validateApiKey();
+        // API密钥输入变化时触发自动保存以便主页面实时检测
+        autoSave();
+    });
+    
+    // API URL变化也触发实时检测
+    document.getElementById('apiUrl').addEventListener('input', autoSave);
+    
+    // 为所有输入框添加失焦自动保存
+    const autoSaveInputs = [
+        'apiKey', 'apiUrl', 'targetLanguage', 
+        'silenceThreshold', 'silenceDuration', 'theaterMode'
+    ];
+    
+    autoSaveInputs.forEach(inputId => {
+        const input = document.getElementById(inputId);
+        if (input) {
+            input.addEventListener('blur', autoSave);
+            input.addEventListener('change', autoSave);
+        }
+    });
+}
+
+async function loadCurrentConfig() {
+    try {
+        currentConfig = await window.electronAPI.getConfig();
+        populateForm(currentConfig);
+    } catch (error) {
+        showTopNotification(`❌ 加载配置失败: ${error.message}`, 'error');
+    }
+}
+
+function populateForm(config) {
+    // API配置
+    document.getElementById('apiKey').value = config.openai_api_key || '';
+    document.getElementById('apiUrl').value = config.openai_base_url || '';
+    
+    // 翻译设置
+    const enableTranslation = document.getElementById('enableTranslation');
+    enableTranslation.checked = config.enable_translation !== false;
+    
+    document.getElementById('targetLanguage').value = config.translate_language || '中文';
+    
+    // 录音设置
+    document.getElementById('silenceThreshold').value = config.silence_rms_threshold || 0.01;
+    document.getElementById('silenceDuration').value = config.min_silence_seconds || 1.0;
+    
+    // 剧场模式
+    document.getElementById('theaterMode').checked = config.theater_mode || false;
+    
+    // 更新UI状态
+    toggleTranslationSettings();
+    updateLanguageSelection(config.translate_language || '中文');
+}
+
+function toggleTranslationSettings() {
+    const enableTranslation = document.getElementById('enableTranslation').checked;
+    const translationSettings = document.getElementById('translationSettings');
+    
+    if (enableTranslation) {
+        translationSettings.style.opacity = '1';
+        translationSettings.style.pointerEvents = 'auto';
+    } else {
+        translationSettings.style.opacity = '0.5';
+        translationSettings.style.pointerEvents = 'none';
+    }
+}
+
+function selectLanguage(event) {
+    const language = event.target.dataset.lang;
+    document.getElementById('targetLanguage').value = language;
+    updateLanguageSelection(language);
+    // 语言选择也触发自动保存
+    autoSave();
+}
+
+function updateLanguageSelection(selectedLang) {
+    document.querySelectorAll('.language-option').forEach(option => {
+        if (option.dataset.lang === selectedLang) {
+            option.classList.add('selected');
+        } else {
+            option.classList.remove('selected');
+        }
+    });
+}
+
+function validateApiKey() {
+    const apiKey = document.getElementById('apiKey').value;
+    // 简单验证API密钥格式
+    return apiKey && apiKey.startsWith('sk-') && apiKey.length > 20;
+}
+
+async function saveSettings(event) {
+    event.preventDefault();
+    
+    const formData = new FormData(event.target);
+    const newConfig = {};
+    
+    // 收集表单数据
+    for (let [key, value] of formData.entries()) {
+        if (key === 'enable_translation') {
+            newConfig[key] = true;
+        } else if (key === 'silence_rms_threshold' || key === 'min_silence_seconds') {
+            newConfig[key] = parseFloat(value);
+        } else {
+            newConfig[key] = value;
+        }
+    }
+    
+    // 处理复选框
+    newConfig.enable_translation = document.getElementById('enableTranslation').checked;
+    newConfig.theater_mode = document.getElementById('theaterMode').checked;
+    
+    try {
+        const success = await window.electronAPI.saveConfig(newConfig);
+        
+        if (success) {
+            // 显示顶部成功通知
+            showTopNotification('✅ 设置保存成功！正在重启服务...', 'success');
+            
+            // 更新当前配置
+            currentConfig = { ...currentConfig, ...newConfig };
+            
+            // 自动重启Python服务
+            await autoRestartService();
+        } else {
+            showTopNotification('❌ 设置保存失败', 'error');
+        }
+    } catch (error) {
+        showTopNotification(`❌ 保存设置时出错: ${error.message}`, 'error');
+    }
+}
+
+async function autoRestartService() {
+    try {
+        const result = await window.electronAPI.restartPythonService();
+        
+        if (result.success) {
+            showTopNotification('✅ 配置已保存，服务重启成功！', 'success');
+        } else {
+            showTopNotification(`⚠️ 配置已保存，但服务重启失败: ${result.error}`, 'warning');
+        }
+    } catch (error) {
+        showTopNotification(`⚠️ 配置已保存，但自动重启出错: ${error.message}`, 'warning');
+    }
+}
+
+function showStatus(type, message) {
+    const statusDiv = document.getElementById('statusMessage');
+    statusDiv.className = `status-message status-${type}`;
+    statusDiv.textContent = message;
+    statusDiv.style.display = 'block';
+    
+    // 成功消息自动消失
+    if (type === 'success') {
+        setTimeout(() => {
+            statusDiv.style.display = 'none';
+        }, 3000);
+    }
+}
+
+// 键盘快捷键
+document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+        window.close();
+    } else if (event.ctrlKey && event.key === 's') {
+        event.preventDefault();
+        document.getElementById('settingsForm').dispatchEvent(new Event('submit'));
+    }
+});
+
+// 自动保存功能
+function autoSave() {
+    // 清除之前的定时器，实现防抖
+    if (autoSaveTimeout) {
+        clearTimeout(autoSaveTimeout);
+    }
+    
+    // API相关配置变化时使用较短延迟(300ms)，其他配置使用800ms
+    const newConfig = collectFormData();
+    const isApiRelated = checkIfRestartNeeded(newConfig);
+    const delay = isApiRelated ? 300 : 800;
+    
+    autoSaveTimeout = setTimeout(async () => {
+        try {
+            // 检查是否有关键配置变更需要重启服务
+            const needsRestart = checkIfRestartNeeded(newConfig);
+            
+            const success = await window.electronAPI.saveConfig(newConfig);
+            
+            if (success) {
+                // 更新当前配置
+                currentConfig = { ...currentConfig, ...newConfig };
+                
+                if (needsRestart) {
+                    // 显示保存并重启的通知
+                    showTopNotification('✅ 设置已自动保存，正在重启服务...', 'success');
+                    await autoRestartService();
+                } else {
+                    // 显示简单的自动保存通知
+                    showTopNotification('✅ 设置已自动保存', 'success');
+                }
+            } else {
+                showTopNotification('❌ 自动保存失败', 'error');
+            }
+        } catch (error) {
+            console.error('自动保存出错:', error);
+            showTopNotification('❌ 自动保存出错: ' + error.message, 'error');
+        }
+    }, delay);
+}
+
+// 检查是否需要重启服务
+function checkIfRestartNeeded(newConfig) {
+    // API相关配置变更需要重启
+    const apiRelatedKeys = ['openai_api_key', 'openai_base_url', 'enable_translation', 'translate_language', 'theater_mode'];
+    
+    for (const key of apiRelatedKeys) {
+        if (currentConfig[key] !== newConfig[key]) {
+            return true;
+        }
+    }
+    
+    return false;
+}
+
+// 收集表单数据
+function collectFormData() {
+    const formData = new FormData(document.getElementById('settingsForm'));
+    const newConfig = {};
+    
+    // 收集表单数据
+    for (let [key, value] of formData.entries()) {
+        if (key === 'enable_translation') {
+            newConfig[key] = true;
+        } else if (key === 'silence_rms_threshold' || key === 'min_silence_seconds') {
+            newConfig[key] = parseFloat(value);
+        } else {
+            newConfig[key] = value;
+        }
+    }
+    
+    // 处理复选框
+    newConfig.enable_translation = document.getElementById('enableTranslation').checked;
+    newConfig.theater_mode = document.getElementById('theaterMode').checked;
+    
+    return newConfig;
+}
+
+// 显示顶部通知
+function showTopNotification(message, type = 'success') {
+    const notification = document.getElementById('topNotification');
+    notification.textContent = message;
+    notification.className = `top-notification ${type}`;
+    
+    // 添加body类以调整页面间距
+    document.body.classList.add('notification-active');
+    
+    // 显示通知
+    setTimeout(() => {
+        notification.classList.add('show');
+    }, 100);
+    
+    // 4秒后自动隐藏
+    setTimeout(() => {
+        hideTopNotification();
+    }, 4000);
+}
+
+// 隐藏顶部通知
+function hideTopNotification() {
+    const notification = document.getElementById('topNotification');
+    notification.classList.remove('show');
+    
+    // 等待动画完成后移除body类
+    setTimeout(() => {
+        document.body.classList.remove('notification-active');
+    }, 300);
+}

@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>设置</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .settings-container {
+            max-width: 500px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+        }
+
+        .settings-header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .settings-header h1 {
+            color: #333;
+            font-size: 1.8rem;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+
+        .settings-header p {
+            color: #666;
+            font-size: 0.9rem;
+        }
+
+        .form-group {
+            margin-bottom: 25px;
+        }
+
+        .form-group label {
+            display: block;
+            color: #333;
+            font-weight: 500;
+            margin-bottom: 8px;
+            font-size: 0.95rem;
+        }
+
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 0.95rem;
+            transition: all 0.3s ease;
+            background: white;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #2196F3;
+            box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.1);
+        }
+
+        .form-group input[type="password"] {
+            font-family: monospace;
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .checkbox-group input[type="checkbox"] {
+            width: auto;
+            margin-right: 12px;
+            transform: scale(1.2);
+        }
+
+        .checkbox-group label {
+            margin-bottom: 0;
+            cursor: pointer;
+        }
+
+        .form-note {
+            font-size: 0.85rem;
+            color: #666;
+            margin-top: 5px;
+            line-height: 1.4;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 15px;
+            margin-top: 30px;
+        }
+
+        .btn {
+            flex: 1;
+            padding: 14px 20px;
+            border: none;
+            border-radius: 10px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary {
+            background: linear-gradient(45deg, #2196F3, #1976D2);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: linear-gradient(45deg, #1976D2, #1565C0);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 16px rgba(33, 150, 243, 0.3);
+        }
+
+        .btn-secondary {
+            background: #f5f5f5;
+            color: #333;
+            border: 2px solid #e0e0e0;
+        }
+
+        .btn-secondary:hover {
+            background: #eeeeee;
+            border-color: #bdbdbd;
+        }
+
+        .test-button {
+            margin-top: 10px;
+            padding: 8px 16px;
+            background: linear-gradient(45deg, #4CAF50, #45a049);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .test-button:hover {
+            background: linear-gradient(45deg, #45a049, #3d8b40);
+        }
+
+        .test-button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .status-message {
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-top: 15px;
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+
+        .status-success {
+            background: rgba(76, 175, 80, 0.1);
+            color: #4CAF50;
+            border: 1px solid rgba(76, 175, 80, 0.3);
+        }
+
+        .status-error {
+            background: rgba(244, 67, 54, 0.1);
+            color: #f44336;
+            border: 1px solid rgba(244, 67, 54, 0.3);
+        }
+
+        .divider {
+            height: 1px;
+            background: linear-gradient(to right, transparent, #e0e0e0, transparent);
+            margin: 30px 0;
+        }
+
+        .section-title {
+            color: #333;
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #f0f0f0;
+        }
+
+        .help-text {
+            background: rgba(33, 150, 243, 0.1);
+            border: 1px solid rgba(33, 150, 243, 0.3);
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+            font-size: 0.9rem;
+            line-height: 1.5;
+            color: #1976D2;
+        }
+
+        .language-options {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .language-option {
+            padding: 8px 12px;
+            background: #f5f5f5;
+            border: 2px solid #e0e0e0;
+            border-radius: 6px;
+            cursor: pointer;
+            text-align: center;
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
+        }
+
+        .language-option:hover {
+            background: #eeeeee;
+            border-color: #bdbdbd;
+        }
+
+        .language-option.selected {
+            background: rgba(33, 150, 243, 0.1);
+            border-color: #2196F3;
+            color: #1976D2;
+            font-weight: 500;
+        }
+
+        /* 顶部通知栏样式 */
+        .top-notification {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: linear-gradient(45deg, #4CAF50, #45a049);
+            color: white;
+            padding: 12px 20px;
+            text-align: center;
+            font-weight: 500;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+            transform: translateY(-100%);
+            transition: all 0.3s ease;
+            z-index: 1000;
+            font-size: 0.95rem;
+        }
+
+        .top-notification.show {
+            transform: translateY(0);
+        }
+
+        .top-notification.success {
+            background: linear-gradient(45deg, #4CAF50, #45a049);
+        }
+
+        .top-notification.error {
+            background: linear-gradient(45deg, #f44336, #d32f2f);
+        }
+
+        .top-notification.warning {
+            background: linear-gradient(45deg, #ff9800, #f57c00);
+        }
+
+        /* 为设置容器添加顶部间距，避免被通知栏遮挡 */
+        body.notification-active {
+            padding-top: 60px;
+        }
+    </style>
+</head>
+<body>
+    <!-- 顶部通知栏 -->
+    <div class="top-notification" id="topNotification"></div>
+    
+    <div class="settings-container">
+        <div class="settings-header">
+            <h1>⚙️ 设置</h1>
+            <p>配置API密钥和转写翻译选项</p>
+        </div>
+
+        <form id="settingsForm">
+            <div class="section-title">🔑 API 配置</div>
+            
+            <div class="form-group">
+                <label for="apiKey">OpenAI API 密钥</label>
+                <input type="password" id="apiKey" name="openai_api_key" placeholder="sk-...">
+                <div class="form-note">
+                    您的API密钥将安全存储在本地配置文件中
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="apiUrl">API 地址（可选）</label>
+                <input type="url" id="apiUrl" name="openai_base_url" placeholder="https://api.openai.com/v1">
+                <div class="form-note">
+                    留空使用默认地址，支持兼容 OpenAI API 的服务
+                </div>
+            </div>
+
+            <div class="divider"></div>
+
+            <div class="section-title">🌐 翻译设置</div>
+
+            <div class="checkbox-group">
+                <input type="checkbox" id="enableTranslation" name="enable_translation">
+                <label for="enableTranslation">启用自动翻译</label>
+            </div>
+
+            <div class="form-group" id="translationSettings">
+                <label for="targetLanguage">目标语言</label>
+                <input type="text" id="targetLanguage" name="translate_language" placeholder="中文">
+                <div class="form-note">
+                    指定翻译的目标语言，例如：中文、English、日本語、한국어
+                </div>
+                
+                <div class="language-options">
+                    <div class="language-option" data-lang="中文">中文</div>
+                    <div class="language-option" data-lang="English">English</div>
+                    <div class="language-option" data-lang="日本語">日本語</div>
+                    <div class="language-option" data-lang="한국어">한국어</div>
+                    <div class="language-option" data-lang="Français">Français</div>
+                    <div class="language-option" data-lang="Español">Español</div>
+                </div>
+            </div>
+
+            <div class="divider"></div>
+
+            <div class="section-title">🎙️ 录音设置</div>
+
+            <div class="form-group">
+                <label for="silenceThreshold">静音阈值</label>
+                <input type="number" id="silenceThreshold" name="silence_rms_threshold" 
+                       min="0.001" max="0.1" step="0.001" value="0.01">
+                <div class="form-note">
+                    数值越小越敏感，建议范围：0.005-0.02
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="silenceDuration">静音分段时长（秒）</label>
+                <input type="number" id="silenceDuration" name="min_silence_seconds" 
+                       min="0.5" max="5" step="0.1" value="1.0">
+                <div class="form-note">
+                    连续静音超过此时长将自动分段处理
+                </div>
+            </div>
+
+            <div class="checkbox-group">
+                <input type="checkbox" id="theaterMode" name="theater_mode">
+                <label for="theaterMode">🎭 剧场模式</label>
+            </div>
+            <div class="form-note" style="margin-left: 32px; margin-top: -15px; margin-bottom: 20px;">
+                自动将录制的音频放大到正常说话音量，提高小音量录音的识别率
+            </div>
+
+            <div id="statusMessage"></div>
+
+            <div class="button-group">
+                <button type="button" class="btn btn-secondary" onclick="window.close()">
+                    取消
+                </button>
+                <button type="submit" class="btn btn-primary">
+                    💾 保存设置
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <script src="settings.js"></script>
+</body>
+</html>

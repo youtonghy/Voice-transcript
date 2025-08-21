@@ -1,0 +1,56 @@
+{
+  "name": "voice-transcript-electron",
+  "version": "1.0.0",
+  "description": "Voice transcription and translation desktop app",
+  "author": {
+    "name": "youtonghy",
+    "email": "hi@youtonghy.com",
+    "url": "https://youtonghy.com"
+  },
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron . --dev",
+    "build": "electron-builder",
+    "dist:win": "npm run build:py:win && electron-builder --win",
+    "build:py:win": "pyinstaller --noconsole --onefile --name transcribe_service transcribe_service.py && if not exist dist-python mkdir dist-python && if not exist dist-python\\win mkdir dist-python\\win && copy /Y dist\\transcribe_service.exe dist-python\\win\\"
+  },
+  "devDependencies": {
+    "electron": "^37.3.1",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.voice.transcript",
+    "productName": "Voice Transcript",
+    "icon": "assets/icons/icon.ico",
+    "asar": true,
+    "files": [
+      "index.html",
+      "main.js",
+      "preload.js",
+      "renderer.js",
+      "settings.html",
+      "settings.js",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "dist-python/win",
+        "to": "python",
+        "filter": [
+          "transcribe_service.exe"
+        ]
+      }
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  }
+}
