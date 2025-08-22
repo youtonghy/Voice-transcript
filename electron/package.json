@@ -1,6 +1,6 @@
 {
   "name": "voice-transcript-electron",
-  "version": "1.0.0",
+  "version": "0.2.0",
   "description": "Voice transcription and translation desktop app",
   "author": {
     "name": "youtonghy",
@@ -10,10 +10,12 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
+    "debug:py-list": ".venv\\Scripts\\python.exe -m pip list",
+    "debug:py-path": ".venv\\Scripts\\python.exe -c \"import sys; print(f'Python Executable Path: {sys.executable}')\"",
     "dev": "electron . --dev",
     "build": "electron-builder",
     "dist:win": "npm run build:py:win && electron-builder --win",
-    "build:py:win": "pyinstaller --noconsole --onefile --name transcribe_service transcribe_service.py && if not exist dist-python mkdir dist-python && if not exist dist-python\\win mkdir dist-python\\win && copy /Y dist\\transcribe_service.exe dist-python\\win\\"
+    "build:py:win": ".venv\\Scripts\\python.exe -m nuitka --onefile --windows-console-mode=disable --output-dir=dist-python\\win --output-filename=transcribe_service.exe transcribe_service.py"
   },
   "devDependencies": {
     "electron": "^37.3.1",

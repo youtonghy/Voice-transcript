@@ -5,7 +5,11 @@ const fs = require('fs');
 
 let mainWindow;
 let settingsWindow;
+// Python进程管理
 let pythonProcess;
+let pythonBuffer = ''; // 用于缓存不完整的JSON消息
+let pythonReady = false;
+let pendingMessages = []; // 缓存待发送的消息
 let config = {
   openai_api_key: '',
   openai_base_url: '',
@@ -44,6 +48,110 @@ function saveConfig() {
     fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
   } catch (error) {
     console.error('保存配置失败:', error);
+  }
+}
+
+// 处理Python进程输出的函数
+function processPythonOutput(data) {
+  const dataStr = data.toString('utf8');
+  console.log('Python原始输出:', dataStr);
+  
+  // 将新数据添加到缓冲区
+  pythonBuffer += dataStr;
+  
+  // 尝试提取完整的JSON消息
+  const messages = [];
+  let braceCount = 0;
+  let inString = false;
+  let escapeNext = false;
+  let currentMessage = '';
+  
+  for (let i = 0; i < pythonBuffer.length; i++) {
+    const char = pythonBuffer[i];
+    currentMessage += char;
+    
+    if (escapeNext) {
+      escapeNext = false;
+      continue;
+    }
+    
+    if (char === '\\') {
+      escapeNext = true;
+      continue;
+    }
+    
+    if (char === '"') {
+      inString = !inString;
+      continue;
+    }
+    
+    if (!inString) {
+      if (char === '{') {
+        braceCount++;
+      } else if (char === '}') {
+        braceCount--;
+        if (braceCount === 0) {
+          // 找到完整的JSON消息
+          messages.push(currentMessage.trim());
+          currentMessage = '';
+        }
+      }
+    }
+  }
+  
+  // 更新缓冲区，保留未完成的消息
+  pythonBuffer = currentMessage;
+  
+  // 处理提取出的完整消息
+  messages.forEach(messageStr => {
+    if (messageStr) {
+      try {
+        const message = JSON.parse(messageStr);
+        console.log('解析的Python消息:', message);
+        
+        // 检查是否是启动完成消息
+        if (message.type === 'log' && message.message === '转写服务已启动，等待命令...') {
+          pythonReady = true;
+          console.log('Python服务已就绪，处理待发送消息');
+          
+          // 发送所有待发送的消息
+          while (pendingMessages.length > 0) {
+            const pendingMessage = pendingMessages.shift();
+            sendToPythonDirect(pendingMessage);
+          }
+        }
+        
+        if (mainWindow) {
+          mainWindow.webContents.send('python-message', message);
+        }
+      } catch (error) {
+        console.error('JSON解析失败:', error);
+        console.error('问题消息:', messageStr);
+        
+        // 发送原始消息作为日志
+        if (mainWindow) {
+          mainWindow.webContents.send('python-message', {
+            type: 'log',
+            level: 'warning',
+            message: `Python输出解析失败: ${messageStr}`,
+            timestamp: new Date().toISOString()
+          });
+        }
+      }
+    }
+  });
+}
+
+// 直接发送消息到Python（不检查状态）
+function sendToPythonDirect(message) {
+  try {
+    const jsonMessage = JSON.stringify(message) + '\n';
+    console.log('直接发送到Python:', jsonMessage.trim());
+    pythonProcess.stdin.write(jsonMessage);
+    return true;
+  } catch (error) {
+    console.error('直接发送消息失败:', error);
+    return false;
   }
 }
 
@@ -125,6 +233,11 @@ function startPythonService() {
     pythonProcess.kill();
     pythonProcess = null;
   }
+
+  // 重置状态
+  pythonReady = false;
+  pythonBuffer = '';
+  pendingMessages = [];
 
   console.log('启动转写服务...');
   const userCwd = isPackaged ? userDataPath : __dirname;
@@ -227,44 +340,18 @@ function startPythonService() {
 
     console.log('转写服务已启动，PID:', pythonProcess.pid);
 
-    pythonProcess.stdout.on('data', (data) => {
-      const lines = data.toString('utf8').split('\n');
-      console.log('Python输出:', data.toString('utf8'));
-      
-      lines.forEach(line => {
-        if (line.trim()) {
-          try {
-            const message = JSON.parse(line.trim());
-            console.log('解析的Python消息:', message);
-            if (mainWindow) {
-              mainWindow.webContents.send('python-message', message);
-            }
-          } catch (error) {
-            console.error('解析Python消息失败:', error);
-            console.error('原始消息:', line);
-            // 发送原始消息作为日志
-            if (mainWindow) {
-              mainWindow.webContents.send('python-message', {
-                type: 'log',
-                level: 'info',
-                message: `Python输出: ${line.trim()}`,
-                timestamp: new Date().toISOString()
-              });
-            }
-          }
-        }
-      });
-    });
+    // 使用新的输出处理函数
+    pythonProcess.stdout.on('data', processPythonOutput);
 
     pythonProcess.stderr.on('data', (data) => {
       const errorOutput = data.toString('utf8');
       console.error('Python stderr:', errorOutput);
-      
+
       // 在调试模式下，显示更详细的stderr信息
       if (processEnv.ELECTRON_DEBUG === '1') {
         console.log('Python调试信息:', errorOutput);
       }
-      
+
       if (mainWindow) {
         mainWindow.webContents.send('python-message', {
           type: 'log',
@@ -277,6 +364,7 @@ function startPythonService() {
 
     pythonProcess.on('error', (error) => {
       console.error('Python进程启动失败:', error);
+      pythonReady = false;
       if (mainWindow) {
         mainWindow.webContents.send('python-message', {
           type: 'log',
@@ -290,6 +378,7 @@ function startPythonService() {
 
     pythonProcess.on('close', (code, signal) => {
       console.log(`Python进程退出，代码: ${code}, 信号: ${signal}`);
+      pythonReady = false;
       if (mainWindow) {
         mainWindow.webContents.send('python-message', {
           type: 'log',
@@ -302,26 +391,32 @@ function startPythonService() {
     });
 
     pythonProcess.on('spawn', () => {
-      console.log('转写服务已成功启动');
+      console.log('转写服务进程已启动，等待初始化完成...');
       if (mainWindow) {
         mainWindow.webContents.send('python-message', {
           type: 'log',
           level: 'info',
-          message: '转写服务已启动',
+          message: '转写服务进程已启动',
           timestamp: new Date().toISOString()
         });
       }
       
-      // 发送初始配置
+      // 等待Python服务就绪后发送初始配置
       setTimeout(() => {
-        console.log('发送初始配置到转写服务:', config);
-        sendToPython({ type: 'update_config', config });
-      }, 1000);
+        if (pythonReady) {
+          console.log('发送初始配置到转写服务:', config);
+          sendToPython({ type: 'update_config', config });
+        } else {
+          console.log('Python服务未就绪，将配置加入待发送队列');
+          pendingMessages.push({ type: 'update_config', config });
+        }
+      }, 2000);
     });
-    
+
     return true;
   } catch (error) {
     console.error('启动转写服务失败:', error);
+    pythonReady = false;
     if (mainWindow) {
       mainWindow.webContents.send('python-message', {
         type: 'log',
@@ -336,7 +431,7 @@ function startPythonService() {
 
 function sendToPython(message) {
   console.log('准备发送消息到转写服务:', message);
-  
+
   if (!pythonProcess) {
     console.error('转写服务进程不存在，无法发送消息');
     if (mainWindow) {
@@ -363,24 +458,14 @@ function sendToPython(message) {
     return false;
   }
 
-  try {
-    const jsonMessage = JSON.stringify(message) + '\n';
-    console.log('发送JSON消息:', jsonMessage.trim());
-    pythonProcess.stdin.write(jsonMessage);
-    console.log('消息发送成功');
+  // 如果Python服务未就绪，将消息加入待发送队列
+  if (!pythonReady) {
+    console.log('Python服务未就绪，消息加入待发送队列');
+    pendingMessages.push(message);
     return true;
-  } catch (error) {
-    console.error('发送消息到转写服务失败:', error);
-    if (mainWindow) {
-      mainWindow.webContents.send('python-message', {
-        type: 'log',
-        level: 'error',
-        message: `发送消息失败: ${error.message}`,
-        timestamp: new Date().toISOString()
-      });
-    }
-    return false;
   }
+
+  return sendToPythonDirect(message);
 }
 
 // IPC事件处理
@@ -420,7 +505,7 @@ ipcMain.handle('open-settings', () => {
 
 ipcMain.handle('test-python', async (event, pythonPath) => {
   console.log('收到Python测试请求:', pythonPath);
-  
+
   // 如果没有提供Python路径，提示用户这是可选的
   if (!pythonPath) {
     return {
@@ -429,28 +514,28 @@ ipcMain.handle('test-python', async (event, pythonPath) => {
       message: '应用将使用预编译的转写服务，Python环境配置是可选的。'
     };
   }
-  
+
   return new Promise((resolve) => {
     const testCmd = pythonPath;
     const testProcess = spawn(testCmd, ['--version'], {
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: { 
-        ...process.env, 
-        PYTHONIOENCODING: 'utf-8' 
+      env: {
+        ...process.env,
+        PYTHONIOENCODING: 'utf-8'
       }
     });
-    
+
     let output = '';
     let error = '';
-    
+
     testProcess.stdout.on('data', (data) => {
       output += data.toString('utf8');
     });
-    
+
     testProcess.stderr.on('data', (data) => {
       error += data.toString('utf8');
     });
-    
+
     testProcess.on('close', (code) => {
       if (code === 0) {
         const version = output.trim() || error.trim(); // 有些Python版本输出到stderr
@@ -467,7 +552,7 @@ ipcMain.handle('test-python', async (event, pythonPath) => {
         });
       }
     });
-    
+
     testProcess.on('error', (err) => {
       resolve({
         success: false,
@@ -475,7 +560,7 @@ ipcMain.handle('test-python', async (event, pythonPath) => {
         message: 'Python不可用，但应用将使用预编译的转写服务。'
       });
     });
-    
+
     // 5秒超时
     setTimeout(() => {
       testProcess.kill();
@@ -490,7 +575,7 @@ ipcMain.handle('test-python', async (event, pythonPath) => {
 
 ipcMain.handle('restart-python-service', async (event) => {
   console.log('收到重启转写服务请求');
-  
+
   try {
     // 停止现有服务
     if (pythonProcess) {
@@ -498,13 +583,13 @@ ipcMain.handle('restart-python-service', async (event) => {
       pythonProcess = null;
       console.log('已停止现有转写服务');
     }
-    
+
     // 等待一秒
     await new Promise(resolve => setTimeout(resolve, 1000));
-    
+
     // 重新启动服务
     const success = startPythonService();
-    
+
     return {
       success: success,
       error: success ? null : '启动转写服务失败'
@@ -612,7 +697,7 @@ app.whenReady().then(() => {
   console.log('Electron app is ready');
   console.log('Current working directory:', process.cwd());
   console.log('__dirname:', __dirname);
-  
+
   try {
     console.log('Loading config...');
     loadConfig();
@@ -642,7 +727,7 @@ app.on('window-all-closed', () => {
     console.log('应用退出，终止转写服务');
     pythonProcess.kill();
   }
-  
+
   if (process.platform !== 'darwin') {
     app.quit();
   }

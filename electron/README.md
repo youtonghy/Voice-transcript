@@ -13,7 +13,7 @@
 - ⚙️ 自适应配置：阈值、静音时长、翻译、模型、API 地址可动态修改
 - 📜 实时日志：界面中即时显示处理状态与结果
 - 🧩 前后端解耦：Python 独立服务，可单独更新 / 替换
-- 🛠️ 打包免 Python：Windows 下内置 PyInstaller 产物，零依赖运行
+- 🛠️ 打包免 Python：Windows 下内置 Nuitka 产物，零依赖运行
 - ⌨️ 快捷键支持：录音控制、设置、退出
 
 ---
@@ -47,7 +47,7 @@ npm install
 ### 3. 安装 Python 依赖（开发调试需要）
 ```bash
 pip install --upgrade pip
-pip install sounddevice soundfile numpy openai
+pip install sounddevice soundfile numpy openai nuitka
 ```
 ### 4. 启动应用
 ```bash
@@ -65,7 +65,7 @@ npm run dev     # 开启开发者工具
 | npm start | 启动应用 |
 | npm run dev | 启动并自动打开 DevTools |
 | npm run build | 仅 Electron 打包（不含安装包差异平台产物定义）|
-| npm run build:py:win | 使用 PyInstaller 打包 Python 服务 (transcribe_service.exe) |
+| npm run build:py:win | 使用 Nuitka 打包 Python 服务 (transcribe_service.exe) |
 | npm run dist:win | 先打包 Python，再生成 Windows 安装包 (NSIS) |
 
 ---
@@ -125,10 +125,10 @@ npm run build:py:win
 npm run dist:win
 # 产物: dist/ 下的安装程序 (NSIS)
 ```
-其他平台（需自行补充 PyInstaller 构建脚本）：
+其他平台（需自行补充 Nuitka 构建脚本）：
 ```bash
 # 示例（需根据平台调整）
-pyinstaller --noconsole --onefile transcribe_service.py
+nuitka --onefile --disable-console transcribe_service.py
 npm run build
 ```
 > 跨平台打包包含本地音频库差异，建议在目标平台或对应 CI Runner 上构建。

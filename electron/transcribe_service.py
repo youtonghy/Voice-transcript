@@ -403,6 +403,7 @@ def audio_callback(indata, frames, time, status):
     """音频录制回调函数"""
     global audio_data, segment_frames, silence_frames_contig, split_requested
     global segment_active, new_segment_requested, pre_roll_chunks, pre_roll_frames
+    global is_recording
     
     if status:
         log_message("warning", f"录音状态: {status}")
@@ -793,8 +794,8 @@ def handle_message(message):
 
 def main():
     """主函数"""
-    import sys
     import traceback
+    global is_recording, recording_thread
     
     # 编码已经在模块导入时设置，这里只检查调试模式
     debug_mode = os.environ.get('ELECTRON_DEBUG') == '1'
