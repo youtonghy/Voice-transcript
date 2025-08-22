@@ -11,11 +11,25 @@ contextBridge.exposeInMainWorld('electronAPI', {
   testPython: (pythonPath) => ipcRenderer.invoke('test-python', pythonPath),
   restartPythonService: () => ipcRenderer.invoke('restart-python-service'),
   
+  // 媒体转写相关API
+  processMediaFile: (params) => ipcRenderer.invoke('process-media-file', params),
+  selectMediaFile: () => ipcRenderer.invoke('select-media-file'),
+  selectOutputPath: (params) => ipcRenderer.invoke('select-output-path', params),
+  exportResults: (params) => ipcRenderer.invoke('export-results', params),
+  
   onPythonMessage: (callback) => {
     ipcRenderer.on('python-message', (event, message) => callback(message));
   },
   
+  onMediaProgress: (callback) => {
+    ipcRenderer.on('media-progress', (event, message) => callback(message));
+  },
+  
   removePythonMessageListener: () => {
     ipcRenderer.removeAllListeners('python-message');
+  },
+  
+  removeMediaProgressListener: () => {
+    ipcRenderer.removeAllListeners('media-progress');
   }
 });

@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>媒体文件转写翻译</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            background: #ffffff;
+            color: #333;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* 顶部导航栏 */
+        .nav-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: #ffffff;
+            border-bottom: 1px solid #e5e5e5;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            z-index: 1000;
+            height: 60px;
+        }
+
+        .nav-content {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 100%;
+            padding: 0 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .nav-left {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .back-btn {
+            width: 40px;
+            height: 40px;
+            border: 1px solid #e5e5e5;
+            border-radius: 8px;
+            background: #ffffff;
+            color: #666;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+            text-decoration: none;
+            font-size: 1.2rem;
+        }
+
+        .back-btn:hover {
+            border-color: #333;
+            color: #333;
+            background: #f5f5f5;
+        }
+
+        .nav-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #333;
+        }
+
+        /* 主内容区域 */
+        .main-content {
+            padding-top: 60px;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .content-wrapper {
+            flex: 1;
+            display: flex;
+            gap: 20px;
+            padding: 20px;
+            overflow: hidden;
+            min-height: 0; /* 允许子项滚动 */
+        }
+
+        /* 左侧设置面板 */
+        .settings-panel {
+            width: 350px;
+            background: #ffffff;
+            border: 1px solid #e5e5e5;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            overflow-y: auto; /* 左侧面板可滚动 */
+            min-height: 0;
+        }
+
+        .panel-section {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .panel-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 8px;
+        }
+
+        /* 文件上传区域 */
+        .upload-area {
+            border: 2px dashed #e5e5e5;
+            border-radius: 12px;
+            padding: 30px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            background: #fafbfc;
+        }
+
+        .upload-area:hover {
+            border-color: #333;
+            background: #f5f5f5;
+        }
+
+        .upload-area.dragover {
+            border-color: #333;
+            background: #f0f9ff;
+        }
+
+        .upload-icon {
+            font-size: 2.5rem;
+            color: #666;
+            margin-bottom: 12px;
+        }
+
+        .upload-text {
+            color: #666;
+            font-size: 0.9rem;
+            line-height: 1.5;
+        }
+
+        .upload-text .primary {
+            color: #333;
+            font-weight: 500;
+        }
+
+        .file-info {
+            background: #f8f9fa;
+            border: 1px solid #e5e5e5;
+            border-radius: 8px;
+            padding: 12px;
+            font-size: 0.9rem;
+        }
+
+        .file-name {
+            font-weight: 500;
+            color: #333;
+            margin-bottom: 4px;
+        }
+
+        .file-size {
+            color: #666;
+            font-size: 0.8rem;
+        }
+
+        /* 设置选项 */
+        .setting-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .setting-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 10px;
+            border-radius: 6px;
+            cursor: pointer; /* 整行可点击 */
+            transition: background 0.15s ease;
+        }
+
+        .setting-item:hover {
+            background: #f8f9fa;
+        }
+
+        .checkbox {
+            width: 18px;
+            height: 18px;
+            border: 2px solid #e5e5e5;
+            border-radius: 4px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+        }
+
+        .checkbox.checked {
+            background: #333;
+            border-color: #333;
+            color: white;
+        }
+
+        /* 由JS注入勾选符号，移除伪元素避免重复显示 */
+
+        .setting-label {
+            flex: 1;
+            color: #333;
+            font-size: 0.9rem;
+            cursor: pointer;
+        }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .input-label {
+            font-size: 0.85rem;
+            color: #666;
+            font-weight: 500;
+        }
+
+        .text-input {
+            padding: 8px 12px;
+            border: 1px solid #e5e5e5;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            transition: border-color 0.2s ease;
+        }
+
+        .text-input:focus {
+            outline: none;
+            border-color: #333;
+        }
+
+        /* 操作按钮区域 */
+        .action-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-top: auto;
+        }
+
+        .btn {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-align: center;
+        }
+
+        .btn-primary {
+            background: #333;
+            color: white;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            background: #000;
+        }
+
+        .btn-primary:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .btn-secondary {
+            background: #f5f5f5;
+            color: #333;
+            border: 1px solid #e5e5e5;
+        }
+
+        .btn-secondary:hover:not(:disabled) {
+            background: #e5e5e5;
+        }
+
+        /* 右侧结果面板 */
+        .results-panel {
+            flex: 1;
+            background: #ffffff;
+            border: 1px solid #e5e5e5;
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+        }
+
+        .results-header {
+            padding: 20px;
+            border-bottom: 1px solid #e5e5e5;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .results-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .export-btn {
+            padding: 8px 16px;
+            background: #333;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }
+
+        .export-btn:hover:not(:disabled) {
+            background: #000;
+        }
+
+        .export-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .results-content {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            min-height: 0;
+        }
+
+        /* 进度显示 */
+        .progress-container {
+            padding: 20px;
+            text-align: center;
+        }
+
+        .progress-text {
+            color: #666;
+            font-size: 0.9rem;
+            margin-bottom: 12px;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 6px;
+            background: #e5e5e5;
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: #333;
+            transition: width 0.3s ease;
+            border-radius: 3px;
+        }
+
+        /* 结果项 */
+        .result-item {
+            background: #f8f9fa;
+            border: 1px solid #e5e5e5;
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 12px;
+        }
+
+        .result-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+        }
+
+        .segment-number {
+            font-size: 0.8rem;
+            color: #666;
+            font-weight: 500;
+        }
+
+        .result-text {
+            margin-bottom: 8px;
+        }
+
+        .transcription {
+            color: #333;
+            line-height: 1.5;
+            margin-bottom: 8px;
+            font-size: 0.95rem;
+        }
+
+        .translation {
+            color: #555;
+            line-height: 1.5;
+            font-size: 0.95rem;
+            border-top: 1px solid #e5e5e5;
+            padding-top: 8px;
+        }
+
+        .empty-state {
+            text-align: center;
+            color: #666;
+            font-size: 0.9rem;
+            padding: 40px 20px;
+        }
+
+        .empty-icon {
+            font-size: 3rem;
+            color: #ccc;
+            margin-bottom: 12px;
+        }
+
+        /* 隐藏的文件输入 */
+        .file-input {
+            display: none;
+        }
+
+        /* 响应式设计 */
+        @media (max-width: 768px) {
+            .content-wrapper {
+                flex-direction: column;
+                gap: 15px;
+                padding: 15px;
+            }
+
+            .settings-panel {
+                width: 100%;
+            }
+
+            .nav-content {
+                padding: 0 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- 顶部导航栏 -->
+    <div class="nav-bar">
+        <div class="nav-content">
+            <div class="nav-left">
+                <a href="index.html" class="back-btn" title="返回主页">
+                    ←
+                </a>
+                <div class="nav-title">媒体文件转写翻译</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 主内容区域 -->
+    <div class="main-content">
+        <div class="content-wrapper">
+            <!-- 左侧设置面板 -->
+            <div class="settings-panel">
+                <!-- 文件上传 -->
+                <div class="panel-section">
+                    <div class="panel-title">选择文件</div>
+                    <div class="upload-area" id="uploadArea">
+                        <div class="upload-icon">📁</div>
+                        <div class="upload-text">
+                            <div class="primary">点击选择媒体文件</div>
+                            <div>支持视频: MP4, AVI, MOV, MKV 等</div>
+                            <div>支持音频: WAV, MP3, FLAC, AAC 等</div>
+                        </div>
+                    </div>
+                    
+                    <!-- 文件信息显示 -->
+                    <div id="fileInfo" class="file-info" style="display: none;">
+                        <div class="file-name" id="fileName"></div>
+                        <div class="file-size" id="fileSize"></div>
+                    </div>
+                </div>
+
+                <!-- 处理设置 -->
+                <div class="panel-section">
+                    <div class="panel-title">处理设置</div>
+                    <div class="setting-group">
+                        <div class="setting-item">
+                            <div class="checkbox checked" id="enableTranslation">
+                                <span>✓</span>
+                            </div>
+                            <div class="setting-label">启用翻译</div>
+                        </div>
+                        
+                        <div class="input-group" id="languageGroup">
+                            <div class="input-label">目标语言</div>
+                            <select class="text-input" id="targetLanguage">
+                                <option value="中文" selected>中文 (Chinese)</option>
+                                <option value="English">English</option>
+                                <option value="日本語">日本語 (Japanese)</option>
+                                <option value="한국어">한국어 (Korean)</option>
+                                <option value="Español">Español (Spanish)</option>
+                                <option value="Français">Français (French)</option>
+                                <option value="Deutsch">Deutsch (German)</option>
+                                <option value="Italiano">Italiano (Italian)</option>
+                                <option value="Português">Português (Portuguese)</option>
+                                <option value="Русский">Русский (Russian)</option>
+                                <option value="العربية">العربية (Arabic)</option>
+                                <option value="हिन्दी">हिन्दी (Hindi)</option>
+                                <option value="ไทย">ไทย (Thai)</option>
+                                <option value="Tiếng Việt">Tiếng Việt (Vietnamese)</option>
+                                <option value="Bahasa Indonesia">Bahasa Indonesia</option>
+                                <option value="Türkçe">Türkçe (Turkish)</option>
+                                <option value="Nederlands">Nederlands (Dutch)</option>
+                                <option value="Polski">Polski (Polish)</option>
+                                <option value="Українська">Українська (Ukrainian)</option>
+                                <option value="Čeština">Čeština (Czech)</option>
+                                <option value="__custom__">自定义...</option>
+                            </select>
+                            <input type="text" class="text-input" id="customLanguage" placeholder="输入自定义语言" style="display: none;">
+                        </div>
+                        
+                        <div class="setting-item">
+                            <div class="checkbox" id="theaterMode">
+                            </div>
+                            <div class="setting-label">启用剧场模式（音频增强）</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 保存设置 -->
+                <div class="panel-section">
+                    <div class="panel-title">输出设置</div>
+                    <div class="input-group">
+                        <div class="input-label">保存位置</div>
+                        <div style="display: flex; gap: 8px;">
+                            <input type="text" class="text-input" id="outputPath" placeholder="选择保存位置" readonly style="flex: 1;">
+                            <button class="btn btn-secondary" id="browseOutputBtn" style="white-space: nowrap;">浏览</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 操作按钮 -->
+                <div class="action-buttons">
+                    <button class="btn btn-primary" id="startProcessBtn" disabled>开始处理</button>
+                    <button class="btn btn-secondary" id="clearBtn">清除选择</button>
+                </div>
+            </div>
+
+            <!-- 右侧结果面板 -->
+            <div class="results-panel">
+                <div class="results-header">
+                    <div class="results-title">处理结果</div>
+                    <button class="export-btn" id="exportBtn" disabled>导出TXT</button>
+                </div>
+                
+                <div class="results-content" id="resultsContent">
+                    <div class="empty-state">
+                        <div class="empty-icon">📄</div>
+                        <div>选择媒体文件并开始处理后，转写结果将显示在这里</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="media-transcribe-renderer.js"></script>
+</body>
+</html>

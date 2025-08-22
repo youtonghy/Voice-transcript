@@ -10,12 +10,12 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "debug:py-list": ".venv\\Scripts\\python.exe -m pip list",
-    "debug:py-path": ".venv\\Scripts\\python.exe -c \"import sys; print(f'Python Executable Path: {sys.executable}')\"",
     "dev": "electron . --dev",
     "build": "electron-builder",
     "dist:win": "npm run build:py:win && electron-builder --win",
-    "build:py:win": ".venv\\Scripts\\python.exe -m nuitka --onefile --windows-console-mode=disable --output-dir=dist-python\\win --output-filename=transcribe_service.exe transcribe_service.py"
+    "build:py:transcribe": ".venv\\Scripts\\python.exe -m nuitka --onefile --windows-console-mode=disable --output-dir=dist-python\\win --output-filename=transcribe_service.exe transcribe_service.py",
+    "build:py:media": ".venv\\Scripts\\python.exe -m nuitka --onefile --windows-console-mode=disable --include-data-files=ffmpeg.exe=ffmpeg\\ffmpeg.exe --output-dir=dist-python\\win --output-filename=media_transcribe.exe media_transcribe.py",
+    "build:py:win": "npm run build:py:transcribe && npm run build:py:media"
   },
   "devDependencies": {
     "electron": "^37.3.1",
@@ -33,6 +33,8 @@
       "renderer.js",
       "settings.html",
       "settings.js",
+      "media-transcribe.html",
+      "media-transcribe-renderer.js",
       "package.json"
     ],
     "extraResources": [
@@ -40,7 +42,15 @@
         "from": "dist-python/win",
         "to": "python",
         "filter": [
-          "transcribe_service.exe"
+          "transcribe_service.exe",
+          "media_transcribe.exe"
+        ]
+      },
+      {
+        "from": ".",
+        "to": "python",
+        "filter": [
+          "ffmpeg.exe"
         ]
       }
     ],

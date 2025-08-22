@@ -17,10 +17,14 @@ function setupEventListeners() {
     // 剧场模式开关
     document.getElementById('theaterMode').addEventListener('change', autoSave);
     
-    // 语言选项
-    document.querySelectorAll('.language-option').forEach(option => {
-        option.addEventListener('click', selectLanguage);
+    // 目标语言选择与自定义
+    const targetLanguage = document.getElementById('targetLanguage');
+    const customLanguage = document.getElementById('customLanguage');
+    targetLanguage.addEventListener('change', () => {
+        updateCustomLanguageVisibility();
+        autoSave();
     });
+    customLanguage.addEventListener('input', autoSave);
     
     // 实时验证API密钥格式并触发主页面检测
     document.getElementById('apiKey').addEventListener('input', (event) => {
@@ -34,7 +38,7 @@ function setupEventListeners() {
     
     // 为所有输入框添加失焦自动保存
     const autoSaveInputs = [
-        'apiKey', 'apiUrl', 'targetLanguage', 
+        'apiKey', 'apiUrl', 'targetLanguage', 'customLanguage',
         'silenceThreshold', 'silenceDuration', 'theaterMode'
     ];
     
@@ -65,7 +69,20 @@ function populateForm(config) {
     const enableTranslation = document.getElementById('enableTranslation');
     enableTranslation.checked = config.enable_translation !== false;
     
-    document.getElementById('targetLanguage').value = config.translate_language || '中文';
+    // 目标语言：若不在下拉选项中，切换为自定义
+    const targetLanguage = document.getElementById('targetLanguage');
+    const customLanguage = document.getElementById('customLanguage');
+    const savedLang = config.translate_language || '中文';
+    const options = Array.from(targetLanguage.options).map(o => o.value);
+    if (options.includes(savedLang)) {
+        targetLanguage.value = savedLang;
+        customLanguage.style.display = 'none';
+        customLanguage.value = '';
+    } else {
+        targetLanguage.value = '__custom__';
+        customLanguage.style.display = 'block';
+        customLanguage.value = savedLang;
+    }
     
     // 录音设置
     document.getElementById('silenceThreshold').value = config.silence_rms_threshold || 0.01;
@@ -76,7 +93,7 @@ function populateForm(config) {
     
     // 更新UI状态
     toggleTranslationSettings();
-    updateLanguageSelection(config.translate_language || '中文');
+    updateCustomLanguageVisibility();
 }
 
 function toggleTranslationSettings() {
@@ -92,22 +109,11 @@ function toggleTranslationSettings() {
     }
 }
 
-function selectLanguage(event) {
-    const language = event.target.dataset.lang;
-    document.getElementById('targetLanguage').value = language;
-    updateLanguageSelection(language);
-    // 语言选择也触发自动保存
-    autoSave();
-}
-
-function updateLanguageSelection(selectedLang) {
-    document.querySelectorAll('.language-option').forEach(option => {
-        if (option.dataset.lang === selectedLang) {
-            option.classList.add('selected');
-        } else {
-            option.classList.remove('selected');
-        }
-    });
+function updateCustomLanguageVisibility() {
+    const targetLanguage = document.getElementById('targetLanguage');
+    const customLanguage = document.getElementById('customLanguage');
+    const useCustom = targetLanguage.value === '__custom__';
+    customLanguage.style.display = useCustom ? 'block' : 'none';
 }
 
 function validateApiKey() {
@@ -119,6 +125,16 @@ function validateApiKey() {
 async function saveSettings(event) {
     event.preventDefault();
     
+    // 校验自定义语言
+    const enableTranslation = document.getElementById('enableTranslation').checked;
+    const targetLanguage = document.getElementById('targetLanguage');
+    const customLanguage = document.getElementById('customLanguage');
+    if (enableTranslation && targetLanguage.value === '__custom__' && !customLanguage.value.trim()) {
+        showTopNotification('❌ 请输入自定义目标语言', 'error');
+        customLanguage.focus();
+        return;
+    }
+
     const formData = new FormData(event.target);
     const newConfig = {};
     
@@ -188,7 +204,8 @@ function showStatus(type, message) {
 // 键盘快捷键
 document.addEventListener('keydown', (event) => {
     if (event.key === 'Escape') {
-        window.close();
+        // 返回主页面而不是关闭窗口
+        window.location.href = 'index.html';
     } else if (event.ctrlKey && event.key === 's') {
         event.preventDefault();
         document.getElementById('settingsForm').dispatchEvent(new Event('submit'));
@@ -204,6 +221,15 @@ function autoSave() {
     
     // API相关配置变化时使用较短延迟(300ms)，其他配置使用800ms
     const newConfig = collectFormData();
+    // 自定义目标语言不能为空
+    if (newConfig.enable_translation) {
+        const targetLanguage = document.getElementById('targetLanguage').value;
+        const customLanguage = document.getElementById('customLanguage').value.trim();
+        if (targetLanguage === '__custom__' && !customLanguage) {
+            // 不自动保存，等待填写
+            return;
+        }
+    }
     const isApiRelated = checkIfRestartNeeded(newConfig);
     const delay = isApiRelated ? 300 : 800;
     
@@ -270,6 +296,10 @@ function collectFormData() {
     newConfig.enable_translation = document.getElementById('enableTranslation').checked;
     newConfig.theater_mode = document.getElementById('theaterMode').checked;
     
+    // 统一解析目标语言：自定义优先
+    const targetLanguage = document.getElementById('targetLanguage').value;
+    const customLanguage = document.getElementById('customLanguage').value.trim();
+    newConfig.translate_language = (targetLanguage === '__custom__') ? customLanguage : targetLanguage;
     return newConfig;
 }
 
@@ -278,9 +308,6 @@ function showTopNotification(message, type = 'success') {
     const notification = document.getElementById('topNotification');
     notification.textContent = message;
     notification.className = `top-notification ${type}`;
-    
-    // 添加body类以调整页面间距
-    document.body.classList.add('notification-active');
     
     // 显示通知
     setTimeout(() => {
@@ -297,9 +324,4 @@ function showTopNotification(message, type = 'success') {
 function hideTopNotification() {
     const notification = document.getElementById('topNotification');
     notification.classList.remove('show');
-    
-    // 等待动画完成后移除body类
-    setTimeout(() => {
-        document.body.classList.remove('notification-active');
-    }, 300);
 }

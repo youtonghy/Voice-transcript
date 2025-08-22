@@ -38,10 +38,12 @@ async function checkOpenAIConfig() {
                                            cfg.openai_api_key.startsWith('sk-') && cfg.openai_api_key.length > 20);
             const newTranslationEnabled = cfg && cfg.enable_translation !== false;
             
-            // 只有状态变化时才更新日志
+            // 仅在未配置时输出日志；已配置不输出
             if (openaiConfigured !== newOpenaiConfigured) {
                 openaiConfigured = newOpenaiConfigured;
-                addLogEntry('info', `OpenAI转写: ${openaiConfigured ? '已配置' : '未配置'}`);
+                if (!openaiConfigured) {
+                    addLogEntry('warning', 'OpenAI转写: 未配置');
+                }
             }
             
             translationEnabled = newTranslationEnabled;
@@ -51,7 +53,7 @@ async function checkOpenAIConfig() {
             if (openaiConfigured !== false) {
                 openaiConfigured = false;
                 translationEnabled = true;
-                addLogEntry('info', 'OpenAI转写: 未配置');
+                addLogEntry('warning', 'OpenAI转写: 未配置');
             }
         }
     }
@@ -106,11 +108,9 @@ function updateServiceStatus(status) {
         'error': '服务错误',
         'stopped': '服务已停止'
     };
-    // 仅在最终状态写入日志：后端连接 成功/失败
-    if (status === 'running') {
-        addLogEntry('info', '后端连接: 成功');
-    } else if (status === 'error' || status === 'stopped') {
-        addLogEntry('info', '后端连接: 失败');
+    // 仅在失败状态输出日志；成功不输出
+    if (status === 'error' || status === 'stopped') {
+        addLogEntry('error', '后端连接: 失败');
     }
 
     // 更新UI状态
@@ -508,20 +508,28 @@ function addOrUpdateResultBubble({ transcription, translation }) {
 
 async function openSettings() {
     try {
-        await window.electronAPI.openSettings();
+        // 在同一窗口中打开设置页
+        window.location.href = 'settings.html';
     } catch (error) {
         console.error('打开设置失败:', error);
+    }
+}
+
+function openMediaTranscribe() {
+    try {
+        // 导航到媒体转写页面
+        window.location.href = 'media-transcribe.html';
+    } catch (error) {
+        console.error('打开媒体转写页面失败:', error);
     }
 }
 
 function clearLogs() {
     if (confirm('确定要清空所有日志吗？')) {
         logContainer.innerHTML = '';
-        // 重新输出当前状态
-        if (pythonServiceStatus === 'running') {
-            addLogEntry('info', '后端连接: 成功');
-        } else if (pythonServiceStatus === 'error' || pythonServiceStatus === 'stopped') {
-            addLogEntry('info', '后端连接: 失败');
+        // 仅在失败状态下输出后端连接日志；成功不输出
+        if (pythonServiceStatus === 'error' || pythonServiceStatus === 'stopped') {
+            addLogEntry('error', '后端连接: 失败');
         }
         // 重新检查并输出OpenAI配置状态
         checkOpenAIConfig();

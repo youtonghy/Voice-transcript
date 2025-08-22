@@ -1,12 +1,14 @@
-const { app, BrowserWindow, ipcMain, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, Menu, dialog } = require('electron');
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 
 let mainWindow;
 let settingsWindow;
+let mediaTranscribeWindow;
 // Python进程管理
 let pythonProcess;
+let mediaTranscribeProcess;
 let pythonBuffer = ''; // 用于缓存不完整的JSON消息
 let pythonReady = false;
 let pendingMessages = []; // 缓存待发送的消息
@@ -499,8 +501,10 @@ ipcMain.handle('save-config', (event, newConfig) => {
 });
 
 ipcMain.handle('open-settings', () => {
-  console.log('收到打开设置请求');
-  createSettingsWindow();
+  console.log('收到打开设置请求（改为单窗口导航）');
+  if (mainWindow) {
+    mainWindow.loadFile('settings.html');
+  }
 });
 
 ipcMain.handle('test-python', async (event, pythonPath) => {
@@ -612,7 +616,9 @@ function createMenu() {
         {
           label: '设置',
           accelerator: 'CmdOrCtrl+,',
-          click: () => createSettingsWindow()
+          click: () => {
+            if (mainWindow) mainWindow.loadFile('settings.html');
+          }
         },
         { type: 'separator' },
         {
@@ -733,9 +739,465 @@ app.on('window-all-closed', () => {
   }
 });
 
+// 媒体转写相关IPC处理
+ipcMain.handle('process-media-file', async (event, params) => {
+  console.log('收到媒体文件处理请求:', params);
+  
+  try {
+    const { filePath, settings } = params;
+    
+    console.log('检查文件路径:', filePath);
+    
+    if (!filePath || filePath.trim() === '') {
+      throw new Error('文件路径为空');
+    }
+    
+    if (!fs.existsSync(filePath)) {
+      console.error('文件不存在:', filePath);
+      throw new Error(`文件不存在: ${filePath}`);
+    }
+    
+    // 检查文件大小
+    const stats = fs.statSync(filePath);
+    console.log('文件信息:', {
+      path: filePath,
+      size: stats.size,
+      sizeMB: (stats.size / 1024 / 1024).toFixed(2) + 'MB'
+    });
+
+    // 发送开始处理消息
+    if (mainWindow) {
+      mainWindow.webContents.send('media-progress', {
+        type: 'progress',
+        message: `开始处理文件: ${filePath.split('\\').pop().split('/').pop()}`,
+        progress: 0
+      });
+    }
+
+    // 启动媒体转写Python进程
+    const result = await startMediaTranscribeProcess(filePath, settings);
+    
+    return result;
+    
+  } catch (error) {
+    console.error('媒体文件处理失败:', error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+});
+
+ipcMain.handle('select-media-file', async (event) => {
+  console.log('收到选择媒体文件请求');
+  
+  try {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: '选择媒体文件',
+      filters: [
+        { 
+          name: '所有支持的媒体文件', 
+          extensions: ['mp4', 'avi', 'mov', 'mkv', 'flv', 'wmv', 'webm', 'm4v', 'wav', 'mp3', 'flac', 'aac', 'ogg', 'm4a', 'wma'] 
+        },
+        { 
+          name: '视频文件', 
+          extensions: ['mp4', 'avi', 'mov', 'mkv', 'flv', 'wmv', 'webm', 'm4v'] 
+        },
+        { 
+          name: '音频文件', 
+          extensions: ['wav', 'mp3', 'flac', 'aac', 'ogg', 'm4a', 'wma'] 
+        },
+        { name: '所有文件', extensions: ['*'] }
+      ],
+      properties: ['openFile']
+    });
+    
+    return result;
+    
+  } catch (error) {
+    console.error('选择媒体文件失败:', error);
+    return {
+      canceled: true,
+      error: error.message
+    };
+  }
+});
+
+ipcMain.handle('select-output-path', async (event, params) => {
+  console.log('收到选择输出路径请求');
+  
+  try {
+    const baseName = params && params.baseName ? params.baseName : '';
+    let defaultBase = 'transcription_result';
+    try {
+      if (baseName && typeof baseName === 'string') {
+        const parsed = path.parse(baseName);
+        if (parsed && parsed.name) {
+          defaultBase = `${parsed.name}_transcription_result`;
+        }
+      }
+    } catch (e) {
+      // ignore parse errors
+    }
+
+    const result = await dialog.showSaveDialog(mainWindow, {
+      title: '选择保存位置',
+      defaultPath: `${defaultBase}.txt`,
+      filters: [
+        { name: '文本文件', extensions: ['txt'] },
+        { name: '所有文件', extensions: ['*'] }
+      ]
+    });
+    
+    return result;
+    
+  } catch (error) {
+    console.error('选择输出路径失败:', error);
+    return {
+      canceled: true,
+      error: error.message
+    };
+  }
+});
+
+ipcMain.handle('export-results', async (event, params) => {
+  console.log('收到导出结果请求:', params);
+  
+  try {
+    const { results, outputPath } = params;
+    
+    if (!results || results.length === 0) {
+      throw new Error('没有可导出的结果');
+    }
+
+    // 构建导出内容
+    let content = `转写翻译结果\n`;
+    content += `生成时间: ${new Date().toLocaleString('zh-CN')}\n`;
+    content += '=' + '='.repeat(50) + '\n\n';
+    
+    results.forEach((result, index) => {
+      content += `段落 ${index + 1}:\n`;
+      content += `原文: ${result.transcription || ''}\n`;
+      if (result.translation) {
+        content += `翻译: ${result.translation}\n`;
+      }
+      content += '\n';
+    });
+
+    // 写入文件
+    fs.writeFileSync(outputPath, content, 'utf8');
+    
+    console.log('结果已导出到:', outputPath);
+    
+    return {
+      success: true,
+      exportPath: outputPath
+    };
+    
+  } catch (error) {
+    console.error('导出结果失败:', error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+});
+
+// 启动媒体转写Python进程
+async function startMediaTranscribeProcess(filePath, settings) {
+  return new Promise((resolve, reject) => {
+    try {
+      // 终止现有的媒体转写进程
+      if (mediaTranscribeProcess) {
+        mediaTranscribeProcess.kill();
+        mediaTranscribeProcess = null;
+      }
+
+      const userCwd = isPackaged ? userDataPath : __dirname;
+      
+      // 优先寻找已编译的exe文件
+      let servicePath = null;
+      let useSystemPython = false;
+      
+      // 按优先级搜索可执行文件
+      const candidates = [];
+      
+      if (isPackaged) {
+        // 打包后环境：从resources目录查找
+        candidates.push(path.join(process.resourcesPath, 'python', 'media_transcribe.exe'));
+      } else {
+        // 开发环境：优先使用已编译的exe
+        candidates.push(path.join(__dirname, 'dist-python', 'win', 'media_transcribe.exe'));
+        candidates.push(path.join(__dirname, 'dist', 'media_transcribe.exe'));
+      }
+
+      // 查找可用的exe文件
+      for (const candidate of candidates) {
+        if (fs.existsSync(candidate)) {
+          servicePath = candidate;
+          console.log('找到媒体转写服务可执行文件:', servicePath);
+          break;
+        }
+      }
+
+      // 如果没有找到exe文件，才考虑使用Python脚本（仅在开发模式下）
+      if (!servicePath && !isPackaged) {
+        const pythonScript = path.join(__dirname, 'media_transcribe.py');
+        if (fs.existsSync(pythonScript)) {
+          // 只有在配置中明确指定Python路径时才使用脚本模式
+          const configPythonPath = config.python_path;
+          if (configPythonPath) {
+            servicePath = configPythonPath;
+            useSystemPython = true;
+            console.log('使用配置的Python路径运行媒体转写脚本:', configPythonPath, pythonScript);
+          } else {
+            console.warn('未找到媒体转写可执行文件，且未配置Python路径。请运行 npm run build:py:win 编译服务。');
+            throw new Error('媒体转写服务不可用：未找到可执行文件且未配置Python路径。');
+          }
+        }
+      }
+
+      if (!servicePath) {
+        throw new Error('无法启动媒体转写服务：未找到可执行文件。请运行 npm run build:py:win 编译服务。');
+      }
+
+      console.log('启动媒体转写进程...');
+
+      // 构建命令行参数
+      // 若未提供输出文件名，则按“源文件名_transcription_result.txt”生成到同目录
+      let outputPath = settings.outputPath;
+      if (!outputPath || String(outputPath).trim() === '') {
+        try {
+          const parsed = path.parse(filePath);
+          outputPath = path.join(parsed.dir, `${parsed.name}_transcription_result.txt`);
+          console.log('未提供输出路径，自动生成:', outputPath);
+        } catch (e) {
+          outputPath = 'transcription_result.txt';
+        }
+      }
+      let spawnCmd, spawnArgs;
+      
+      if (useSystemPython) {
+        spawnCmd = servicePath;
+        spawnArgs = [
+          path.join(__dirname, 'media_transcribe.py'),
+          '--file', filePath,
+          '--output', outputPath
+        ];
+      } else {
+        spawnCmd = servicePath;
+        spawnArgs = [
+          '--file', filePath,
+          '--output', outputPath
+        ];
+      }
+
+      if (settings.enableTranslation) {
+        spawnArgs.push('--translate');
+        if (settings.targetLanguage) {
+          spawnArgs.push('--language', settings.targetLanguage);
+        }
+      }
+
+      if (settings.theaterMode) {
+        spawnArgs.push('--theater-mode');
+      }
+
+      // 设置环境变量
+      const processEnv = {
+        ...process.env,
+        PYTHONUNBUFFERED: '1',
+        PYTHONIOENCODING: 'utf-8'
+      };
+
+      // 指定本地 ffmpeg.exe 路径，优先使用项目根目录或打包目录中的文件
+      try {
+        const ffmpegCandidates = [];
+        // 开发环境：项目根目录
+        ffmpegCandidates.push(path.join(__dirname, 'ffmpeg.exe'));
+        ffmpegCandidates.push(path.join(__dirname, 'ffmpeg', 'ffmpeg.exe'));
+
+        // 若 exe 同目录存在（例如手动放到 dist-python/win/）
+        try {
+          const serviceDir = path.dirname(servicePath);
+          ffmpegCandidates.push(path.join(serviceDir, 'ffmpeg.exe'));
+          ffmpegCandidates.push(path.join(serviceDir, 'ffmpeg', 'ffmpeg.exe'));
+        } catch (e) {
+          // ignore
+        }
+
+        // 打包环境：resources/python 下（与 .exe 一起分发）
+        if (isPackaged) {
+          ffmpegCandidates.push(path.join(process.resourcesPath, 'python', 'ffmpeg.exe'));
+          ffmpegCandidates.push(path.join(process.resourcesPath, 'ffmpeg', 'ffmpeg.exe'));
+        }
+
+        for (const c of ffmpegCandidates) {
+          if (c && fs.existsSync(c)) {
+            processEnv.IMAGEIO_FFMPEG_EXE = c;
+            console.log('使用本地 ffmpeg:', c);
+            break;
+          }
+        }
+      } catch (e) {
+        console.warn('设置本地 ffmpeg 路径失败:', e.message);
+      }
+
+      // 添加OpenAI配置
+      if (config.openai_api_key) {
+        processEnv.OPENAI_API_KEY = config.openai_api_key;
+      }
+      if (config.openai_base_url) {
+        processEnv.OPENAI_BASE_URL = config.openai_base_url;
+      }
+
+      console.log('启动媒体转写服务:', spawnCmd, spawnArgs);
+
+      mediaTranscribeProcess = spawn(spawnCmd, spawnArgs, {
+        stdio: ['pipe', 'pipe', 'pipe'],
+        cwd: userCwd,
+        env: processEnv
+      });
+
+      console.log('媒体转写进程已启动，PID:', mediaTranscribeProcess.pid);
+
+      let outputBuffer = '';
+      let hasResults = false;
+      let stderrBuffer = '';
+
+      mediaTranscribeProcess.stdout.on('data', (data) => {
+        const output = data.toString('utf8');
+        console.log('媒体转写输出:', output);
+        
+        outputBuffer += output;
+        
+        // 解析进度和结果
+        const lines = outputBuffer.split('\n');
+        outputBuffer = lines.pop() || ''; // 保留最后一行（可能不完整）
+        
+        lines.forEach(line => {
+          line = line.trim();
+          if (!line) return;
+          
+          // 尝试解析JSON消息
+          try {
+            const message = JSON.parse(line);
+            if (mainWindow) {
+              mainWindow.webContents.send('media-progress', message);
+            }
+            if (message.type === 'result') {
+              hasResults = true;
+            }
+          } catch (e) {
+            // 不是JSON，作为普通日志处理
+            if (line.includes('段落') || line.includes('转写') || line.includes('翻译') || line.includes('进度') || line.includes('完成')) {
+              if (mainWindow) {
+                mainWindow.webContents.send('media-progress', {
+                  type: 'progress',
+                  message: line,
+                  progress: 50
+                });
+              }
+              if (line.includes('转写完成') || line.includes('翻译完成')) {
+                hasResults = true;
+              }
+            }
+          }
+        });
+      });
+
+      mediaTranscribeProcess.stderr.on('data', (data) => {
+        const chunk = data.toString('utf8');
+        stderrBuffer += chunk;
+        
+        // 按行处理，过滤 FFmpeg 的正常日志，保留明显错误
+        const lines = chunk.split('\n');
+        lines.forEach(rawLine => {
+          const line = String(rawLine || '').trim();
+          if (!line) return;
+
+          const isError = /(error|failed|traceback|not found|invalid)/i.test(line);
+          if (isError) {
+            console.error('媒体转写错误:', line);
+            if (mainWindow) {
+              mainWindow.webContents.send('media-progress', {
+                type: 'error',
+                message: line
+              });
+            }
+          } else {
+            // 将非致命信息作为进度/日志展示，避免造成“错误”误报
+            if (mainWindow) {
+              mainWindow.webContents.send('media-progress', {
+                type: 'progress',
+                message: line,
+                progress: 50
+              });
+            }
+          }
+        });
+      });
+
+      mediaTranscribeProcess.on('error', (error) => {
+        console.error('媒体转写进程启动失败:', error);
+        reject(new Error(`进程启动失败: ${error.message}`));
+      });
+
+      mediaTranscribeProcess.on('close', (code, signal) => {
+        console.log(`媒体转写进程退出，代码: ${code}, 信号: ${signal}`);
+        
+        if (code === 0) {
+          // 成功完成
+          if (mainWindow) {
+            mainWindow.webContents.send('media-progress', {
+              type: 'complete',
+              message: '处理完成',
+              progress: 100
+            });
+          }
+          resolve({
+            success: true,
+            hasResults: hasResults
+          });
+        } else {
+          // 处理失败
+          const tail = stderrBuffer.split(/\r?\n/).filter(Boolean).slice(-10).join('\n');
+          const errorMsg = `处理失败，退出代码: ${code}${tail ? `\n详情: ${tail}` : ''}`;
+          if (mainWindow) {
+            mainWindow.webContents.send('media-progress', {
+              type: 'error',
+              message: errorMsg
+            });
+          }
+          reject(new Error(errorMsg));
+        }
+        
+        mediaTranscribeProcess = null;
+      });
+
+      // 设置超时（30分钟）
+      setTimeout(() => {
+        if (mediaTranscribeProcess) {
+          mediaTranscribeProcess.kill();
+          reject(new Error('处理超时'));
+        }
+      }, 30 * 60 * 1000);
+
+    } catch (error) {
+      console.error('启动媒体转写进程失败:', error);
+      reject(error);
+    }
+  });
+}
+
 app.on('before-quit', () => {
   if (pythonProcess) {
     console.log('应用即将退出，终止转写服务');
     pythonProcess.kill();
+  }
+  
+  if (mediaTranscribeProcess) {
+    console.log('应用即将退出，终止媒体转写进程');
+    mediaTranscribeProcess.kill();
   }
 });

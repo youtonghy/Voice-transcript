@@ -15,18 +15,75 @@
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
             background: #ffffff;
             min-height: 100vh;
-            padding: 20px;
+            color: #333;
+        }
+
+        /* 顶部导航栏（样式参考 media-transcribe.html） */
+        .nav-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: #ffffff;
+            border-bottom: 1px solid #e5e5e5;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            z-index: 1000;
+            height: 60px;
+        }
+
+        .nav-content {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 100%;
+            padding: 0 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .nav-left {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .back-btn {
+            width: 40px;
+            height: 40px;
+            border: 1px solid #e5e5e5;
+            border-radius: 8px;
+            background: #ffffff;
+            color: #666;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s ease;
+            text-decoration: none;
+            font-size: 1.2rem;
+        }
+
+        .back-btn:hover {
+            border-color: #333;
+            color: #333;
+            background: #f5f5f5;
+        }
+
+        .nav-title {
+            font-size: 1.2rem;
+            font-weight: 600;
             color: #333;
         }
 
         .settings-container {
-            max-width: 500px;
+            max-width: 700px;
             margin: 0 auto;
             background: #ffffff;
             border: 1px solid #e5e5e5;
             border-radius: 12px;
             padding: 30px;
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+            margin-top: 80px; /* 为顶部导航留空 */
         }
 
         .settings-header {
@@ -275,13 +332,19 @@
             background: #999;
         }
 
-        /* 为设置容器添加顶部间距，避免被通知栏遮挡 */
-        body.notification-active {
-            padding-top: 60px;
-        }
+        /* 顶部通知栏不再占据布局，使用绝对定位 */
     </style>
 </head>
 <body>
+    <!-- 顶部导航栏 -->
+    <div class="nav-bar">
+        <div class="nav-content">
+            <div class="nav-left">
+                <a href="index.html" class="back-btn" title="返回主页">←</a>
+                <div class="nav-title">设置</div>
+            </div>
+        </div>
+    </div>
     <!-- 顶部通知栏 -->
     <div class="top-notification" id="topNotification"></div>
     
@@ -321,18 +384,32 @@
 
             <div class="form-group" id="translationSettings">
                 <label for="targetLanguage">目标语言</label>
-                <input type="text" id="targetLanguage" name="translate_language" placeholder="中文">
+                <select id="targetLanguage" name="translate_language">
+                    <option value="中文" selected>中文 (Chinese)</option>
+                    <option value="English">English</option>
+                    <option value="日本語">日本語 (Japanese)</option>
+                    <option value="한국어">한국어 (Korean)</option>
+                    <option value="Español">Español (Spanish)</option>
+                    <option value="Français">Français (French)</option>
+                    <option value="Deutsch">Deutsch (German)</option>
+                    <option value="Italiano">Italiano (Italian)</option>
+                    <option value="Português">Português (Portuguese)</option>
+                    <option value="Русский">Русский (Russian)</option>
+                    <option value="العربية">العربية (Arabic)</option>
+                    <option value="हिन्दी">हिन्दी (Hindi)</option>
+                    <option value="ไทย">ไทย (Thai)</option>
+                    <option value="Tiếng Việt">Tiếng Việt (Vietnamese)</option>
+                    <option value="Bahasa Indonesia">Bahasa Indonesia</option>
+                    <option value="Türkçe">Türkçe (Turkish)</option>
+                    <option value="Nederlands">Nederlands (Dutch)</option>
+                    <option value="Polski">Polski (Polish)</option>
+                    <option value="Українська">Українська (Ukrainian)</option>
+                    <option value="Čeština">Čeština (Czech)</option>
+                    <option value="__custom__">自定义...</option>
+                </select>
+                <input type="text" id="customLanguage" placeholder="输入自定义语言" style="margin-top:10px; display:none;" />
                 <div class="form-note">
-                    指定翻译的目标语言，例如：中文、English、日本語、한국어
-                </div>
-                
-                <div class="language-options">
-                    <div class="language-option" data-lang="中文">中文</div>
-                    <div class="language-option" data-lang="English">English</div>
-                    <div class="language-option" data-lang="日本語">日本語</div>
-                    <div class="language-option" data-lang="한국어">한국어</div>
-                    <div class="language-option" data-lang="Français">Français</div>
-                    <div class="language-option" data-lang="Español">Español</div>
+                    可选择常用语言或选择“自定义...”后输入任意语言名称
                 </div>
             </div>
 
@@ -369,9 +446,9 @@
             <div id="statusMessage"></div>
 
             <div class="button-group">
-                <button type="button" class="btn btn-secondary" onclick="window.close()">
-                    取消
-                </button>
+                <a href="index.html" class="btn btn-secondary" style="text-align:center; display:inline-block; line-height: 20px;">
+                    返回
+                </a>
                 <button type="submit" class="btn btn-primary">
                     💾 保存设置
                 </button>
