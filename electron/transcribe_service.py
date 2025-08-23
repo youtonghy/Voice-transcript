@@ -655,37 +655,82 @@ def process_combined_audio(combined_audio, seg_idx=None, from_split=False):
             
             # 检查是否启用翻译
             if config.get('enable_translation', True):
-                target_language = config.get('translate_language', '中文')
-                if target_language and target_language.strip():
-                    # 异步排队翻译任务，获取翻译顺序
-                    queue_success, translation_order = queue_translation(result_id, transcription, target_language)
+                translation_mode = config.get('translation_mode', 'fixed')
+                
+                if translation_mode == 'smart':
+                    # 智能翻译模式
+                    language1 = config.get('smart_language1', '中文')
+                    language2 = config.get('smart_language2', 'English')
                     
-                    if queue_success:
-                        # 立即发送转写结果（带翻译占位符和顺序信息）
+                    # 判断转录文本的语言并确定翻译目标
+                    smart_target = determine_smart_translation_target(transcription, language1, language2)
+                    
+                    if smart_target:
+                        # 异步排队翻译任务，获取翻译顺序
+                        queue_success, translation_order = queue_translation(result_id, transcription, smart_target)
+                        
+                        if queue_success:
+                            # 立即发送转写结果（带翻译占位符和顺序信息）
+                            send_message({
+                                "type": "result",
+                                "result_id": result_id,
+                                "transcription": transcription.strip(),
+                                "translation_pending": True,
+                                "translation_order": translation_order,
+                                "smart_translation": True,
+                                "detected_language": language1 if smart_target == language2 else language2,
+                                "target_language": smart_target,
+                                "timestamp": datetime.now().isoformat()
+                            })
+                        else:
+                            # 翻译队列失败，发送无翻译的结果
+                            send_message({
+                                "type": "result_final",
+                                "result_id": result_id,
+                                "transcription": transcription.strip(),
+                                "timestamp": datetime.now().isoformat()
+                            })
+                    else:
+                        # 智能翻译失败，只发送转写
                         send_message({
                             "type": "result",
-                            "result_id": result_id,
-                            "transcription": transcription.strip(),
-                            "translation_pending": True,
-                            "translation_order": translation_order,
-                            "timestamp": datetime.now().isoformat()
-                        })
-                    else:
-                        # 翻译队列失败，发送无翻译的结果
-                        send_message({
-                            "type": "result_final",
                             "result_id": result_id,
                             "transcription": transcription.strip(),
                             "timestamp": datetime.now().isoformat()
                         })
                 else:
-                    # 未设置目标语言，只发送转写
-                    send_message({
-                        "type": "result",
-                        "result_id": result_id,
-                        "transcription": transcription.strip(),
-                        "timestamp": datetime.now().isoformat()
-                    })
+                    # 固定翻译模式（原有逻辑）
+                    target_language = config.get('translate_language', '中文')
+                    if target_language and target_language.strip():
+                        # 异步排队翻译任务，获取翻译顺序
+                        queue_success, translation_order = queue_translation(result_id, transcription, target_language)
+                        
+                        if queue_success:
+                            # 立即发送转写结果（带翻译占位符和顺序信息）
+                            send_message({
+                                "type": "result",
+                                "result_id": result_id,
+                                "transcription": transcription.strip(),
+                                "translation_pending": True,
+                                "translation_order": translation_order,
+                                "timestamp": datetime.now().isoformat()
+                            })
+                        else:
+                            # 翻译队列失败，发送无翻译的结果
+                            send_message({
+                                "type": "result_final",
+                                "result_id": result_id,
+                                "transcription": transcription.strip(),
+                                "timestamp": datetime.now().isoformat()
+                            })
+                    else:
+                        # 未设置目标语言，只发送转写
+                        send_message({
+                            "type": "result",
+                            "result_id": result_id,
+                            "transcription": transcription.strip(),
+                            "timestamp": datetime.now().isoformat()
+                        })
             else:
                 # 未启用翻译：直接发送转写
                 send_message({
@@ -702,6 +747,68 @@ def process_combined_audio(combined_audio, seg_idx=None, from_split=False):
                 pass  # 静默删除失败
     except Exception as e:
         log_message("error", f"保存/转写音频文件时出错: {e}")
+
+def determine_smart_translation_target(text, language1, language2):
+    """
+    智能翻译：判断文本语言并返回目标翻译语言
+    
+    Args:
+        text: 要翻译的文本
+        language1: 智能翻译语言1
+        language2: 智能翻译语言2
+    
+    Returns:
+        目标翻译语言，如果无法判断则返回None
+    """
+    global openai_client
+    
+    if not openai_client or not text or not text.strip():
+        return None
+    
+    try:
+        # 使用OpenAI来判断文本的主要语言
+        detection_prompt = f"""请判断以下文本主要使用的是哪种语言，只需要回答语言名称。
+
+可选语言：{language1}、{language2}
+
+如果文本主要是{language1}，请回答"{language1}"
+如果文本主要是{language2}，请回答"{language2}"
+如果无法判断或包含多种语言，请回答"未知"
+
+文本：{text}"""
+
+        response = openai_client.chat.completions.create(
+            model=OPENAI_TRANSLATE_MODEL,
+            messages=[
+                {"role": "system", "content": "你是一个专业的语言识别助手。"},
+                {"role": "user", "content": detection_prompt}
+            ],
+            max_tokens=50,
+            temperature=0.1,
+            top_p=0.95,
+            frequency_penalty=0,
+            presence_penalty=0,
+            stop=None,
+            stream=False
+        )
+        
+        detected_language = response.choices[0].message.content.strip()
+        log_message("info", f"检测到文本语言: {detected_language}")
+        
+        # 根据检测结果返回目标翻译语言
+        if detected_language == language1:
+            return language2
+        elif detected_language == language2:
+            return language1
+        else:
+            # 无法判断语言，默认翻译为语言2
+            log_message("warning", f"无法准确判断语言，默认翻译为: {language2}")
+            return language2
+            
+    except Exception as e:
+        log_message("error", f"语言检测失败: {e}")
+        # 出错时默认翻译为语言2
+        return language2
 
 def translate_text(text, target_language="中文"):
     """翻译文本"""
@@ -751,12 +858,25 @@ def transcribe_audio_file(filepath):
         return None
 
     try:
+        # 获取转录语言设置
+        transcribe_language = config.get('transcribe_language', 'auto')
+        
+        # 准备转录参数
+        transcribe_params = {
+            "model": OPENAI_TRANSCRIBE_MODEL,
+            "file": None,  # 将在下面设置
+            "response_format": "text",
+        }
+        
+        # 如果设置了特定的转录语言，添加提示词
+        if transcribe_language and transcribe_language != 'auto':
+            transcribe_params["prompt"] = f"请只转录为{transcribe_language}"
+            log_message("info", f"使用转录语言: {transcribe_language}")
+        
         with open(filepath, "rb") as audio_file:
-            result = openai_client.audio.transcriptions.create(
-                model=OPENAI_TRANSCRIBE_MODEL,
-                file=audio_file,
-                response_format="text",
-            )
+            transcribe_params["file"] = audio_file
+            result = openai_client.audio.transcriptions.create(**transcribe_params)
+        
         return getattr(result, "text", str(result))
     except Exception as e:
         log_message("error", f"转写失败: {e}")

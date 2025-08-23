@@ -383,33 +383,134 @@
             </div>
 
             <div class="form-group" id="translationSettings">
-                <label for="targetLanguage">目标语言</label>
-                <select id="targetLanguage" name="translate_language">
-                    <option value="中文" selected>中文 (Chinese)</option>
-                    <option value="English">English</option>
-                    <option value="日本語">日本語 (Japanese)</option>
-                    <option value="한국어">한국어 (Korean)</option>
-                    <option value="Español">Español (Spanish)</option>
-                    <option value="Français">Français (French)</option>
-                    <option value="Deutsch">Deutsch (German)</option>
-                    <option value="Italiano">Italiano (Italian)</option>
-                    <option value="Português">Português (Portuguese)</option>
-                    <option value="Русский">Русский (Russian)</option>
-                    <option value="العربية">العربية (Arabic)</option>
-                    <option value="हिन्दी">हिन्दी (Hindi)</option>
-                    <option value="ไทย">ไทย (Thai)</option>
-                    <option value="Tiếng Việt">Tiếng Việt (Vietnamese)</option>
-                    <option value="Bahasa Indonesia">Bahasa Indonesia</option>
-                    <option value="Türkçe">Türkçe (Turkish)</option>
-                    <option value="Nederlands">Nederlands (Dutch)</option>
-                    <option value="Polski">Polski (Polish)</option>
-                    <option value="Українська">Українська (Ukrainian)</option>
-                    <option value="Čeština">Čeština (Czech)</option>
-                    <option value="__custom__">自定义...</option>
+                <label for="translationMode">翻译模式</label>
+                <select id="translationMode" name="translation_mode">
+                    <option value="fixed" selected>固定翻译</option>
+                    <option value="smart">智能翻译</option>
                 </select>
-                <input type="text" id="customLanguage" placeholder="输入自定义语言" style="margin-top:10px; display:none;" />
                 <div class="form-note">
-                    可选择常用语言或选择“自定义...”后输入任意语言名称
+                    固定翻译：始终翻译为指定语言；智能翻译：双语互译模式
+                </div>
+                
+                <!-- 固定翻译设置 -->
+                <div id="fixedTranslationSettings" style="margin-top: 15px;">
+                    <label for="targetLanguage">目标语言</label>
+                    <select id="targetLanguage" name="translate_language">
+                        <option value="中文" selected>中文 (Chinese)</option>
+                        <option value="English">English</option>
+                        <option value="日本語">日本語 (Japanese)</option>
+                        <option value="한국어">한국어 (Korean)</option>
+                        <option value="Español">Español (Spanish)</option>
+                        <option value="Français">Français (French)</option>
+                        <option value="Deutsch">Deutsch (German)</option>
+                        <option value="Italiano">Italiano (Italian)</option>
+                        <option value="Português">Português (Portuguese)</option>
+                        <option value="Русский">Русский (Russian)</option>
+                        <option value="العربية">العربية (Arabic)</option>
+                        <option value="हिन्दी">हिन्दी (Hindi)</option>
+                        <option value="ไทย">ไทย (Thai)</option>
+                        <option value="Tiếng Việt">Tiếng Việt (Vietnamese)</option>
+                        <option value="Bahasa Indonesia">Bahasa Indonesia</option>
+                        <option value="Türkçe">Türkçe (Turkish)</option>
+                        <option value="Nederlands">Nederlands (Dutch)</option>
+                        <option value="Polski">Polski (Polish)</option>
+                        <option value="Українська">Українська (Ukrainian)</option>
+                        <option value="Čeština">Čeština (Czech)</option>
+                        <option value="__custom__">自定义...</option>
+                    </select>
+                    <input type="text" id="customLanguage" placeholder="输入自定义语言" style="margin-top:10px; display:none;" />
+                    <div class="form-note">
+                        可选择常用语言或选择"自定义..."后输入任意语言名称
+                    </div>
+                </div>
+                
+                <!-- 智能翻译设置 -->
+                <div id="smartTranslationSettings" style="margin-top: 15px; display: none;">
+                    <label for="language1">语言1</label>
+                    <select id="language1" name="smart_language1">
+                        <option value="中文" selected>中文 (Chinese)</option>
+                        <option value="English">English</option>
+                        <option value="日本語">日本語 (Japanese)</option>
+                        <option value="한국어">한국어 (Korean)</option>
+                        <option value="Español">Español (Spanish)</option>
+                        <option value="Français">Français (French)</option>
+                        <option value="Deutsch">Deutsch (German)</option>
+                        <option value="Italiano">Italiano (Italian)</option>
+                        <option value="Português">Português (Portuguese)</option>
+                        <option value="Русский">Русский (Russian)</option>
+                        <option value="العربية">العربية (Arabic)</option>
+                        <option value="हिन्दी">हिन्दी (Hindi)</option>
+                        <option value="ไทย">ไทย (Thai)</option>
+                        <option value="Tiếng Việt">Tiếng Việt (Vietnamese)</option>
+                        <option value="Bahasa Indonesia">Bahasa Indonesia</option>
+                        <option value="Türkçe">Türkçe (Turkish)</option>
+                        <option value="Nederlands">Nederlands (Dutch)</option>
+                        <option value="Polski">Polski (Polish)</option>
+                        <option value="Українська">Українська (Ukrainian)</option>
+                        <option value="Čeština">Čeština (Czech)</option>
+                    </select>
+                    
+                    <label for="language2" style="margin-top: 10px; display: block;">语言2</label>
+                    <select id="language2" name="smart_language2">
+                        <option value="中文">中文 (Chinese)</option>
+                        <option value="English" selected>English</option>
+                        <option value="日本語">日本語 (Japanese)</option>
+                        <option value="한국어">한국어 (Korean)</option>
+                        <option value="Español">Español (Spanish)</option>
+                        <option value="Français">Français (French)</option>
+                        <option value="Deutsch">Deutsch (German)</option>
+                        <option value="Italiano">Italiano (Italian)</option>
+                        <option value="Português">Português (Portuguese)</option>
+                        <option value="Русский">Русский (Russian)</option>
+                        <option value="العربية">العربية (Arabic)</option>
+                        <option value="हिन्दी">हिन्दी (Hindi)</option>
+                        <option value="ไทย">ไทย (Thai)</option>
+                        <option value="Tiếng Việt">Tiếng Việt (Vietnamese)</option>
+                        <option value="Bahasa Indonesia">Bahasa Indonesia</option>
+                        <option value="Türkçe">Türkçe (Turkish)</option>
+                        <option value="Nederlands">Nederlands (Dutch)</option>
+                        <option value="Polski">Polski (Polish)</option>
+                        <option value="Українська">Українська (Ukrainian)</option>
+                        <option value="Čeština">Čeština (Czech)</option>
+                    </select>
+                    <div class="form-note">
+                        智能翻译：如果转录为语言1则翻译为语言2，如果转录为语言2则翻译为语言1，适合双语对话场景
+                    </div>
+                </div>
+            </div>
+
+            <div class="divider"></div>
+
+            <div class="section-title">🎙️ 转录设置</div>
+            
+            <div class="form-group">
+                <label for="transcribeLanguage">转录语言</label>
+                <select id="transcribeLanguage" name="transcribe_language">
+                    <option value="auto" selected>自动检测</option>
+                    <option value="中文">中文</option>
+                    <option value="English">English</option>
+                    <option value="日本語">日本語</option>
+                    <option value="한국어">한국어</option>
+                    <option value="Español">Español</option>
+                    <option value="Français">Français</option>
+                    <option value="Deutsch">Deutsch</option>
+                    <option value="Italiano">Italiano</option>
+                    <option value="Português">Português</option>
+                    <option value="Русский">Русский</option>
+                    <option value="العربية">العربية</option>
+                    <option value="हिन्दी">हिन्दी</option>
+                    <option value="ไทย">ไทย</option>
+                    <option value="Tiếng Việt">Tiếng Việt</option>
+                    <option value="Bahasa Indonesia">Bahasa Indonesia</option>
+                    <option value="Türkçe">Türkçe</option>
+                    <option value="Nederlands">Nederlands</option>
+                    <option value="Polski">Polski</option>
+                    <option value="Українська">Українська</option>
+                    <option value="Čeština">Čeština</option>
+                </select>
+                <div class="form-note">
+                    选择"自动检测"时不使用提示词，选择特定语言时会使用"请转录为XX语言"作为提示词<br>
+                    <strong>注意：智能翻译模式下，转录语言将被强制设为"自动检测"</strong>
                 </div>
             </div>
 

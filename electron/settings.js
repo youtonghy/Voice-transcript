@@ -14,6 +14,18 @@ function setupEventListeners() {
     document.getElementById('enableTranslation').addEventListener('change', toggleTranslationSettings);
     document.getElementById('enableTranslation').addEventListener('change', autoSave);
     
+    // 翻译模式切换
+    document.getElementById('translationMode').addEventListener('change', () => {
+        updateTranslationModeSettings();
+        updateTranscribeLanguageAvailability();
+        autoSave();
+    });
+    
+    // 翻译开关切换时也需要更新转录语言可用性
+    document.getElementById('enableTranslation').addEventListener('change', () => {
+        updateTranscribeLanguageAvailability();
+    });
+    
     // 剧场模式开关
     document.getElementById('theaterMode').addEventListener('change', autoSave);
     
@@ -38,7 +50,8 @@ function setupEventListeners() {
     
     // 为所有输入框添加失焦自动保存
     const autoSaveInputs = [
-        'apiKey', 'apiUrl', 'targetLanguage', 'customLanguage',
+        'apiKey', 'apiUrl', 'targetLanguage', 'customLanguage', 'transcribeLanguage',
+        'translationMode', 'language1', 'language2',
         'silenceThreshold', 'silenceDuration', 'theaterMode'
     ];
     
@@ -91,9 +104,25 @@ function populateForm(config) {
     // 剧场模式
     document.getElementById('theaterMode').checked = config.theater_mode || false;
     
+    // 转录语言设置
+    const transcribeLanguage = document.getElementById('transcribeLanguage');
+    transcribeLanguage.value = config.transcribe_language || 'auto';
+    
+    // 翻译模式设置
+    const translationMode = document.getElementById('translationMode');
+    translationMode.value = config.translation_mode || 'fixed';
+    
+    // 智能翻译语言设置
+    const language1 = document.getElementById('language1');
+    const language2 = document.getElementById('language2');
+    language1.value = config.smart_language1 || '中文';
+    language2.value = config.smart_language2 || 'English';
+    
     // 更新UI状态
     toggleTranslationSettings();
     updateCustomLanguageVisibility();
+    updateTranslationModeSettings();
+    updateTranscribeLanguageAvailability();
 }
 
 function toggleTranslationSettings() {
@@ -116,6 +145,40 @@ function updateCustomLanguageVisibility() {
     customLanguage.style.display = useCustom ? 'block' : 'none';
 }
 
+function updateTranslationModeSettings() {
+    const translationMode = document.getElementById('translationMode');
+    const fixedSettings = document.getElementById('fixedTranslationSettings');
+    const smartSettings = document.getElementById('smartTranslationSettings');
+    
+    if (translationMode.value === 'smart') {
+        fixedSettings.style.display = 'none';
+        smartSettings.style.display = 'block';
+    } else {
+        fixedSettings.style.display = 'block';
+        smartSettings.style.display = 'none';
+    }
+}
+
+function updateTranscribeLanguageAvailability() {
+    const enableTranslation = document.getElementById('enableTranslation').checked;
+    const translationMode = document.getElementById('translationMode').value;
+    const transcribeLanguage = document.getElementById('transcribeLanguage');
+    
+    // 如果启用了智能翻译模式，则转录语言必须是自动检测
+    if (enableTranslation && translationMode === 'smart') {
+        // 强制设置为自动检测并禁用选择器
+        transcribeLanguage.value = 'auto';
+        transcribeLanguage.disabled = true;
+        transcribeLanguage.style.opacity = '0.6';
+        transcribeLanguage.style.cursor = 'not-allowed';
+    } else {
+        // 恢复正常状态
+        transcribeLanguage.disabled = false;
+        transcribeLanguage.style.opacity = '1';
+        transcribeLanguage.style.cursor = 'auto';
+    }
+}
+
 function validateApiKey() {
     const apiKey = document.getElementById('apiKey').value;
     // 简单验证API密钥格式
@@ -125,14 +188,38 @@ function validateApiKey() {
 async function saveSettings(event) {
     event.preventDefault();
     
-    // 校验自定义语言
+    // 校验翻译设置
     const enableTranslation = document.getElementById('enableTranslation').checked;
-    const targetLanguage = document.getElementById('targetLanguage');
-    const customLanguage = document.getElementById('customLanguage');
-    if (enableTranslation && targetLanguage.value === '__custom__' && !customLanguage.value.trim()) {
-        showTopNotification('❌ 请输入自定义目标语言', 'error');
-        customLanguage.focus();
-        return;
+    if (enableTranslation) {
+        const translationMode = document.getElementById('translationMode').value;
+        
+        if (translationMode === 'fixed') {
+            // 校验固定翻译的自定义语言
+            const targetLanguage = document.getElementById('targetLanguage');
+            const customLanguage = document.getElementById('customLanguage');
+            if (targetLanguage.value === '__custom__' && !customLanguage.value.trim()) {
+                showTopNotification('❌ 请输入自定义目标语言', 'error');
+                customLanguage.focus();
+                return;
+            }
+        } else if (translationMode === 'smart') {
+            // 校验智能翻译的语言设置
+            const language1 = document.getElementById('language1').value;
+            const language2 = document.getElementById('language2').value;
+            if (language1 === language2) {
+                showTopNotification('❌ 智能翻译的两种语言不能相同', 'error');
+                document.getElementById('language2').focus();
+                return;
+            }
+            
+            // 智能翻译模式下转录语言必须为自动检测
+            const transcribeLanguage = document.getElementById('transcribeLanguage');
+            if (transcribeLanguage.value !== 'auto') {
+                showTopNotification('❌ 智能翻译模式下，转录语言必须为"自动检测"', 'error');
+                transcribeLanguage.value = 'auto';
+                return;
+            }
+        }
     }
 
     const formData = new FormData(event.target);
@@ -218,13 +305,34 @@ function autoSave() {
     
     // API相关配置变化时使用较短延迟(300ms)，其他配置使用800ms
     const newConfig = collectFormData();
-    // 自定义目标语言不能为空
+    // 翻译设置验证
     if (newConfig.enable_translation) {
-        const targetLanguage = document.getElementById('targetLanguage').value;
-        const customLanguage = document.getElementById('customLanguage').value.trim();
-        if (targetLanguage === '__custom__' && !customLanguage) {
-            // 不自动保存，等待填写
-            return;
+        const translationMode = document.getElementById('translationMode').value;
+        
+        if (translationMode === 'fixed') {
+            // 自定义目标语言不能为空
+            const targetLanguage = document.getElementById('targetLanguage').value;
+            const customLanguage = document.getElementById('customLanguage').value.trim();
+            if (targetLanguage === '__custom__' && !customLanguage) {
+                // 不自动保存，等待填写
+                return;
+            }
+        } else if (translationMode === 'smart') {
+            // 智能翻译的两种语言不能相同
+            const language1 = document.getElementById('language1').value;
+            const language2 = document.getElementById('language2').value;
+            if (language1 === language2) {
+                // 不自动保存，等待修改
+                return;
+            }
+            
+            // 智能翻译模式下转录语言必须为自动检测
+            const transcribeLanguage = document.getElementById('transcribeLanguage');
+            if (transcribeLanguage.value !== 'auto') {
+                // 强制设置为自动检测，不自动保存
+                transcribeLanguage.value = 'auto';
+                return;
+            }
         }
     }
     const delay = 600;
@@ -282,10 +390,21 @@ function collectFormData() {
     newConfig.enable_translation = document.getElementById('enableTranslation').checked;
     newConfig.theater_mode = document.getElementById('theaterMode').checked;
     
-    // 统一解析目标语言：自定义优先
-    const targetLanguage = document.getElementById('targetLanguage').value;
-    const customLanguage = document.getElementById('customLanguage').value.trim();
-    newConfig.translate_language = (targetLanguage === '__custom__') ? customLanguage : targetLanguage;
+    // 处理翻译设置
+    const translationMode = document.getElementById('translationMode').value;
+    newConfig.translation_mode = translationMode;
+    
+    if (translationMode === 'fixed') {
+        // 统一解析目标语言：自定义优先
+        const targetLanguage = document.getElementById('targetLanguage').value;
+        const customLanguage = document.getElementById('customLanguage').value.trim();
+        newConfig.translate_language = (targetLanguage === '__custom__') ? customLanguage : targetLanguage;
+    } else if (translationMode === 'smart') {
+        // 智能翻译设置
+        newConfig.smart_language1 = document.getElementById('language1').value;
+        newConfig.smart_language2 = document.getElementById('language2').value;
+    }
+    
     return newConfig;
 }
 
