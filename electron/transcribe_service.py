@@ -30,13 +30,7 @@ def setup_console_encoding():
         if hasattr(sys.stderr, 'reconfigure'):
             sys.stderr.reconfigure(encoding='utf-8', errors='replace')
         
-        # 对于Windows，尝试设置控制台代码页
-        if sys.platform == 'win32':
-            try:
-                import subprocess
-                subprocess.run(['chcp', '65001'], capture_output=True, shell=True)
-            except Exception:
-                pass
+        # 依赖 Electron 启动时的环境变量即可；不再调用外部 chcp 以加快启动
                 
     except Exception as e:
         # 如果编码设置失败，至少记录错误
@@ -607,6 +601,14 @@ def stop_recording():
     
     if audio_data:
         save_audio_file()
+    # 通知主进程录音已完全停止（用于外部协调重启）
+    try:
+        send_message({
+            "type": "recording_stopped",
+            "timestamp": datetime.now().isoformat()
+        })
+    except Exception:
+        pass
 
 def save_audio_file():
     """保存最后一段音频文件"""
@@ -774,16 +776,69 @@ def handle_message(message):
         elif msg_type == "stop_recording":
             log_message("info", "执行停止录音命令")
             stop_recording()
+        elif msg_type == "shutdown":
+            # 优雅退出：若在录音，先停止；然后停止翻译线程并退出
+            log_message("info", "收到关闭服务命令，准备优雅退出")
+            try:
+                if is_recording:
+                    stop_recording()
+            except Exception:
+                pass
+            try:
+                stop_translation_worker()
+            except Exception:
+                pass
+            # 发送即将退出提示
+            try:
+                send_message({
+                    "type": "log",
+                    "level": "info",
+                    "message": "收到关闭命令，服务即将退出",
+                    "timestamp": datetime.now().isoformat()
+                })
+            except Exception:
+                pass
+            # 触发系统退出，让主循环和finally清理收尾
+            raise SystemExit(0)
         elif msg_type == "update_config":
             new_config = message.get("config", {})
             log_message("info", f"更新配置: {list(new_config.keys())}")
+            # 记录旧配置以判断变更
+            old_config = config.copy() if isinstance(config, dict) else {}
             config = new_config
-            # 重新初始化OpenAI客户端
-            success = init_openai_client()
-            log_message("info", f"OpenAI客户端初始化结果: {success}")
-            # 如果启用翻译且OpenAI配置成功，启动翻译工作线程
-            if success and config.get('enable_translation', True):
+
+            # 判断是否需要重建 OpenAI 客户端（仅当密钥或基地址改变）
+            need_reinit = (
+                old_config.get('openai_api_key') != config.get('openai_api_key') or
+                old_config.get('openai_base_url') != config.get('openai_base_url')
+            )
+            if need_reinit or (OpenAIClient is not None and (openai_client is None)):
+                success = init_openai_client()
+                log_message("info", f"OpenAI客户端初始化结果: {success}")
+            else:
+                success = openai_client is not None
+
+            # 应用与录音检测相关的阈值配置（热更新）
+            global SILENCE_RMS_THRESHOLD, MIN_SILENCE_SEC_FOR_SPLIT
+            try:
+                if 'silence_rms_threshold' in config and isinstance(config.get('silence_rms_threshold'), (int, float)):
+                    SILENCE_RMS_THRESHOLD = float(config.get('silence_rms_threshold'))
+                    log_message("info", f"已应用静音阈值: {SILENCE_RMS_THRESHOLD}")
+                if 'min_silence_seconds' in config and isinstance(config.get('min_silence_seconds'), (int, float)):
+                    MIN_SILENCE_SEC_FOR_SPLIT = float(config.get('min_silence_seconds'))
+                    log_message("info", f"已应用静音时长: {MIN_SILENCE_SEC_FOR_SPLIT}s")
+            except Exception as _e:
+                log_message("warning", f"应用录音阈值配置失败: {_e}")
+
+            # 根据翻译开关动态管理翻译线程（热更新，无需重启）
+            enable_tr = config.get('enable_translation', True)
+            global translation_worker_running
+            if success and enable_tr:
                 start_translation_worker()
+            else:
+                if translation_worker_running:
+                    stop_translation_worker()
+                    log_message("info", "已停止翻译工作线程（根据配置关闭翻译）")
         else:
             log_message("warning", f"未知消息类型: {msg_type}")
             
@@ -808,48 +863,10 @@ def main():
         log_message("info", "转写服务正在启动...")
         log_message("info", f"Python版本: {sys.version}")
         log_message("info", f"工作目录: {os.getcwd()}")
-        
-        # 检查必要的依赖
-        try:
-            import sounddevice as sd_test
-            log_message("info", "sounddevice 模块加载成功")
-        except ImportError as e:
-            log_message("error", f"sounddevice 模块导入失败: {e}")
-            
-        try:
-            import soundfile as sf_test
-            log_message("info", "soundfile 模块加载成功")
-        except ImportError as e:
-            log_message("error", f"soundfile 模块导入失败: {e}")
-            
-        try:
-            import numpy as np_test
-            log_message("info", "numpy 模块加载成功")
-        except ImportError as e:
-            log_message("error", f"numpy 模块导入失败: {e}")
-        
-        if OpenAIClient is not None:
-            log_message("info", "openai 模块加载成功")
-        else:
-            log_message("warning", "openai 模块未安装或导入失败")
-        
-        # 初始化音频设备检查
-        try:
-            log_message("info", "检查音频设备...")
-            devices = sd.query_devices()
-            log_message("info", f"找到 {len(devices)} 个音频设备")
-            
-            # 显示默认设备信息
-            default_input = sd.query_devices(kind='input')
-            if default_input:
-                log_message("info", f"默认输入设备: {default_input.get('name', 'Unknown')}")
-            else:
-                log_message("warning", "未找到默认输入设备")
-                
-        except Exception as e:
-            log_message("warning", f"音频设备检查失败: {e}")
-        
+        # 尽快通知主进程：服务已就绪，避免阻塞初始配置
         log_message("info", "转写服务已启动，等待命令...")
+        
+        # 省略启动时的音频设备枚举和依赖检查，改为在开始录音时检查
         
         # 读取stdin消息
         line_count = 0

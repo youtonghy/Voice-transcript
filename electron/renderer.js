@@ -25,6 +25,19 @@ document.addEventListener('DOMContentLoaded', () => {
     // 立即检查配置并开始定时检查
     checkOpenAIConfig();
     startConfigMonitoring();
+
+    // 查询后端服务状态，避免二次进入页面时一直显示“等待服务启动”
+    if (window.electronAPI && window.electronAPI.getServiceStatus) {
+        window.electronAPI.getServiceStatus().then(status => {
+            if (status && status.running) {
+                updateServiceStatus(status.ready ? 'running' : 'starting');
+            } else {
+                updateServiceStatus('stopped');
+            }
+        }).catch(() => {
+            // 忽略错误，保持原有状态
+        });
+    }
 });
 
 // 检查OpenAI配置状态
@@ -508,8 +521,8 @@ function addOrUpdateResultBubble({ transcription, translation }) {
 
 async function openSettings() {
     try {
-        // 在同一窗口中打开设置页
-        window.location.href = 'settings.html';
+        // 以独立窗口打开设置，保持主页常驻
+        await window.electronAPI.openSettings();
     } catch (error) {
         console.error('打开设置失败:', error);
     }
@@ -517,8 +530,8 @@ async function openSettings() {
 
 function openMediaTranscribe() {
     try {
-        // 导航到媒体转写页面
-        window.location.href = 'media-transcribe.html';
+        // 以独立窗口打开媒体转写，保持主页常驻
+        window.electronAPI.openMediaTranscribe();
     } catch (error) {
         console.error('打开媒体转写页面失败:', error);
     }

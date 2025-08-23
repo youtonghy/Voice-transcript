@@ -87,3 +87,6 @@ coverage/
 # Temporary files
 *.tmp
 *.temp
+
+# FFMPEG
+ffmpeg.exe

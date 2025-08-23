@@ -157,14 +157,11 @@ async function saveSettings(event) {
         const success = await window.electronAPI.saveConfig(newConfig);
         
         if (success) {
-            // 显示顶部成功通知
-            showTopNotification('✅ 设置保存成功！正在重启服务...', 'success');
+            // 显示顶部成功通知（不重启，统一由后端处理配置热更新）
+            showTopNotification('✅ 设置已保存（已热更新）', 'success');
             
             // 更新当前配置
             currentConfig = { ...currentConfig, ...newConfig };
-            
-            // 自动重启Python服务
-            await autoRestartService();
         } else {
             showTopNotification('❌ 设置保存失败', 'error');
         }
@@ -230,28 +227,17 @@ function autoSave() {
             return;
         }
     }
-    const isApiRelated = checkIfRestartNeeded(newConfig);
-    const delay = isApiRelated ? 300 : 800;
+    const delay = 600;
     
     autoSaveTimeout = setTimeout(async () => {
         try {
-            // 检查是否有关键配置变更需要重启服务
-            const needsRestart = checkIfRestartNeeded(newConfig);
-            
             const success = await window.electronAPI.saveConfig(newConfig);
             
             if (success) {
                 // 更新当前配置
                 currentConfig = { ...currentConfig, ...newConfig };
-                
-                if (needsRestart) {
-                    // 显示保存并重启的通知
-                    showTopNotification('✅ 设置已自动保存，正在重启服务...', 'success');
-                    await autoRestartService();
-                } else {
-                    // 显示简单的自动保存通知
-                    showTopNotification('✅ 设置已自动保存', 'success');
-                }
+                // 显示简单的自动保存通知（热更新）
+                showTopNotification('✅ 设置已自动保存（已热更新）', 'success');
             } else {
                 showTopNotification('❌ 自动保存失败', 'error');
             }

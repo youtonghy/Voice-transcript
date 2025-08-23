@@ -12,6 +12,8 @@ let mediaTranscribeProcess;
 let pythonBuffer = ''; // 用于缓存不完整的JSON消息
 let pythonReady = false;
 let pendingMessages = []; // 缓存待发送的消息
+let restartingPython = false; // 防止重复重启
+let restartAfterUserStopPending = false; // 用户手动停止录音后待重启标记
 let config = {
   openai_api_key: '',
   openai_base_url: '',
@@ -126,6 +128,16 @@ function processPythonOutput(data) {
         if (mainWindow) {
           mainWindow.webContents.send('python-message', message);
         }
+
+        // 检测录音停止事件，用于按需重启服务
+        if (message.type === 'recording_stopped') {
+          console.log('检测到录音已停止事件');
+          if (restartAfterUserStopPending) {
+            console.log('用户请求的录音停止后重启标记为真，开始优雅重启');
+            restartAfterUserStopPending = false;
+            restartPythonServiceAfterStop();
+          }
+        }
       } catch (error) {
         console.error('JSON解析失败:', error);
         console.error('问题消息:', messageStr);
@@ -210,7 +222,7 @@ function createSettingsWindow() {
     width: 500,
     height: 600,
     parent: mainWindow,
-    modal: true,
+    modal: false,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
@@ -227,13 +239,40 @@ function createSettingsWindow() {
   });
 }
 
+function createMediaTranscribeWindow() {
+  if (mediaTranscribeWindow) {
+    mediaTranscribeWindow.focus();
+    return;
+  }
+
+  mediaTranscribeWindow = new BrowserWindow({
+    width: 1100,
+    height: 720,
+    parent: mainWindow,
+    modal: false,
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js')
+    },
+    title: '媒体文件转写',
+    resizable: true
+  });
+
+  mediaTranscribeWindow.loadFile('media-transcribe.html');
+
+  mediaTranscribeWindow.on('closed', () => {
+    mediaTranscribeWindow = null;
+  });
+}
+
 function startPythonService() {
   console.log('startPythonService called');
   
+  // 已有运行中的服务则不重复启动，保持单实例
   if (pythonProcess) {
-    console.log('正在终止现有Python进程...');
-    pythonProcess.kill();
-    pythonProcess = null;
+    console.log('检测到已有转写服务进程，跳过启动');
+    return true;
   }
 
   // 重置状态
@@ -402,17 +441,10 @@ function startPythonService() {
           timestamp: new Date().toISOString()
         });
       }
-      
-      // 等待Python服务就绪后发送初始配置
-      setTimeout(() => {
-        if (pythonReady) {
-          console.log('发送初始配置到转写服务:', config);
-          sendToPython({ type: 'update_config', config });
-        } else {
-          console.log('Python服务未就绪，将配置加入待发送队列');
-          pendingMessages.push({ type: 'update_config', config });
-        }
-      }, 2000);
+
+      // 立即发送初始配置；如未就绪将自动入队
+      console.log('发送初始配置到转写服务(立即):', config);
+      sendToPython({ type: 'update_config', config });
     });
 
     return true;
@@ -470,6 +502,64 @@ function sendToPython(message) {
   return sendToPythonDirect(message);
 }
 
+// 用户手动停止录音后触发的优雅重启逻辑
+function restartPythonServiceAfterStop() {
+  if (!pythonProcess) {
+    console.log('转写服务进程不存在，直接启动新实例');
+    startPythonService();
+    return;
+  }
+
+  if (restartingPython) {
+    console.log('重启中，忽略重复触发');
+    return;
+  }
+
+  restartingPython = true;
+  try {
+    console.log('发送关闭命令以优雅退出转写服务');
+    // 尝试优雅关闭
+    sendToPythonDirect({ type: 'shutdown' });
+  } catch (e) {
+    console.warn('发送关闭命令失败，改为直接终止:', e.message);
+  }
+
+  let closed = false;
+  const onClose = () => {
+    if (closed) return;
+    closed = true;
+    console.log('旧转写服务已退出，准备重启');
+    pythonProcess = null;
+    setTimeout(() => {
+      const ok = startPythonService();
+      restartingPython = false;
+      console.log('重启结果:', ok);
+    }, 500);
+  };
+
+  // 一次性监听关闭
+  const closeHandler = (code, signal) => {
+    console.log('收到转写服务关闭事件(重启流程):', code, signal);
+    if (pythonProcess) {
+      pythonProcess.removeListener('close', closeHandler);
+    }
+    onClose();
+  };
+  if (pythonProcess) {
+    pythonProcess.once('close', closeHandler);
+  }
+
+  // 超时强制关闭
+  setTimeout(() => {
+    if (!closed) {
+      console.warn('等待优雅关闭超时，强制终止进程');
+      try {
+        pythonProcess && pythonProcess.kill();
+      } catch (e) {}
+    }
+  }, 5000);
+}
+
 // IPC事件处理
 ipcMain.handle('start-recording', () => {
   console.log('收到开始录音请求');
@@ -480,6 +570,7 @@ ipcMain.handle('start-recording', () => {
 
 ipcMain.handle('stop-recording', () => {
   console.log('收到停止录音请求');
+  restartAfterUserStopPending = true; // 标记用户手动停止，录音停止后将重启服务
   const result = sendToPython({ type: 'stop_recording' });
   console.log('停止录音命令发送结果:', result);
   return result;
@@ -488,6 +579,15 @@ ipcMain.handle('stop-recording', () => {
 ipcMain.handle('get-config', () => {
   console.log('收到获取配置请求，当前配置:', config);
   return config;
+});
+
+// 提供后端服务状态给渲染进程，避免页面切换后误判为“等待服务启动”
+ipcMain.handle('get-service-status', () => {
+  return {
+    running: !!pythonProcess,
+    ready: pythonReady,
+    pid: pythonProcess ? pythonProcess.pid : null
+  };
 });
 
 ipcMain.handle('save-config', (event, newConfig) => {
@@ -501,10 +601,13 @@ ipcMain.handle('save-config', (event, newConfig) => {
 });
 
 ipcMain.handle('open-settings', () => {
-  console.log('收到打开设置请求（改为单窗口导航）');
-  if (mainWindow) {
-    mainWindow.loadFile('settings.html');
-  }
+  console.log('收到打开设置请求（独立窗口）');
+  createSettingsWindow();
+});
+
+ipcMain.handle('open-media-transcribe', () => {
+  console.log('收到打开媒体转写请求（独立窗口）');
+  createMediaTranscribeWindow();
 });
 
 ipcMain.handle('test-python', async (event, pythonPath) => {
@@ -581,6 +684,11 @@ ipcMain.handle('restart-python-service', async (event) => {
   console.log('收到重启转写服务请求');
 
   try {
+    if (restartingPython) {
+      console.log('重启操作正在进行，忽略重复请求');
+      return { success: false, error: '正在重启中' };
+    }
+    restartingPython = true;
     // 停止现有服务
     if (pythonProcess) {
       pythonProcess.kill();
@@ -593,6 +701,7 @@ ipcMain.handle('restart-python-service', async (event) => {
 
     // 重新启动服务
     const success = startPythonService();
+    restartingPython = false;
 
     return {
       success: success,
@@ -600,6 +709,7 @@ ipcMain.handle('restart-python-service', async (event) => {
     };
   } catch (error) {
     console.error('重启转写服务失败:', error);
+    restartingPython = false;
     return {
       success: false,
       error: error.message
@@ -617,7 +727,7 @@ function createMenu() {
           label: '设置',
           accelerator: 'CmdOrCtrl+,',
           click: () => {
-            if (mainWindow) mainWindow.loadFile('settings.html');
+            createSettingsWindow();
           }
         },
         { type: 'separator' },
@@ -642,6 +752,7 @@ function createMenu() {
           label: '停止录音',
           accelerator: 'F2',
           click: () => {
+            restartAfterUserStopPending = true;
             sendToPython({ type: 'stop_recording' });
           }
         }
