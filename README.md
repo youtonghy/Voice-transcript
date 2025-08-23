@@ -1,4 +1,4 @@
-# Voice-transcript 王易转
+# Voice-transcript 王译转
 
 一个使用 Python 与 OpenAI 模型进行语音转写/翻译的小工具集合。
 
