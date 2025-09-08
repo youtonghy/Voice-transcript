@@ -1,5 +1,5 @@
 let currentConfig = {};
-let autoSaveTimeout = null; // 防抖定时器
+let autoSaveTimeout = null; // Debounce timer
 
 document.addEventListener('DOMContentLoaded', () => {
     loadCurrentConfig();
@@ -7,29 +7,29 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function setupEventListeners() {
-    // 表单提交
+    // Form submission
     document.getElementById('settingsForm').addEventListener('submit', saveSettings);
     
-    // 翻译开关
+    // Translation switch
     document.getElementById('enableTranslation').addEventListener('change', toggleTranslationSettings);
     document.getElementById('enableTranslation').addEventListener('change', autoSave);
     
-    // 翻译模式切换
+    // Translation mode switching
     document.getElementById('translationMode').addEventListener('change', () => {
         updateTranslationModeSettings();
         updateTranscribeLanguageAvailability();
         autoSave();
     });
     
-    // 翻译开关切换时也需要更新转录语言可用性
+    // Update transcription language availability when translation switch changes
     document.getElementById('enableTranslation').addEventListener('change', () => {
         updateTranscribeLanguageAvailability();
     });
     
-    // 剧场模式开关
+    // Theater mode switch
     document.getElementById('theaterMode').addEventListener('change', autoSave);
     
-    // 目标语言选择与自定义
+    // Target language selection and customization
     const targetLanguage = document.getElementById('targetLanguage');
     const customLanguage = document.getElementById('customLanguage');
     targetLanguage.addEventListener('change', () => {
@@ -38,17 +38,17 @@ function setupEventListeners() {
     });
     customLanguage.addEventListener('input', autoSave);
     
-    // 实时验证API密钥格式并触发主页面检测
+    // Real-time validation of API key format and trigger home page detection
     document.getElementById('apiKey').addEventListener('input', (event) => {
-        validateApiKey();
-        // API密钥输入变化时触发自动保存以便主页面实时检测
+        try { validateApiKey(); } catch {}
+        // Trigger auto-save when API key input changes for real-time detection on main page
         autoSave();
     });
     
-    // API URL变化也触发实时检测
+    // API URL changes also trigger real-time detection
     document.getElementById('apiUrl').addEventListener('input', autoSave);
     
-    // 为所有输入框添加失焦自动保存
+    // Add auto-save on blur for all input fields
     const autoSaveInputs = [
         'apiKey', 'apiUrl', 'targetLanguage', 'customLanguage', 'transcribeLanguage',
         'translationMode', 'language1', 'language2',
@@ -74,359 +74,307 @@ async function loadCurrentConfig() {
 }
 
 function populateForm(config) {
-    // API配置
+    // API configuration
     document.getElementById('apiKey').value = config.openai_api_key || '';
     document.getElementById('apiUrl').value = config.openai_base_url || '';
     
-    // 翻译设置
+    // Translation settings
     const enableTranslation = document.getElementById('enableTranslation');
     enableTranslation.checked = config.enable_translation !== false;
     
-    // 目标语言：若不在下拉选项中，切换为自定义
+    // Target language: if not in dropdown options, switch to custom
     const targetLanguage = document.getElementById('targetLanguage');
     const customLanguage = document.getElementById('customLanguage');
     const savedLang = config.translate_language || '中文';
     const options = Array.from(targetLanguage.options).map(o => o.value);
     if (options.includes(savedLang)) {
         targetLanguage.value = savedLang;
-        customLanguage.style.display = 'none';
-        customLanguage.value = '';
+        if (customLanguage) {
+            customLanguage.style.display = 'none';
+            customLanguage.value = '';
+        }
     } else {
         targetLanguage.value = '__custom__';
-        customLanguage.style.display = 'block';
-        customLanguage.value = savedLang;
+        if (customLanguage) {
+            customLanguage.style.display = 'block';
+            customLanguage.value = savedLang;
+        }
     }
     
-    // 录音设置
-    document.getElementById('silenceThreshold').value = config.silence_rms_threshold || 0.01;
+    // Recording settings
+    (function(){
+        const el = document.getElementById('transcribeLanguage');
+        if (el) el.value = config.transcribe_language || 'auto';
+    })();
+    
+    // Translation mode settings
+    (function(){
+        const el = document.getElementById('translationMode');
+        if (el) el.value = config.translation_mode || 'fixed';
+    })();
+    
+    // Smart translation language settings
+    document.getElementById('language1').value = config.smart_language1 || '中文';
+    document.getElementById('language2').value = config.smart_language2 || 'English';
+    
+    // Advanced settings
+    document.getElementById('silenceThreshold').value = config.silence_rms_threshold || 0.010;
     document.getElementById('silenceDuration').value = config.min_silence_seconds || 1.0;
+    document.getElementById('theaterMode').checked = config.theater_mode === true;
     
-    // 剧场模式
-    document.getElementById('theaterMode').checked = config.theater_mode || false;
-    
-    // 转录语言设置
-    const transcribeLanguage = document.getElementById('transcribeLanguage');
-    transcribeLanguage.value = config.transcribe_language || 'auto';
-    
-    // 翻译模式设置
-    const translationMode = document.getElementById('translationMode');
-    translationMode.value = config.translation_mode || 'fixed';
-    
-    // 智能翻译语言设置
-    const language1 = document.getElementById('language1');
-    const language2 = document.getElementById('language2');
-    language1.value = config.smart_language1 || '中文';
-    language2.value = config.smart_language2 || 'English';
-    
-    // 更新UI状态
-    toggleTranslationSettings();
-    updateCustomLanguageVisibility();
-    updateTranslationModeSettings();
-    updateTranscribeLanguageAvailability();
+    // Update UI based on current settings (guarded)
+    try { toggleTranslationSettings(); } catch {}
+    try { updateCustomLanguageVisibility(); } catch {}
+    try { updateTranslationModeSettings(); } catch {}
+    try { updateTranscribeLanguageAvailability(); } catch {}
+    try { validateApiKey(); } catch {}
 }
 
 function toggleTranslationSettings() {
-    const enableTranslation = document.getElementById('enableTranslation').checked;
-    const translationSettings = document.getElementById('translationSettings');
+    const enable = document.getElementById('enableTranslation').checked;
+    const elements = [
+        'targetLanguage', 'customLanguage', 'translationMode', 
+        'language1', 'language2'
+    ];
     
-    if (enableTranslation) {
-        translationSettings.style.opacity = '1';
-        translationSettings.style.pointerEvents = 'auto';
-    } else {
-        translationSettings.style.opacity = '0.5';
-        translationSettings.style.pointerEvents = 'none';
+    elements.forEach(id => {
+        const element = document.getElementById(id);
+        if (element) {
+            element.disabled = !enable;
+        }
+    });
+    
+    // Also disable/enable the translation mode container
+    const modeContainer = document.querySelector('.translation-mode-container');
+    if (modeContainer) {
+        modeContainer.style.opacity = enable ? '1' : '0.5';
     }
 }
 
 function updateCustomLanguageVisibility() {
     const targetLanguage = document.getElementById('targetLanguage');
     const customLanguage = document.getElementById('customLanguage');
-    const useCustom = targetLanguage.value === '__custom__';
-    customLanguage.style.display = useCustom ? 'block' : 'none';
+    if (!targetLanguage || !customLanguage) return;
+    if (targetLanguage.value === '__custom__') {
+        customLanguage.style.display = 'block';
+        customLanguage.required = true;
+    } else {
+        customLanguage.style.display = 'none';
+        customLanguage.required = false;
+    }
 }
 
 function updateTranslationModeSettings() {
-    const translationMode = document.getElementById('translationMode');
-    const fixedSettings = document.getElementById('fixedTranslationSettings');
-    const smartSettings = document.getElementById('smartTranslationSettings');
-    
-    if (translationMode.value === 'smart') {
-        fixedSettings.style.display = 'none';
+    const modeEl = document.getElementById('translationMode');
+    const mode = modeEl ? modeEl.value : 'fixed';
+    const smartSettings = document.querySelector('.smart-translation-settings');
+    if (!smartSettings) return;
+    if (mode === 'smart') {
         smartSettings.style.display = 'block';
     } else {
-        fixedSettings.style.display = 'block';
         smartSettings.style.display = 'none';
     }
 }
 
 function updateTranscribeLanguageAvailability() {
-    const enableTranslation = document.getElementById('enableTranslation').checked;
-    const translationMode = document.getElementById('translationMode').value;
+    const enableEl = document.getElementById('enableTranslation');
+    const modeEl = document.getElementById('translationMode');
     const transcribeLanguage = document.getElementById('transcribeLanguage');
+    if (!enableEl || !modeEl || !transcribeLanguage) return;
+    const transcribeContainer = transcribeLanguage.parentElement;
     
-    // 如果启用了智能翻译模式，则转录语言必须是自动检测
-    if (enableTranslation && translationMode === 'smart') {
-        // 强制设置为自动检测并禁用选择器
-        transcribeLanguage.value = 'auto';
-        transcribeLanguage.disabled = true;
-        transcribeLanguage.style.opacity = '0.6';
-        transcribeLanguage.style.cursor = 'not-allowed';
-    } else {
-        // 恢复正常状态
-        transcribeLanguage.disabled = false;
-        transcribeLanguage.style.opacity = '1';
-        transcribeLanguage.style.cursor = 'auto';
+    // Transcription language is only available when translation is disabled or in fixed mode
+    const isAvailable = !enableEl.checked || modeEl.value === 'fixed';
+    
+    transcribeLanguage.disabled = !isAvailable;
+    if (transcribeContainer && transcribeContainer.style) {
+        transcribeContainer.style.opacity = isAvailable ? '1' : '0.5';
+    }
+    
+    // Add a note for smart mode
+    if (transcribeContainer) {
+        const existingNote = transcribeContainer.querySelector('.mode-note');
+        if (existingNote) existingNote.remove();
+    }
+    
+    if (enableEl.checked && modeEl.value === 'smart' && transcribeContainer) {
+        const note = document.createElement('div');
+        note.className = 'mode-note';
+        note.textContent = '智能翻译模式下，转录语言将自动检测';
+        note.style.fontSize = '12px';
+        note.style.color = '#666';
+        note.style.marginTop = '5px';
+        transcribeContainer.appendChild(note);
     }
 }
 
 function validateApiKey() {
     const apiKey = document.getElementById('apiKey').value;
-    // 简单验证API密钥格式
-    return apiKey && apiKey.startsWith('sk-') && apiKey.length > 20;
-}
-
-async function saveSettings(event) {
-    event.preventDefault();
+    const indicator = document.getElementById('apiKeyIndicator');
+    const submitBtn = document.querySelector('.submit-btn');
     
-    // 校验翻译设置
-    const enableTranslation = document.getElementById('enableTranslation').checked;
-    if (enableTranslation) {
-        const translationMode = document.getElementById('translationMode').value;
-        
-        if (translationMode === 'fixed') {
-            // 校验固定翻译的自定义语言
-            const targetLanguage = document.getElementById('targetLanguage');
-            const customLanguage = document.getElementById('customLanguage');
-            if (targetLanguage.value === '__custom__' && !customLanguage.value.trim()) {
-                showTopNotification('❌ 请输入自定义目标语言', 'error');
-                customLanguage.focus();
-                return;
-            }
-        } else if (translationMode === 'smart') {
-            // 校验智能翻译的语言设置
-            const language1 = document.getElementById('language1').value;
-            const language2 = document.getElementById('language2').value;
-            if (language1 === language2) {
-                showTopNotification('❌ 智能翻译的两种语言不能相同', 'error');
-                document.getElementById('language2').focus();
-                return;
-            }
-            
-            // 智能翻译模式下转录语言必须为自动检测
-            const transcribeLanguage = document.getElementById('transcribeLanguage');
-            if (transcribeLanguage.value !== 'auto') {
-                showTopNotification('❌ 智能翻译模式下，转录语言必须为"自动检测"', 'error');
-                transcribeLanguage.value = 'auto';
-                return;
-            }
-        }
-    }
-
-    const formData = new FormData(event.target);
-    const newConfig = {};
-    
-    // 收集表单数据
-    for (let [key, value] of formData.entries()) {
-        if (key === 'enable_translation') {
-            newConfig[key] = true;
-        } else if (key === 'silence_rms_threshold' || key === 'min_silence_seconds') {
-            newConfig[key] = parseFloat(value);
-        } else {
-            newConfig[key] = value;
-        }
+    if (!apiKey) {
+        indicator.textContent = '';
+        indicator.className = '';
+        return;
     }
     
-    // 处理复选框
-    newConfig.enable_translation = document.getElementById('enableTranslation').checked;
-    newConfig.theater_mode = document.getElementById('theaterMode').checked;
-    
-    try {
-        const success = await window.electronAPI.saveConfig(newConfig);
-        
-        if (success) {
-            // 显示顶部成功通知（不重启，统一由后端处理配置热更新）
-            showTopNotification('✅ 设置已保存（已热更新）', 'success');
-            
-            // 更新当前配置
-            currentConfig = { ...currentConfig, ...newConfig };
-        } else {
-            showTopNotification('❌ 设置保存失败', 'error');
-        }
-    } catch (error) {
-        showTopNotification(`❌ 保存设置时出错: ${error.message}`, 'error');
+    if (apiKey.startsWith('sk-') && apiKey.length > 20) {
+        indicator.textContent = '✓ 格式正确';
+        indicator.className = 'valid';
+    } else {
+        indicator.textContent = '✗ 格式无效';
+        indicator.className = 'invalid';
     }
 }
 
-async function autoRestartService() {
-    try {
-        const result = await window.electronAPI.restartPythonService();
-        
-        if (result.success) {
-            showTopNotification('✅ 配置已保存，服务重启成功！', 'success');
-        } else {
-            showTopNotification(`⚠️ 配置已保存，但服务重启失败: ${result.error}`, 'warning');
-        }
-    } catch (error) {
-        showTopNotification(`⚠️ 配置已保存，但自动重启出错: ${error.message}`, 'warning');
-    }
-}
-
-function showStatus(type, message) {
-    const statusDiv = document.getElementById('statusMessage');
-    statusDiv.className = `status-message status-${type}`;
-    statusDiv.textContent = message;
-    statusDiv.style.display = 'block';
-    
-    // 成功消息自动消失
-    if (type === 'success') {
-        setTimeout(() => {
-            statusDiv.style.display = 'none';
-        }, 3000);
-    }
-}
-
-// 键盘快捷键
-document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape') {
-        // 返回主页面而不是关闭窗口
-        window.location.href = 'index.html';
-    } else if (event.ctrlKey && event.key === 's') {
-        event.preventDefault();
-        document.getElementById('settingsForm').dispatchEvent(new Event('submit'));
-    }
-});
-
-// 自动保存功能
 function autoSave() {
-    // 清除之前的定时器，实现防抖
+    // Clear existing timeout to debounce
     if (autoSaveTimeout) {
         clearTimeout(autoSaveTimeout);
     }
     
-    // API相关配置变化时使用较短延迟(300ms)，其他配置使用800ms
-    const newConfig = collectFormData();
-    // 翻译设置验证
-    if (newConfig.enable_translation) {
-        const translationMode = document.getElementById('translationMode').value;
+    // Set new timeout
+    autoSaveTimeout = setTimeout(() => {
+        saveSettingsInternal(true); // Silent save
+    }, 1000); // 1 second delay
+}
+
+async function saveSettings(event) {
+    if (event) {
+        event.preventDefault();
+    }
+    
+    await saveSettingsInternal(false); // Non-silent save
+}
+
+async function saveSettingsInternal(silent = false) {
+    try {
+        const config = collectFormData();
         
-        if (translationMode === 'fixed') {
-            // 自定义目标语言不能为空
-            const targetLanguage = document.getElementById('targetLanguage').value;
-            const customLanguage = document.getElementById('customLanguage').value.trim();
-            if (targetLanguage === '__custom__' && !customLanguage) {
-                // 不自动保存，等待填写
-                return;
-            }
-        } else if (translationMode === 'smart') {
-            // 智能翻译的两种语言不能相同
-            const language1 = document.getElementById('language1').value;
-            const language2 = document.getElementById('language2').value;
-            if (language1 === language2) {
-                // 不自动保存，等待修改
-                return;
-            }
+        // Validate required fields
+        if (config.enable_translation) {
+            const targetLang = document.getElementById('targetLanguage').value === '__custom__' 
+                ? document.getElementById('customLanguage').value 
+                : document.getElementById('targetLanguage').value;
             
-            // 智能翻译模式下转录语言必须为自动检测
-            const transcribeLanguage = document.getElementById('transcribeLanguage');
-            if (transcribeLanguage.value !== 'auto') {
-                // 强制设置为自动检测，不自动保存
-                transcribeLanguage.value = 'auto';
-                return;
+            if (!targetLang.trim()) {
+                if (!silent) {
+                    showTopNotification('❌ 请设置翻译目标语言', 'error');
+                }
+                return false;
             }
         }
+        
+        await window.electronAPI.saveConfig(config);
+        currentConfig = config;
+        
+        if (!silent) {
+            showTopNotification('✅ 设置已保存', 'success');
+        }
+        return true;
+        
+    } catch (error) {
+        if (!silent) {
+            showTopNotification(`❌ 保存失败: ${error.message}`, 'error');
+        }
+        console.error('Save settings error:', error);
+        return false;
     }
-    const delay = 600;
-    
-    autoSaveTimeout = setTimeout(async () => {
-        try {
-            const success = await window.electronAPI.saveConfig(newConfig);
-            
-            if (success) {
-                // 更新当前配置
-                currentConfig = { ...currentConfig, ...newConfig };
-                // 显示简单的自动保存通知（热更新）
-                showTopNotification('✅ 设置已自动保存（已热更新）', 'success');
-            } else {
-                showTopNotification('❌ 自动保存失败', 'error');
-            }
-        } catch (error) {
-            console.error('自动保存出错:', error);
-            showTopNotification('❌ 自动保存出错: ' + error.message, 'error');
-        }
-    }, delay);
 }
 
-// 检查是否需要重启服务
-function checkIfRestartNeeded(newConfig) {
-    // API相关配置变更需要重启
-    const apiRelatedKeys = ['openai_api_key', 'openai_base_url', 'enable_translation', 'translate_language', 'theater_mode'];
-    
-    for (const key of apiRelatedKeys) {
-        if (currentConfig[key] !== newConfig[key]) {
-            return true;
-        }
-    }
-    
-    return false;
-}
-
-// 收集表单数据
 function collectFormData() {
-    const formData = new FormData(document.getElementById('settingsForm'));
-    const newConfig = {};
+    const config = {};
     
-    // 收集表单数据
-    for (let [key, value] of formData.entries()) {
-        if (key === 'enable_translation') {
-            newConfig[key] = true;
-        } else if (key === 'silence_rms_threshold' || key === 'min_silence_seconds') {
-            newConfig[key] = parseFloat(value);
-        } else {
-            newConfig[key] = value;
-        }
+    // API configuration
+    config.openai_api_key = document.getElementById('apiKey').value.trim();
+    config.openai_base_url = document.getElementById('apiUrl').value.trim();
+    
+    // Translation settings
+    config.enable_translation = document.getElementById('enableTranslation').checked;
+    
+    if (config.enable_translation) {
+        const targetLanguage = document.getElementById('targetLanguage');
+        const customLanguage = document.getElementById('customLanguage');
+        
+        config.translate_language = targetLanguage.value === '__custom__' 
+            ? customLanguage.value.trim() 
+            : targetLanguage.value;
     }
     
-    // 处理复选框
-    newConfig.enable_translation = document.getElementById('enableTranslation').checked;
-    newConfig.theater_mode = document.getElementById('theaterMode').checked;
+    // Translation mode
+    config.translation_mode = document.getElementById('translationMode').value;
     
-    // 处理翻译设置
-    const translationMode = document.getElementById('translationMode').value;
-    newConfig.translation_mode = translationMode;
+    // Smart translation languages
+    config.smart_language1 = document.getElementById('language1').value.trim();
+    config.smart_language2 = document.getElementById('language2').value.trim();
     
-    if (translationMode === 'fixed') {
-        // 统一解析目标语言：自定义优先
-        const targetLanguage = document.getElementById('targetLanguage').value;
-        const customLanguage = document.getElementById('customLanguage').value.trim();
-        newConfig.translate_language = (targetLanguage === '__custom__') ? customLanguage : targetLanguage;
-    } else if (translationMode === 'smart') {
-        // 智能翻译设置
-        newConfig.smart_language1 = document.getElementById('language1').value;
-        newConfig.smart_language2 = document.getElementById('language2').value;
+    // Recording settings
+    config.transcribe_language = document.getElementById('transcribeLanguage').value;
+    
+    // Advanced settings
+    const silenceThreshold = parseFloat(document.getElementById('silenceThreshold').value);
+    const silenceDuration = parseFloat(document.getElementById('silenceDuration').value);
+    
+    if (!isNaN(silenceThreshold)) {
+        config.silence_rms_threshold = silenceThreshold;
+    }
+    if (!isNaN(silenceDuration)) {
+        config.min_silence_seconds = silenceDuration;
     }
     
-    return newConfig;
+    config.theater_mode = document.getElementById('theaterMode').checked;
+    
+    return config;
 }
 
-// 显示顶部通知
-function showTopNotification(message, type = 'success') {
-    const notification = document.getElementById('topNotification');
-    notification.textContent = message;
+function showTopNotification(message, type = 'info') {
+    // Remove existing notifications
+    const existingNotifications = document.querySelectorAll('.top-notification');
+    existingNotifications.forEach(n => n.remove());
+    
+    // Create notification element
+    const notification = document.createElement('div');
     notification.className = `top-notification ${type}`;
+    notification.textContent = message;
     
-    // 显示通知
-    setTimeout(() => {
-        notification.classList.add('show');
-    }, 100);
+    // Style the notification
+    notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: ${type === 'error' ? '#ff4757' : type === 'success' ? '#2ed573' : '#5352ed'};
+        color: white;
+        padding: 12px 24px;
+        border-radius: 6px;
+        font-size: 14px;
+        z-index: 10000;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        animation: slideDown 0.3s ease-out;
+    `;
     
-    // 4秒后自动隐藏
+    // Add CSS animation
+    if (!document.querySelector('#notification-styles')) {
+        const styles = document.createElement('style');
+        styles.id = 'notification-styles';
+        styles.textContent = `
+            @keyframes slideDown {
+                from { opacity: 0; transform: translateX(-50%) translateY(-20px); }
+                to { opacity: 1; transform: translateX(-50%) translateY(0); }
+            }
+        `;
+        document.head.appendChild(styles);
+    }
+    
+    // Add to page
+    document.body.appendChild(notification);
+    
+    // Auto remove after 3 seconds
     setTimeout(() => {
-        hideTopNotification();
-    }, 4000);
-}
-
-// 隐藏顶部通知
-function hideTopNotification() {
-    const notification = document.getElementById('topNotification');
-    notification.classList.remove('show');
+        if (notification.parentNode) {
+            notification.style.animation = 'slideUp 0.3s ease-out';
+            setTimeout(() => notification.remove(), 300);
+        }
+    }, 3000);
 }
