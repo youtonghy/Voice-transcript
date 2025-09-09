@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 Electron Audio Transcription and Translation Service
@@ -43,18 +43,7 @@ def setup_console_encoding():
 # Set encoding on module import
 setup_console_encoding()
 
-try:
-    from openai import OpenAI as OpenAIClient
-except Exception:
-    OpenAIClient = None
-
-# Qwen3-ASR / DashScope
-try:
-    import dashscope  # type: ignore
-    QWEN_AVAILABLE = True
-except Exception:
-    dashscope = None
-    QWEN_AVAILABLE = False
+import modles
 
 # Configuration constants
 SAMPLE_RATE = 44100  # Fixed: use standard sampling rate
@@ -76,8 +65,6 @@ OPENAI_TRANSCRIBE_MODEL = "gpt-4o-transcribe"
 OPENAI_TRANSLATE_MODEL = "gpt-4o-mini"
 
 # Global variables
-openai_client = None
-soniox_available = False
 is_recording = False
 audio_data = []
 recording_thread = None
@@ -256,257 +243,67 @@ def init_openai_client():
         return False
 
 def transcribe_with_soniox(filepath):
-    """Transcribe using Soniox backend.
-    Tries to import a local helper module `soniox_realtime` (preferred),
-    falling back to SDK if available. Returns text or None.
-    """
+    """Transcribe using Soniox via models module."""
     try:
-        try:
-            exe_dir = os.path.dirname(getattr(sys, "executable", sys.argv[0]))
-            log_message("info", f"Soniox: importing helper 'soniox_realtime' (exe_dir={exe_dir})")
-        except Exception:
-            pass
         api_key = (
             os.environ.get('SONIOX_API_KEY')
             or (config.get('soniox_api_key') if isinstance(config, dict) else None)
         )
-        if not api_key:
-            log_message("error", "Soniox API key not set; cannot transcribe with Soniox")
-            return None
-
-        # Preferred: local integration helper if present
-        try:
-            import importlib
-            import sys as _sys
-            # Ensure exe directory and CWD are on sys.path for dynamic import
-            try:
-                exe_dir = os.path.dirname(getattr(sys, "executable", sys.argv[0]))
-                if exe_dir and exe_dir not in _sys.path:
-                    _sys.path.insert(0, exe_dir)
-                cwd = os.getcwd()
-                if cwd and cwd not in _sys.path:
-                    _sys.path.insert(0, cwd)
-                log_message("info", f"Soniox: sys.path updated for helper import (exe_dir={exe_dir}, cwd={cwd})")
-            except Exception:
-                pass
-            sr = importlib.import_module('soniox_realtime')
-            # Try common function names
-            fn_candidates = [
-                'transcribe_file', 'transcribe_wav_file', 'transcribe_wav', 'transcribe', 'recognize_file'
-            ]
-            for name in fn_candidates:
-                fn = getattr(sr, name, None)
-                if callable(fn):
-                    log_message("info", f"Soniox: using helper function '{name}'")
-                    try:
-                        text = fn(filepath, api_key)
-                        if isinstance(text, str) and text.strip():
-                            log_message("info", f"Soniox: helper transcription succeeded ({len(text)} chars)")
-                            return text.strip()
-                    except TypeError:
-                        # Some helpers may expect (path) and use env for key
-                        try:
-                            # Set env for helper
-                            os.environ['SONIOX_API_KEY'] = api_key
-                        except Exception:
-                            pass
-                        try:
-                            text = fn(filepath)
-                            if isinstance(text, str) and text.strip():
-                                log_message("info", f"Soniox: helper transcription succeeded ({len(text)} chars)")
-                                return text.strip()
-                        except Exception:
-                            pass
-                    except Exception as e:
-                        log_message("warning", f"soniox_realtime helper failed: {e}")
-                        # Try next candidate or fallback
-            log_message("info", "soniox_realtime module found but no suitable function succeeded")
-        except ModuleNotFoundError:
-            # No local helper; try SDK path if installed
-            pass
-
-        # Fallback: try official SDK if installed
-        try:
-            # Attempt to import SDK
-            import soniox  # noqa: F401
-            # As SDK usage can vary, give a clear message
-            log_message("error", "Soniox SDK detected but no direct file transcription implemented here. Please provide soniox_realtime.py with a transcribe_file(path, api_key) function.")
-            return None
-        except Exception:
-            log_message("error", "Soniox helper/SDK not available. Place soniox_realtime.py next to this script or install the Soniox SDK.")
-            return None
+        return modles.transcribe_soniox(filepath, api_key)
     except Exception as e:
         log_message("error", f"Soniox transcription error: {e}")
         return None
 
-def _file_url_from_path(p: str) -> str:
-    """Return a DashScope-friendly file URI.
-
-    DashScope examples show "file://ABSOLUTE_PATH/welcome.mp3"; on Windows this maps to
-    "file://C:/path/file.wav" (note: NOT file:///C:/...).
-    """
-    try:
-        abspath = os.path.abspath(p).replace('\\', '/')
-        if os.name == 'nt':
-            # Drive letter path like C:/...
-            if re.match(r'^[A-Za-z]:/', abspath):
-                return f"file://{abspath}"
-            # UNC path like //server/share
-            if abspath.startswith('//'):
-                return f"file:{abspath}"
-            # Fallback
-            return f"file://{abspath}"
-        else:
-            # POSIX
-            if not abspath.startswith('/'):
-                abspath = '/' + abspath
-            return f"file://{abspath}"
-    except Exception:
-        return f"file://{p}"
-
-def _map_language_to_qwen_code(lang: str) -> str:
-    if not lang:
-        return ''
-    l = str(lang).lower()
-    if '中' in l or 'chinese' in l:
-        return 'zh'
-    if 'english' in l or l == 'en':
-        return 'en'
-    if '日' in l or 'japanese' in l:
-        return 'ja'
-    if '韩' in l or '韓' in l or 'korean' in l:
-        return 'ko'
-    if 'espa' in l or 'spanish' in l:
-        return 'es'
-    if 'fran' in l or 'french' in l:
-        return 'fr'
-    if 'deutsch' in l or 'german' in l:
-        return 'de'
-    if 'ital' in l:
-        return 'it'
-    if 'portugu' in l:
-        return 'pt'
-    if 'russ' in l or '俄' in l:
-        return 'ru'
-    if 'arab' in l or '阿拉伯' in l:
-        return 'ar'
-    if 'hindi' in l or '印地' in l:
-        return 'hi'
-    if 'thai' in l or '泰' in l:
-        return 'th'
-    if 'viet' in l or '越' in l:
-        return 'vi'
-    if 'indo' in l:
-        return 'id'
-    if 'turk' in l:
-        return 'tr'
-    if 'dutch' in l or 'neder' in l:
-        return 'nl'
-    if 'polski' in l or 'polish' in l:
-        return 'pl'
-    if 'ukrain' in l:
-        return 'uk'
-    if 'czech' in l or 'če' in l:
-        return 'cs'
-    return ''
-
-def _extract_text_from_qwen_response(resp) -> str:
-    # Try to extract text from dashscope response
-    try:
-        # Common layout: resp.output.choices[0].message.content -> list of dicts with {text: ...}
-        output = getattr(resp, 'output', None)
-        if output is None and isinstance(resp, dict):
-            output = resp.get('output')
-        if output:
-            choices = output.get('choices') if isinstance(output, dict) else None
-            if isinstance(choices, list) and choices:
-                msg = choices[0].get('message') if isinstance(choices[0], dict) else None
-                if msg and isinstance(msg, dict):
-                    content = msg.get('content')
-                    if isinstance(content, list):
-                        parts = []
-                        for c in content:
-                            if isinstance(c, dict) and 'text' in c:
-                                parts.append(str(c.get('text') or ''))
-                        out = '\n'.join([p for p in parts if p]).strip()
-                        if out:
-                            return out
-        # Fallbacks
-        text = getattr(resp, 'text', None)
-        if text:
-            return str(text)
-        try:
-            return json.dumps(resp, ensure_ascii=False)
-        except Exception:
-            return str(resp)
-    except Exception:
-        try:
-            return str(resp)
-        except Exception:
-            return ''
 
 def transcribe_with_qwen(filepath):
-    """Transcribe using Qwen3-ASR (DashScope)."""
-    if not QWEN_AVAILABLE:
-        log_message("error", "dashscope SDK not installed; cannot use Qwen3-ASR")
-        return None
-    # Prefer config key, else env
-    api_key = (
-        (config.get('dashscope_api_key') if isinstance(config, dict) else None)
-        or (config.get('qwen_api_key') if isinstance(config, dict) else None)
-        or os.environ.get('DASHSCOPE_API_KEY')
-    )
-    if not api_key:
-        log_message("error", "DashScope API key not set; cannot transcribe with Qwen3-ASR")
-        return None
-
+    """Transcribe using Qwen3-ASR via models module."""
     try:
-        audio_uri = _file_url_from_path(filepath)
-        # Build messages as in reference example
-        messages = [
-            {"role": "system", "content": [{"text": ""}]},
-            {"role": "user", "content": [{"audio": audio_uri}]}
-        ]
-
-        asr_opts = {"enable_lid": True, "enable_itn": True}
-        # If user specified a language, hint it
-        try:
-            lang = config.get('transcribe_language') if isinstance(config, dict) else None
-            if lang and str(lang).lower() != 'auto':
-                code = _map_language_to_qwen_code(lang)
-                if code:
-                    asr_opts["language"] = code
-        except Exception:
-            pass
-
-        audio_uri_for_log = audio_uri
-        try:
-            safe_uri = audio_uri
-            if '://' in safe_uri:
-                # Redact directory for log brevity
-                safe_uri = 'file://.../' + os.path.basename(filepath)
-            log_message("info", f"Qwen3-ASR using audio URI: {safe_uri}")
-        except Exception:
-            pass
-
-        resp = dashscope.MultiModalConversation.call(
-            api_key=api_key,
-            model="qwen3-asr-flash",
-            messages=messages,
-            result_format="message",
-            asr_options=asr_opts,
+        api_key = (
+            (config.get('dashscope_api_key') if isinstance(config, dict) else None)
+            or (config.get('qwen_api_key') if isinstance(config, dict) else None)
+            or os.environ.get('DASHSCOPE_API_KEY')
         )
-
-        text = _extract_text_from_qwen_response(resp)
-        if text and text.strip():
-            log_message("info", f"Qwen3-ASR transcription succeeded ({len(text)} chars)")
-            return text.strip()
-        else:
-            log_message("warning", "Qwen3-ASR returned empty result")
-            return None
+        lang = (config.get('transcribe_language') if isinstance(config, dict) else None)
+        return modles.transcribe_qwen(filepath, lang, api_key)
     except Exception as e:
         log_message("error", f"Qwen3-ASR transcription error: {e}")
         return None
+
+def _translate_text_openai(text, target_language):
+    """Translate text via OpenAI using models module."""
+    api_key = (config.get('openai_api_key') if isinstance(config, dict) else None) or os.environ.get('OPENAI_API_KEY')
+    base_url = (config.get('openai_base_url') if isinstance(config, dict) else None) or os.environ.get('OPENAI_BASE_URL')
+    try:
+        return modles.translate_openai(text, target_language, api_key, base_url)
+    except Exception as e:
+        log_message("error", f"Translation error: {e}")
+        return None
+
+def translate_text(text, target_language="Chinese"):
+    """Compatibility wrapper: translate text using OpenAI via models module."""
+    return _translate_text_openai(text, target_language)
+
+def determine_smart_translation_target(text, language1, language2):
+    """Wrapper to select target language for smart translation using models (OpenAI)."""
+    api_key = (config.get('openai_api_key') if isinstance(config, dict) else None) or os.environ.get('OPENAI_API_KEY')
+    base_url = (config.get('openai_base_url') if isinstance(config, dict) else None) or os.environ.get('OPENAI_BASE_URL')
+    try:
+        target = modles.detect_language_openai(text, language1, language2, api_key, base_url)
+        return target
+    except Exception as e:
+        log_message("error", f"Language detection error: {e}")
+        return language2
+
+# Ensure this function definition appears after any legacy variants in the file
+def determine_smart_translation_target(text, language1, language2):
+    """Determine target language using OpenAI models helper (override)."""
+    api_key = (config.get('openai_api_key') if isinstance(config, dict) else None) or os.environ.get('OPENAI_API_KEY')
+    base_url = (config.get('openai_base_url') if isinstance(config, dict) else None) or os.environ.get('OPENAI_BASE_URL')
+    try:
+        return modles.detect_language_openai(text, language1, language2, api_key, base_url)
+    except Exception as e:
+        log_message("error", f"Language detection error: {e}")
+        return language2
 
 
 def start_translation_worker():
@@ -593,7 +390,7 @@ def translation_worker():
                 log_message("info", f"Processing translation task #{order}: {result_id}")
                 
                 # Execute translation
-                translation = translate_text(transcription, target_language)
+                translation = _translate_text_openai(transcription, target_language)
                 
                 if translation:
                     # Send translation update message
@@ -633,7 +430,7 @@ def translation_worker():
                                 _, t_result_id, t_transcription, t_target_language = t
                                 log_message("info", f"Processing waiting translation task #{t_order}: {t_result_id}")
                                 
-                                t_translation = translate_text(t_transcription, t_target_language)
+                                t_translation = _translate_text_openai(t_transcription, t_target_language)
                                 if t_translation:
                                     send_message({
                                         "type": "translation_update",
@@ -809,7 +606,7 @@ def start_recording():
     
     # Reset translation worker/queue to avoid ordering waits across sessions
     try:
-        if config.get('enable_translation', True) and (openai_client is not None):
+        if config.get('enable_translation', True) and bool(config.get('openai_api_key') or os.environ.get('OPENAI_API_KEY')):
             # Restart worker to ensure clean state; preserve order numbering across sessions
             restart_translation_worker()
             log_message("info", f"Translation worker restarted; next order will be #{translation_next_expected}")
@@ -822,7 +619,7 @@ def start_recording():
                     translation_queue.get_nowait()
                 except queue.Empty:
                     break
-            log_message("info", "Translation disabled or OpenAI not configured; cleared queue, preserved order state")
+            log_message("info", "Translation disabled or OpenAI key missing; cleared queue, preserved order state")
     except Exception as _e:
         log_message("warning", f"Failed to reset translation worker: {_e}")
     
@@ -1005,7 +802,7 @@ def process_combined_audio(combined_audio, seg_idx=None, from_split=False, resul
                 
                 if translation_mode == 'smart':
                     # Smart translation mode
-                    language1 = config.get('smart_language1', '中文')
+                    language1 = config.get('smart_language1', '涓枃')
                     language2 = config.get('smart_language2', 'English')
                     
                     # Determine transcription text language and target translation
@@ -1022,8 +819,8 @@ def process_combined_audio(combined_audio, seg_idx=None, from_split=False, resul
                         pass
                 else:
                     # Fixed translation mode (original logic)
-                    target_language = config.get('translate_language', '中文')
-                    if target_language and target_language.strip() and (openai_client is not None) and translation_worker_running:
+                    target_language = config.get('translate_language', '涓枃')
+                    if target_language and target_language.strip() and translation_worker_running:
                         # Asynchronously queue translation task, get translation order
                         queue_success, translation_order = queue_translation(result_id, transcription, target_language)
                         # If queue fails, we keep transcription only
@@ -1040,102 +837,21 @@ def process_combined_audio(combined_audio, seg_idx=None, from_split=False, resul
         log_message("error", f"Error saving/transcribing audio file: {e}")
 
 def determine_smart_translation_target(text, language1, language2):
-    """
-    Smart translation: determine text language and return target translation language
-    
-    Args:
-        text: Text to translate
-        language1: Smart translation language 1
-        language2: Smart translation language 2
-    
-    Returns:
-        Target translation language, return None if cannot determine
-    """
-    global openai_client
-    
-    if not openai_client or not text or not text.strip():
-        return None
-    
+    """Determine target language for smart translation using models helper (OpenAI)."""
+    api_key = (config.get('openai_api_key') if isinstance(config, dict) else None) or os.environ.get('OPENAI_API_KEY')
+    base_url = (config.get('openai_base_url') if isinstance(config, dict) else None) or os.environ.get('OPENAI_BASE_URL')
     try:
-        # Use OpenAI to determine the main language of the text
-        detection_prompt = f"""Please determine which language the following text primarily uses, just answer the language name.
-
-Optional languages: {language1}, {language2}
-
-If the text is primarily {language1}, please answer "{language1}"
-If the text is primarily {language2}, please answer "{language2}"
-If unable to determine or contains multiple languages, please answer "Unknown"
-
-Text: {text}"""
-
-        response = openai_client.chat.completions.create(
-            model=OPENAI_TRANSLATE_MODEL,
-            messages=[
-                {"role": "system", "content": "You are a professional language recognition assistant."},
-                {"role": "user", "content": detection_prompt}
-            ],
-            max_tokens=50,
-            temperature=0.1,
-            top_p=0.95,
-            frequency_penalty=0,
-            presence_penalty=0,
-            stop=None,
-            stream=False
-        )
-        
-        detected_language = response.choices[0].message.content.strip()
-        log_message("info", f"Detected text language: {detected_language}")
-        
-        # Return target translation language based on detection result
-        if detected_language == language1:
-            return language2
-        elif detected_language == language2:
-            return language1
-        else:
-            # Cannot determine language, default translate to language2
-            log_message("warning", f"Cannot accurately determine language, default translate to: {language2}")
-            return language2
-            
+        return modles.detect_language_openai(text, language1, language2, api_key, base_url)
     except Exception as e:
         log_message("error", f"Language detection failed: {e}")
-        # Default translate to language2 on error
         return language2
 
-def translate_text(text, target_language="中文"):
-    """Translate text"""
-    global openai_client
-    
-    if not openai_client or not text or not text.strip():
-        return None
-    
+def translate_text(text, target_language="Chinese"):
+    """Translate text via models helper (OpenAI)."""
+    api_key = (config.get('openai_api_key') if isinstance(config, dict) else None) or os.environ.get('OPENAI_API_KEY')
+    base_url = (config.get('openai_base_url') if isinstance(config, dict) else None) or os.environ.get('OPENAI_BASE_URL')
     try:
-        system_prompt = f"""You are a professional translation assistant. Please translate the text provided by the user to {target_language}.
-
-Translation requirements:
-1. Maintain the tone and style of the original text
-2. Ensure accurate and natural translation
-3. If the original text is already in {target_language}, please return the original text directly
-4. Only return the translation result, do not add any explanations or comments"""
-
-        chat_messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": text}
-        ]
-        
-        response = openai_client.chat.completions.create(
-            model=OPENAI_TRANSLATE_MODEL,
-            messages=chat_messages,
-            max_tokens=5000,
-            temperature=0.1,
-            top_p=0.95,
-            frequency_penalty=0,
-            presence_penalty=0,
-            stop=None,
-            stream=False
-        )
-        
-        return response.choices[0].message.content.strip()
-        
+        return modles.translate_openai(text, target_language, api_key, base_url)
     except Exception as e:
         log_message("error", f"Translation failed: {e}")
         return None
@@ -1150,33 +866,12 @@ def transcribe_audio_file(filepath):
         log_message("info", "Transcribing via Qwen3-ASR (DashScope) backend")
         return transcribe_with_qwen(filepath)
 
-    # Default: OpenAI
-    global openai_client
-    if openai_client is None:
-        log_message("error", "OpenAI client not configured, cannot transcribe with OpenAI")
-        return None
-
+    # Default: OpenAI via models module
     try:
-        # Get transcription language setting
         transcribe_language = config.get('transcribe_language', 'auto')
-
-        # Prepare transcription parameters
-        transcribe_params = {
-            "model": OPENAI_TRANSCRIBE_MODEL,
-            "file": None,  # Will be set below
-            "response_format": "text",
-        }
-
-        # If a specific transcription language is set, add prompt
-        if transcribe_language and transcribe_language != 'auto':
-            transcribe_params["prompt"] = f"Please only transcribe in {transcribe_language}"
-            log_message("info", f"Using transcription language: {transcribe_language}")
-
-        with open(filepath, "rb") as audio_file:
-            transcribe_params["file"] = audio_file
-            result = openai_client.audio.transcriptions.create(**transcribe_params)
-
-        return getattr(result, "text", str(result))
+        api_key = (config.get('openai_api_key') if isinstance(config, dict) else None) or os.environ.get('OPENAI_API_KEY')
+        base_url = (config.get('openai_base_url') if isinstance(config, dict) else None) or os.environ.get('OPENAI_BASE_URL')
+        return modles.transcribe_openai(filepath, transcribe_language, api_key, base_url)
     except Exception as e:
         log_message("error", f"Transcription failed: {e}")
         return None
@@ -1240,34 +935,8 @@ def handle_message(message):
             except Exception:
                 pass
 
-            # Determine if OpenAI client is needed.
-            # Only require OpenAI when explicitly used for transcription, or when translation/smart mode is enabled AND an OpenAI key is present.
-            need_openai = False
-            try:
-                ts = config.get('transcribe_source', 'openai')
-                key_present = bool(config.get('openai_api_key') or os.environ.get('OPENAI_API_KEY'))
-                if ts == 'openai':
-                    need_openai = True
-                else:
-                    # Soniox transcription: only initialize OpenAI if we actually have a key and translation/smart mode is on
-                    if key_present and (config.get('enable_translation', True) or config.get('translation_mode', 'fixed') == 'smart'):
-                        need_openai = True
-            except Exception:
-                need_openai = False
-
-            # Re-init OpenAI client only if needed and key/base changed
-            if need_openai:
-                need_reinit = (
-                    old_config.get('openai_api_key') != config.get('openai_api_key') or
-                    old_config.get('openai_base_url') != config.get('openai_base_url')
-                )
-                if need_reinit or (OpenAIClient is not None and (openai_client is None)):
-                    success = init_openai_client()
-                    log_message("info", f"OpenAI client init result: {success}")
-                else:
-                    success = openai_client is not None
-            else:
-                success = True
+            # No model client pre-initialization needed after refactor
+            success = True
 
             # Apply recording detection thresholds (initial)
             global SILENCE_RMS_THRESHOLD, MIN_SILENCE_SEC_FOR_SPLIT
@@ -1284,8 +953,8 @@ def handle_message(message):
             # Manage translation worker based on config (initial)
             enable_tr = config.get('enable_translation', True)
             global translation_worker_running
-            # Only start translation worker if OpenAI is actually initialized and translation is enabled
-            translation_ready = enable_tr and (openai_client is not None)
+            # Start translation worker only when translation is enabled and OpenAI API key is present
+            translation_ready = enable_tr and bool(config.get('openai_api_key') or os.environ.get('OPENAI_API_KEY'))
             if translation_ready:
                 start_translation_worker()
             else:

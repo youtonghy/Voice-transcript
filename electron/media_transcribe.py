@@ -57,13 +57,8 @@ if _ffmpeg_path and not os.environ.get("IMAGEIO_FFMPEG_EXE"):
 
 # Audio/video processing: unified use of FFmpeg to extract audio, no longer depends on MoviePy
 
-# OpenAI client
-try:
-    from openai import OpenAI as OpenAIClient
-    OPENAI_AVAILABLE = True
-except ImportError:
-    OPENAI_AVAILABLE = False
-    print("Warning: openai SDK not installed, unable to use transcription feature. Run: pip install openai")
+# Model helpers
+import modles
 
 # scipy for audio resampling
 try:
@@ -99,9 +94,7 @@ class MediaProcessor:
     """Media file processor"""
     
     def __init__(self):
-        self.openai_client = None
         self.config = self.load_config()
-        self.init_openai_client()
         
         # Thread management
         self.processing_queue = queue.PriorityQueue()
@@ -132,25 +125,8 @@ class MediaProcessor:
         return {}
 
     def init_openai_client(self) -> bool:
-        """Initialize OpenAI client"""
-        if not OPENAI_AVAILABLE:
-            return False
-            
-        api_key = os.environ.get("OPENAI_API_KEY") or self.config.get("openai_api_key")
-        base_url = os.environ.get("OPENAI_BASE_URL") or self.config.get("openai_base_url")
-
-        if not api_key:
-            return False
-
-        try:
-            if base_url:
-                self.openai_client = OpenAIClient(api_key=api_key, base_url=base_url)
-            else:
-                self.openai_client = OpenAIClient(api_key=api_key)
-            return True
-        except Exception as e:
-            print(f"OpenAI client initialization failed: {e}")
-            return False
+        """Deprecated: models are invoked via modles.py on demand."""
+        return True
 
     def extract_audio_from_video(self, video_path: str, output_path: str = None) -> Optional[str]:
         """Extract audio from video file (using FFmpeg)"""
@@ -329,9 +305,7 @@ class MediaProcessor:
         return segments
 
     def transcribe_audio_segment(self, audio_segment: np.ndarray, segment_id: str) -> Optional[str]:
-        """Transcribe audio segment"""
-        if not self.openai_client:
-            return None
+        """Transcribe audio segment via OpenAI using central models helper"""
         
         try:
             # Save as temporary file
@@ -340,15 +314,11 @@ class MediaProcessor:
             
             sf.write(temp_file, audio_segment, SAMPLE_RATE)
             
-            # Call OpenAI transcription
-            with open(temp_file, "rb") as audio_file:
-                result = self.openai_client.audio.transcriptions.create(
-                    model=OPENAI_TRANSCRIBE_MODEL,
-                    file=audio_file,
-                    response_format="text",
-                )
-            
-            transcription = getattr(result, "text", str(result)).strip()
+            # Call transcription via models helper
+            api_key = os.environ.get("OPENAI_API_KEY") or self.config.get("openai_api_key")
+            base_url = os.environ.get("OPENAI_BASE_URL") or self.config.get("openai_base_url")
+            transcription = modles.transcribe_openai(temp_file, 'auto', api_key, base_url)
+            transcription = (transcription or '').strip()
             
             # Clean up temporary file
             try:
@@ -365,9 +335,17 @@ class MediaProcessor:
 
     def translate_text(self, text: str, target_language: str = "中文") -> Optional[str]:
         """Translate text"""
-        if not self.openai_client or not text.strip():
+        if not text.strip():
             return None
-        
+
+        try:
+            api_key = os.environ.get("OPENAI_API_KEY") or self.config.get("openai_api_key")
+            base_url = os.environ.get("OPENAI_BASE_URL") or self.config.get("openai_base_url")
+            return modles.translate_openai(text, target_language, api_key, base_url)
+        except Exception as e:
+            print(f"Translation failed: {e}")
+            return None
+
         try:
             system_prompt = f"""You are a professional translation assistant. Please translate the text provided by the user to {target_language}.
 
