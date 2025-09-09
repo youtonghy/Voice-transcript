@@ -1,5 +1,0 @@
-{"type": "log", "level": "info", "message": "转写服务正在启动...", "timestamp": "2025-09-07T22:29:33.988051"}
-{"type": "log", "level": "info", "message": "Python版本: 3.12.10 (tags/v3.12.10:0cc8128, Apr  8 2025, 12:21:36) [MSC v.1943 64 bit (AMD64)]", "timestamp": "2025-09-07T22:29:33.989050"}
-{"type": "log", "level": "info", "message": "工作目录: C:\\Users\\youtonghy\\Documents\\GitHub\\Voice-transcript\\electron", "timestamp": "2025-09-07T22:29:33.990047"}
-{"type": "log", "level": "info", "message": "转写服务已启动，等待命令...", "timestamp": "2025-09-07T22:29:33.990047"}
-{"type": "log", "level": "info", "message": "转写服务已停止", "timestamp": "2025-09-07T22:29:33.991048"}

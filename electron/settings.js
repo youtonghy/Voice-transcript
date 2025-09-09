@@ -4,6 +4,7 @@ let autoSaveTimeout = null; // Debounce timer
 document.addEventListener('DOMContentLoaded', () => {
     loadCurrentConfig();
     setupEventListeners();
+    try { updateProviderVisibility(); } catch {}
 });
 
 function setupEventListeners() {
@@ -48,10 +49,20 @@ function setupEventListeners() {
     // API URL changes also trigger real-time detection
     document.getElementById('apiUrl').addEventListener('input', autoSave);
     
+    // Transcribe source switching (toggle provider fields)
+    const transcribeSource = document.getElementById('transcribeSource');
+    if (transcribeSource) {
+        transcribeSource.addEventListener('change', () => {
+            updateProviderVisibility();
+            autoSave();
+            try { console.log('[Settings] Transcribe source changed to', transcribeSource.value); } catch {}
+        });
+    }
+    
     // Add auto-save on blur for all input fields
     const autoSaveInputs = [
         'apiKey', 'apiUrl', 'targetLanguage', 'customLanguage', 'transcribeLanguage',
-        'translationMode', 'language1', 'language2',
+        'translationMode', 'language1', 'language2', 'transcribeSource', 'sonioxApiKey', 'qwenApiKey',
         'silenceThreshold', 'silenceDuration', 'theaterMode'
     ];
     
@@ -75,8 +86,17 @@ async function loadCurrentConfig() {
 
 function populateForm(config) {
     // API configuration
+    (function(){
+        const el = document.getElementById('transcribeSource');
+        if (el) el.value = config.transcribe_source || 'openai';
+        updateProviderVisibility();
+    })();
     document.getElementById('apiKey').value = config.openai_api_key || '';
     document.getElementById('apiUrl').value = config.openai_base_url || '';
+    const sonioxEl = document.getElementById('sonioxApiKey');
+    if (sonioxEl) sonioxEl.value = config.soniox_api_key || '';
+    const qwenEl = document.getElementById('qwenApiKey');
+    if (qwenEl) qwenEl.value = (config.dashscope_api_key || config.qwen_api_key || '') || '';
     
     // Translation settings
     const enableTranslation = document.getElementById('enableTranslation');
@@ -208,6 +228,18 @@ function updateTranscribeLanguageAvailability() {
     }
 }
 
+function updateProviderVisibility() {
+    const source = (document.getElementById('transcribeSource') || {}).value || 'openai';
+    const isOpenAI = source === 'openai';
+    const openaiBlocks = document.querySelectorAll('.provider-openai');
+    const sonioxBlocks = document.querySelectorAll('.provider-soniox');
+    const qwenBlocks = document.querySelectorAll('.provider-qwen3-asr');
+
+    openaiBlocks.forEach(el => el.style.display = isOpenAI ? '' : 'none');
+    sonioxBlocks.forEach(el => el.style.display = source === 'soniox' ? '' : 'none');
+    qwenBlocks.forEach(el => el.style.display = source === 'qwen3-asr' ? '' : 'none');
+}
+
 function validateApiKey() {
     const apiKey = document.getElementById('apiKey').value;
     const indicator = document.getElementById('apiKeyIndicator');
@@ -287,8 +319,13 @@ function collectFormData() {
     const config = {};
     
     // API configuration
+    config.transcribe_source = (document.getElementById('transcribeSource') || { value: 'openai' }).value;
     config.openai_api_key = document.getElementById('apiKey').value.trim();
     config.openai_base_url = document.getElementById('apiUrl').value.trim();
+    const sonioxEl = document.getElementById('sonioxApiKey');
+    if (sonioxEl) config.soniox_api_key = sonioxEl.value.trim();
+    const qwenEl = document.getElementById('qwenApiKey');
+    if (qwenEl) config.dashscope_api_key = qwenEl.value.trim();
     
     // Translation settings
     config.enable_translation = document.getElementById('enableTranslation').checked;

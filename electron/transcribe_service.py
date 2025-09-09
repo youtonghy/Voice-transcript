@@ -10,6 +10,7 @@ import json
 import time
 import threading
 import os
+import re
 import queue
 import uuid
 from datetime import datetime
@@ -47,6 +48,14 @@ try:
 except Exception:
     OpenAIClient = None
 
+# Qwen3-ASR / DashScope
+try:
+    import dashscope  # type: ignore
+    QWEN_AVAILABLE = True
+except Exception:
+    dashscope = None
+    QWEN_AVAILABLE = False
+
 # Configuration constants
 SAMPLE_RATE = 44100  # Fixed: use standard sampling rate
 CHANNELS = 1
@@ -68,6 +77,7 @@ OPENAI_TRANSLATE_MODEL = "gpt-4o-mini"
 
 # Global variables
 openai_client = None
+soniox_available = False
 is_recording = False
 audio_data = []
 recording_thread = None
@@ -92,6 +102,8 @@ translation_queue = queue.PriorityQueue()  # Use priority queue to ensure order
 translation_worker_thread = None
 translation_worker_running = False
 translation_counter = 0  # Used to ensure translation order
+translation_next_expected = 1  # Worker starts expecting this order
+transcription_counter = 0  # Used to ensure transcription order/placeholders
 pending_translations = {}  # Store pending translation tasks {result_id: task_info}
 
 def log_message(level, message):
@@ -229,7 +241,7 @@ def init_openai_client():
     base_url = config.get("openai_base_url")
 
     if not api_key:
-        log_message("error", "API key not set, transcription feature unavailable")
+        log_message("error", "OpenAI API key not set; OpenAI features unavailable")
         return False
 
     try:
@@ -243,16 +255,266 @@ def init_openai_client():
         log_message("error", f"OpenAI client initialization failed: {e}")
         return False
 
+def transcribe_with_soniox(filepath):
+    """Transcribe using Soniox backend.
+    Tries to import a local helper module `soniox_realtime` (preferred),
+    falling back to SDK if available. Returns text or None.
+    """
+    try:
+        try:
+            exe_dir = os.path.dirname(getattr(sys, "executable", sys.argv[0]))
+            log_message("info", f"Soniox: importing helper 'soniox_realtime' (exe_dir={exe_dir})")
+        except Exception:
+            pass
+        api_key = (
+            os.environ.get('SONIOX_API_KEY')
+            or (config.get('soniox_api_key') if isinstance(config, dict) else None)
+        )
+        if not api_key:
+            log_message("error", "Soniox API key not set; cannot transcribe with Soniox")
+            return None
+
+        # Preferred: local integration helper if present
+        try:
+            import importlib
+            import sys as _sys
+            # Ensure exe directory and CWD are on sys.path for dynamic import
+            try:
+                exe_dir = os.path.dirname(getattr(sys, "executable", sys.argv[0]))
+                if exe_dir and exe_dir not in _sys.path:
+                    _sys.path.insert(0, exe_dir)
+                cwd = os.getcwd()
+                if cwd and cwd not in _sys.path:
+                    _sys.path.insert(0, cwd)
+                log_message("info", f"Soniox: sys.path updated for helper import (exe_dir={exe_dir}, cwd={cwd})")
+            except Exception:
+                pass
+            sr = importlib.import_module('soniox_realtime')
+            # Try common function names
+            fn_candidates = [
+                'transcribe_file', 'transcribe_wav_file', 'transcribe_wav', 'transcribe', 'recognize_file'
+            ]
+            for name in fn_candidates:
+                fn = getattr(sr, name, None)
+                if callable(fn):
+                    log_message("info", f"Soniox: using helper function '{name}'")
+                    try:
+                        text = fn(filepath, api_key)
+                        if isinstance(text, str) and text.strip():
+                            log_message("info", f"Soniox: helper transcription succeeded ({len(text)} chars)")
+                            return text.strip()
+                    except TypeError:
+                        # Some helpers may expect (path) and use env for key
+                        try:
+                            # Set env for helper
+                            os.environ['SONIOX_API_KEY'] = api_key
+                        except Exception:
+                            pass
+                        try:
+                            text = fn(filepath)
+                            if isinstance(text, str) and text.strip():
+                                log_message("info", f"Soniox: helper transcription succeeded ({len(text)} chars)")
+                                return text.strip()
+                        except Exception:
+                            pass
+                    except Exception as e:
+                        log_message("warning", f"soniox_realtime helper failed: {e}")
+                        # Try next candidate or fallback
+            log_message("info", "soniox_realtime module found but no suitable function succeeded")
+        except ModuleNotFoundError:
+            # No local helper; try SDK path if installed
+            pass
+
+        # Fallback: try official SDK if installed
+        try:
+            # Attempt to import SDK
+            import soniox  # noqa: F401
+            # As SDK usage can vary, give a clear message
+            log_message("error", "Soniox SDK detected but no direct file transcription implemented here. Please provide soniox_realtime.py with a transcribe_file(path, api_key) function.")
+            return None
+        except Exception:
+            log_message("error", "Soniox helper/SDK not available. Place soniox_realtime.py next to this script or install the Soniox SDK.")
+            return None
+    except Exception as e:
+        log_message("error", f"Soniox transcription error: {e}")
+        return None
+
+def _file_url_from_path(p: str) -> str:
+    """Return a DashScope-friendly file URI.
+
+    DashScope examples show "file://ABSOLUTE_PATH/welcome.mp3"; on Windows this maps to
+    "file://C:/path/file.wav" (note: NOT file:///C:/...).
+    """
+    try:
+        abspath = os.path.abspath(p).replace('\\', '/')
+        if os.name == 'nt':
+            # Drive letter path like C:/...
+            if re.match(r'^[A-Za-z]:/', abspath):
+                return f"file://{abspath}"
+            # UNC path like //server/share
+            if abspath.startswith('//'):
+                return f"file:{abspath}"
+            # Fallback
+            return f"file://{abspath}"
+        else:
+            # POSIX
+            if not abspath.startswith('/'):
+                abspath = '/' + abspath
+            return f"file://{abspath}"
+    except Exception:
+        return f"file://{p}"
+
+def _map_language_to_qwen_code(lang: str) -> str:
+    if not lang:
+        return ''
+    l = str(lang).lower()
+    if '中' in l or 'chinese' in l:
+        return 'zh'
+    if 'english' in l or l == 'en':
+        return 'en'
+    if '日' in l or 'japanese' in l:
+        return 'ja'
+    if '韩' in l or '韓' in l or 'korean' in l:
+        return 'ko'
+    if 'espa' in l or 'spanish' in l:
+        return 'es'
+    if 'fran' in l or 'french' in l:
+        return 'fr'
+    if 'deutsch' in l or 'german' in l:
+        return 'de'
+    if 'ital' in l:
+        return 'it'
+    if 'portugu' in l:
+        return 'pt'
+    if 'russ' in l or '俄' in l:
+        return 'ru'
+    if 'arab' in l or '阿拉伯' in l:
+        return 'ar'
+    if 'hindi' in l or '印地' in l:
+        return 'hi'
+    if 'thai' in l or '泰' in l:
+        return 'th'
+    if 'viet' in l or '越' in l:
+        return 'vi'
+    if 'indo' in l:
+        return 'id'
+    if 'turk' in l:
+        return 'tr'
+    if 'dutch' in l or 'neder' in l:
+        return 'nl'
+    if 'polski' in l or 'polish' in l:
+        return 'pl'
+    if 'ukrain' in l:
+        return 'uk'
+    if 'czech' in l or 'če' in l:
+        return 'cs'
+    return ''
+
+def _extract_text_from_qwen_response(resp) -> str:
+    # Try to extract text from dashscope response
+    try:
+        # Common layout: resp.output.choices[0].message.content -> list of dicts with {text: ...}
+        output = getattr(resp, 'output', None)
+        if output is None and isinstance(resp, dict):
+            output = resp.get('output')
+        if output:
+            choices = output.get('choices') if isinstance(output, dict) else None
+            if isinstance(choices, list) and choices:
+                msg = choices[0].get('message') if isinstance(choices[0], dict) else None
+                if msg and isinstance(msg, dict):
+                    content = msg.get('content')
+                    if isinstance(content, list):
+                        parts = []
+                        for c in content:
+                            if isinstance(c, dict) and 'text' in c:
+                                parts.append(str(c.get('text') or ''))
+                        out = '\n'.join([p for p in parts if p]).strip()
+                        if out:
+                            return out
+        # Fallbacks
+        text = getattr(resp, 'text', None)
+        if text:
+            return str(text)
+        try:
+            return json.dumps(resp, ensure_ascii=False)
+        except Exception:
+            return str(resp)
+    except Exception:
+        try:
+            return str(resp)
+        except Exception:
+            return ''
+
+def transcribe_with_qwen(filepath):
+    """Transcribe using Qwen3-ASR (DashScope)."""
+    if not QWEN_AVAILABLE:
+        log_message("error", "dashscope SDK not installed; cannot use Qwen3-ASR")
+        return None
+    # Prefer config key, else env
+    api_key = (
+        (config.get('dashscope_api_key') if isinstance(config, dict) else None)
+        or (config.get('qwen_api_key') if isinstance(config, dict) else None)
+        or os.environ.get('DASHSCOPE_API_KEY')
+    )
+    if not api_key:
+        log_message("error", "DashScope API key not set; cannot transcribe with Qwen3-ASR")
+        return None
+
+    try:
+        audio_uri = _file_url_from_path(filepath)
+        # Build messages as in reference example
+        messages = [
+            {"role": "system", "content": [{"text": ""}]},
+            {"role": "user", "content": [{"audio": audio_uri}]}
+        ]
+
+        asr_opts = {"enable_lid": True, "enable_itn": True}
+        # If user specified a language, hint it
+        try:
+            lang = config.get('transcribe_language') if isinstance(config, dict) else None
+            if lang and str(lang).lower() != 'auto':
+                code = _map_language_to_qwen_code(lang)
+                if code:
+                    asr_opts["language"] = code
+        except Exception:
+            pass
+
+        audio_uri_for_log = audio_uri
+        try:
+            safe_uri = audio_uri
+            if '://' in safe_uri:
+                # Redact directory for log brevity
+                safe_uri = 'file://.../' + os.path.basename(filepath)
+            log_message("info", f"Qwen3-ASR using audio URI: {safe_uri}")
+        except Exception:
+            pass
+
+        resp = dashscope.MultiModalConversation.call(
+            api_key=api_key,
+            model="qwen3-asr-flash",
+            messages=messages,
+            result_format="message",
+            asr_options=asr_opts,
+        )
+
+        text = _extract_text_from_qwen_response(resp)
+        if text and text.strip():
+            log_message("info", f"Qwen3-ASR transcription succeeded ({len(text)} chars)")
+            return text.strip()
+        else:
+            log_message("warning", "Qwen3-ASR returned empty result")
+            return None
+    except Exception as e:
+        log_message("error", f"Qwen3-ASR transcription error: {e}")
+        return None
+
 
 def start_translation_worker():
     """Start translation worker thread"""
-    global translation_worker_thread, translation_worker_running, translation_counter
+    global translation_worker_thread, translation_worker_running
     
     if translation_worker_thread and translation_worker_thread.is_alive():
         return
-    
-    # Reset translation counter to start from 1
-    translation_counter = 0
     
     translation_worker_running = True
     translation_worker_thread = threading.Thread(target=translation_worker, daemon=True)
@@ -264,14 +526,52 @@ def stop_translation_worker():
     global translation_worker_running
     translation_worker_running = False
     # Add a stop signal to the queue (use highest priority to ensure it's processed immediately)
-    translation_queue.put((0, None))
+    try:
+        translation_queue.put((0, None))
+    except Exception:
+        pass
+
+    # Try to join existing thread (allow up to 3s; worker get timeout is 2s)
+    try:
+        global translation_worker_thread
+        if translation_worker_thread and translation_worker_thread.is_alive():
+            translation_worker_thread.join(timeout=3.0)
+    except Exception:
+        pass
+
+def restart_translation_worker():
+    """Restart translation worker and align expected order with current counter."""
+    global translation_counter, translation_next_expected
+    try:
+        stop_translation_worker()
+    except Exception:
+        pass
+    # Clear any queued items
+    try:
+        while not translation_queue.empty():
+            try:
+                translation_queue.get_nowait()
+            except queue.Empty:
+                break
+    except Exception:
+        pass
+    # Continue order numbers across sessions; worker expects next after current counter
+    try:
+        translation_next_expected = int(translation_counter) + 1
+    except Exception:
+        translation_next_expected = 1
+    start_translation_worker()
 
 def translation_worker():
     """Translation queue worker thread - process translations in order"""
-    global translation_worker_running, translation_counter
+    global translation_worker_running, translation_counter, translation_next_expected
     
     log_message("info", "Translation worker thread started, will process translation tasks in order")
-    next_expected_order = 1  # Next expected order number
+    try:
+        next_expected_order = int(translation_next_expected) if translation_next_expected and translation_next_expected > 0 else 1
+    except Exception:
+        next_expected_order = 1  # Next expected order number
+    log_message("info", f"Translation worker initial expected order: #{next_expected_order}")
     
     while translation_worker_running:
         try:
@@ -309,6 +609,7 @@ def translation_worker():
                     log_message("warning", f"Translation failed #{order}: {result_id}")
                 
                 next_expected_order += 1
+                translation_next_expected = next_expected_order
                 
                 # Check if there are waiting follow-up tasks to process
                 while True:
@@ -346,6 +647,7 @@ def translation_worker():
                                     log_message("warning", f"Translation failed #{t_order}: {t_result_id}")
                                 
                                 next_expected_order += 1
+                                translation_next_expected = next_expected_order
                                 break
                             else:
                                 # Not the next one, put back to temp list
@@ -505,14 +807,24 @@ def start_recording():
         })
         return
     
-    # Clear translation queue, reset translation counter (prepare for new recording session)
-    while not translation_queue.empty():
-        try:
-            translation_queue.get_nowait()
-        except queue.Empty:
-            break
-    translation_counter = 0
-    log_message("info", "Translation queue cleared, ready for new recording session")
+    # Reset translation worker/queue to avoid ordering waits across sessions
+    try:
+        if config.get('enable_translation', True) and (openai_client is not None):
+            # Restart worker to ensure clean state; preserve order numbering across sessions
+            restart_translation_worker()
+            log_message("info", f"Translation worker restarted; next order will be #{translation_next_expected}")
+        else:
+            # If translation disabled or not configured, stop worker; preserve counter for future sessions
+            stop_translation_worker()
+            # Clear any lingering queue items
+            while not translation_queue.empty():
+                try:
+                    translation_queue.get_nowait()
+                except queue.Empty:
+                    break
+            log_message("info", "Translation disabled or OpenAI not configured; cleared queue, preserved order state")
+    except Exception as _e:
+        log_message("warning", f"Failed to reset translation worker: {_e}")
     
     is_recording = True
     
@@ -623,16 +935,34 @@ def save_audio_file():
     process_segment_chunks(local_chunks, None, False)
 
 def process_segment_chunks(chunks, seg_idx=None, from_split=False):
-    """Process audio chunks"""
+    """Process audio chunks with a placeholder-first flow"""
+    global transcription_counter
     try:
         if not chunks:
             return
         combined_audio = np.concatenate(chunks, axis=0) if len(chunks) > 1 else chunks[0]
-        process_combined_audio(combined_audio, seg_idx, from_split)
+
+        # Assign result_id and order, send placeholder first to maintain ordering in UI
+        transcription_counter += 1
+        trans_order = transcription_counter
+        result_id = str(uuid.uuid4())
+        try:
+            send_message({
+                "type": "result",
+                "result_id": result_id,
+                "transcription": "",
+                "transcription_pending": True,
+                "transcription_order": trans_order,
+                "timestamp": datetime.now().isoformat()
+            })
+        except Exception:
+            pass
+
+        process_combined_audio(combined_audio, seg_idx, from_split, result_id=result_id, trans_order=trans_order)
     except Exception as e:
         log_message("error", f"Error processing audio segment: {e}")
 
-def process_combined_audio(combined_audio, seg_idx=None, from_split=False):
+def process_combined_audio(combined_audio, seg_idx=None, from_split=False, result_id=None, trans_order=None):
     """Save combined audio and transcribe/translate"""
     try:
         # Check if theater mode is enabled
@@ -654,9 +984,21 @@ def process_combined_audio(combined_audio, seg_idx=None, from_split=False):
         # Transcribe audio
         transcription = transcribe_audio_file(filepath)
         if transcription:
-            # Generate unique result ID
-            result_id = str(uuid.uuid4())
-            
+            # Use existing result_id/order if provided (placeholder flow)
+            if not result_id:
+                result_id = str(uuid.uuid4())
+            # Send transcription update to fill the placeholder
+            try:
+                send_message({
+                    "type": "transcription_update",
+                    "result_id": result_id,
+                    "transcription": transcription.strip(),
+                    "order": trans_order or 0,
+                    "timestamp": datetime.now().isoformat()
+                })
+            except Exception:
+                pass
+
             # Check if translation is enabled
             if config.get('enable_translation', True):
                 translation_mode = config.get('translation_mode', 'fixed')
@@ -673,76 +1015,21 @@ def process_combined_audio(combined_audio, seg_idx=None, from_split=False):
                         # Asynchronously queue translation task, get translation order
                         queue_success, translation_order = queue_translation(result_id, transcription, smart_target)
                         
-                        if queue_success:
-                            # Immediately send transcription result (with translation placeholder and order info)
-                            send_message({
-                                "type": "result",
-                                "result_id": result_id,
-                                "transcription": transcription.strip(),
-                                "translation_pending": True,
-                                "translation_order": translation_order,
-                                "smart_translation": True,
-                                "detected_language": language1 if smart_target == language2 else language2,
-                                "target_language": smart_target,
-                                "timestamp": datetime.now().isoformat()
-                            })
-                        else:
-                            # Translation queue failed, send result without translation
-                            send_message({
-                                "type": "result_final",
-                                "result_id": result_id,
-                                "transcription": transcription.strip(),
-                                "timestamp": datetime.now().isoformat()
-                            })
+                        # For translation, we rely on translation_update later; placeholder already exists
+                        # If queue fails, do nothing further here
                     else:
-                        # Smart translation failed, only send transcription
-                        send_message({
-                            "type": "result",
-                            "result_id": result_id,
-                            "transcription": transcription.strip(),
-                            "timestamp": datetime.now().isoformat()
-                        })
+                        # Smart translation failed; keep transcription only
+                        pass
                 else:
                     # Fixed translation mode (original logic)
                     target_language = config.get('translate_language', '中文')
-                    if target_language and target_language.strip():
+                    if target_language and target_language.strip() and (openai_client is not None) and translation_worker_running:
                         # Asynchronously queue translation task, get translation order
                         queue_success, translation_order = queue_translation(result_id, transcription, target_language)
-                        
-                        if queue_success:
-                            # Immediately send transcription result (with translation placeholder and order info)
-                            send_message({
-                                "type": "result",
-                                "result_id": result_id,
-                                "transcription": transcription.strip(),
-                                "translation_pending": True,
-                                "translation_order": translation_order,
-                                "timestamp": datetime.now().isoformat()
-                            })
-                        else:
-                            # Translation queue failed, send result without translation
-                            send_message({
-                                "type": "result_final",
-                                "result_id": result_id,
-                                "transcription": transcription.strip(),
-                                "timestamp": datetime.now().isoformat()
-                            })
-                    else:
-                        # No target language set, only send transcription
-                        send_message({
-                            "type": "result",
-                            "result_id": result_id,
-                            "transcription": transcription.strip(),
-                            "timestamp": datetime.now().isoformat()
-                        })
+                        # If queue fails, we keep transcription only
             else:
-                # Translation not enabled: directly send transcription
-                send_message({
-                    "type": "result",
-                    "result_id": result_id,
-                    "transcription": transcription.strip(),
-                    "timestamp": datetime.now().isoformat()
-                })
+                # Translation not enabled: nothing else to do; placeholder already filled
+                pass
 
             # Delete audio file
             try:
@@ -854,33 +1141,41 @@ Translation requirements:
         return None
 
 def transcribe_audio_file(filepath):
-    """Transcribe audio file"""
-    global openai_client
+    """Transcribe audio file using selected source."""
+    source = (config.get('transcribe_source') if isinstance(config, dict) else None) or 'openai'
+    if source == 'soniox':
+        log_message("info", "Transcribing via Soniox backend")
+        return transcribe_with_soniox(filepath)
+    if source == 'qwen3-asr':
+        log_message("info", "Transcribing via Qwen3-ASR (DashScope) backend")
+        return transcribe_with_qwen(filepath)
 
+    # Default: OpenAI
+    global openai_client
     if openai_client is None:
-        log_message("error", "OpenAI client not configured, cannot transcribe")
+        log_message("error", "OpenAI client not configured, cannot transcribe with OpenAI")
         return None
 
     try:
         # Get transcription language setting
         transcribe_language = config.get('transcribe_language', 'auto')
-        
+
         # Prepare transcription parameters
         transcribe_params = {
             "model": OPENAI_TRANSCRIBE_MODEL,
             "file": None,  # Will be set below
             "response_format": "text",
         }
-        
+
         # If a specific transcription language is set, add prompt
         if transcribe_language and transcribe_language != 'auto':
             transcribe_params["prompt"] = f"Please only transcribe in {transcribe_language}"
             log_message("info", f"Using transcription language: {transcribe_language}")
-        
+
         with open(filepath, "rb") as audio_file:
             transcribe_params["file"] = audio_file
             result = openai_client.audio.transcriptions.create(**transcribe_params)
-        
+
         return getattr(result, "text", str(result))
     except Exception as e:
         log_message("error", f"Transcription failed: {e}")
@@ -926,8 +1221,9 @@ def handle_message(message):
             raise SystemExit(0)
         elif msg_type == "update_config":
             global initial_config_applied
-            if initial_config_applied:
-                log_message("info", "Config update received while running; saved to file and will apply on next start.")
+            force = bool(message.get('force'))
+            if initial_config_applied and not force:
+                log_message("info", "Config update received while running; ignored (no force). Will apply on next start.")
                 return
             new_config = message.get("config", {})
             log_message("info", f"Applying initial config keys: {list(new_config.keys())}")
@@ -935,17 +1231,43 @@ def handle_message(message):
             old_config = config.copy() if isinstance(config, dict) else {}
             config = new_config
             initial_config_applied = True
+            try:
+                src = config.get('transcribe_source', 'openai')
+                oai_set = bool(config.get('openai_api_key') or os.environ.get('OPENAI_API_KEY'))
+                sxi_set = bool(config.get('soniox_api_key') or os.environ.get('SONIOX_API_KEY'))
+                qwn_set = bool(config.get('dashscope_api_key') or config.get('qwen_api_key') or os.environ.get('DASHSCOPE_API_KEY'))
+                log_message("info", f"Config applied. transcribe_source={src}, openai_key_set={oai_set}, soniox_key_set={sxi_set}, qwen_key_set={qwn_set}")
+            except Exception:
+                pass
 
-            # Re-init OpenAI client only if key or base URL changed
-            need_reinit = (
-                old_config.get('openai_api_key') != config.get('openai_api_key') or
-                old_config.get('openai_base_url') != config.get('openai_base_url')
-            )
-            if need_reinit or (OpenAIClient is not None and (openai_client is None)):
-                success = init_openai_client()
-                log_message("info", f"OpenAI client init result: {success}")
+            # Determine if OpenAI client is needed.
+            # Only require OpenAI when explicitly used for transcription, or when translation/smart mode is enabled AND an OpenAI key is present.
+            need_openai = False
+            try:
+                ts = config.get('transcribe_source', 'openai')
+                key_present = bool(config.get('openai_api_key') or os.environ.get('OPENAI_API_KEY'))
+                if ts == 'openai':
+                    need_openai = True
+                else:
+                    # Soniox transcription: only initialize OpenAI if we actually have a key and translation/smart mode is on
+                    if key_present and (config.get('enable_translation', True) or config.get('translation_mode', 'fixed') == 'smart'):
+                        need_openai = True
+            except Exception:
+                need_openai = False
+
+            # Re-init OpenAI client only if needed and key/base changed
+            if need_openai:
+                need_reinit = (
+                    old_config.get('openai_api_key') != config.get('openai_api_key') or
+                    old_config.get('openai_base_url') != config.get('openai_base_url')
+                )
+                if need_reinit or (OpenAIClient is not None and (openai_client is None)):
+                    success = init_openai_client()
+                    log_message("info", f"OpenAI client init result: {success}")
+                else:
+                    success = openai_client is not None
             else:
-                success = openai_client is not None
+                success = True
 
             # Apply recording detection thresholds (initial)
             global SILENCE_RMS_THRESHOLD, MIN_SILENCE_SEC_FOR_SPLIT
@@ -962,12 +1284,14 @@ def handle_message(message):
             # Manage translation worker based on config (initial)
             enable_tr = config.get('enable_translation', True)
             global translation_worker_running
-            if success and enable_tr:
+            # Only start translation worker if OpenAI is actually initialized and translation is enabled
+            translation_ready = enable_tr and (openai_client is not None)
+            if translation_ready:
                 start_translation_worker()
             else:
                 if translation_worker_running:
                     stop_translation_worker()
-                    log_message("info", "Stopped translation worker (disabled by config)")
+                    log_message("info", "Stopped translation worker (disabled or OpenAI not configured)")
         else:
             log_message("warning", f"Unknown message type: {msg_type}")
             

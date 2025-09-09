@@ -30,6 +30,12 @@ const configPath = isPackaged
 let config = {
   openai_api_key: '',
   openai_base_url: '',
+  // Transcription source: 'openai' | 'soniox' | 'qwen3-asr'
+  transcribe_source: 'openai',
+  // Soniox API key (used when transcribe_source === 'soniox')
+  soniox_api_key: '',
+  // Qwen3-ASR (DashScope) API key (used when transcribe_source === 'qwen3-asr')
+  dashscope_api_key: '',
   enable_translation: true,
   translate_language: 'Chinese',
   translation_mode: 'fixed',
@@ -210,6 +216,15 @@ function processPythonStdout(data) {
         }
       }
 
+      // Mirror important logs to terminal for easier debugging
+      if (obj && obj.type === 'log') {
+        const lvl = String(obj.level || '').toLowerCase();
+        const msg = String(obj.message || '');
+        if (lvl === 'error') console.error('[PY]', msg);
+        else if (lvl === 'warning' || lvl === 'warn') console.warn('[PY]', msg);
+        else if (lvl === 'info') console.log('[PY]', msg);
+      }
+
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('python-message', obj);
       }
@@ -256,6 +271,7 @@ function startPythonService() {
     pythonProcess.stdout.on('data', processPythonStdout);
     pythonProcess.stderr.on('data', (data) => {
       const errStr = data.toString('utf8');
+      try { console.error('[PY-STDERR]', errStr.trim()); } catch {}
       if (mainWindow) {
         mainWindow.webContents.send('python-message', {
           type: 'log',
@@ -267,6 +283,13 @@ function startPythonService() {
     });
     pythonProcess.on('spawn', () => {
       // Send initial config immediately on spawn
+      try {
+        const source = config.transcribe_source || 'openai';
+        const oai = !!(config.openai_api_key && config.openai_api_key.trim());
+        const sxi = !!(config.soniox_api_key && config.soniox_api_key.trim());
+        const qwn = !!((config.dashscope_api_key || config.qwen_api_key) && (config.dashscope_api_key || config.qwen_api_key).trim());
+        console.log('[Main] Python spawned. Sending initial config:', { source, openaiKeySet: oai, sonioxKeySet: sxi, qwenKeySet: qwn });
+      } catch {}
       sendToPythonDirect({ type: 'update_config', config });
     });
     pythonProcess.on('error', (err) => {
@@ -311,6 +334,11 @@ function startPythonService() {
 function sendToPythonDirect(message) {
   try {
     if (!pythonProcess || !pythonProcess.stdin) return false;
+    try {
+      if (message && message.type) {
+        console.log('[Main->Py]', message.type);
+      }
+    } catch {}
     pythonProcess.stdin.write(JSON.stringify(message) + '\n', 'utf8');
     return true;
   } catch (err) {
@@ -377,6 +405,14 @@ ipcMain.handle('save-config', async (_event, newConfig) => {
   try {
     config = { ...config, ...(newConfig || {}) };
     saveConfig();
+    try {
+      const source = config.transcribe_source || 'openai';
+      const oai = !!(config.openai_api_key && config.openai_api_key.trim());
+      const sxi = !!(config.soniox_api_key && config.soniox_api_key.trim());
+      const qwn = !!((config.dashscope_api_key || config.qwen_api_key) && (config.dashscope_api_key || config.qwen_api_key).trim());
+      console.log('[Main] Config saved:', { source, openaiKeySet: oai, sonioxKeySet: sxi, qwenKeySet: qwn });
+      if (pythonProcess) console.log('[Main] Restart the backend (Ctrl+R or app relaunch) to apply provider changes.');
+    } catch {}
     return { success: true };
   } catch (err) {
     return { success: false, error: String(err.message || err) };
@@ -398,6 +434,19 @@ ipcMain.handle('restart-python-service', async () => {
 ipcMain.handle('start-recording', async () => {
   if (!pythonProcess) {
     startPythonService();
+  }
+  // Reload config from disk before starting and push to backend
+  try {
+    loadConfig();
+    console.log('[Main] Reloaded config before start:', {
+      source: config.transcribe_source || 'openai',
+      openaiKeySet: !!(config.openai_api_key && config.openai_api_key.trim()),
+      sonioxKeySet: !!(config.soniox_api_key && config.soniox_api_key.trim()),
+      qwenKeySet: !!((config.dashscope_api_key || config.qwen_api_key) && (config.dashscope_api_key || config.qwen_api_key).trim()),
+    });
+    sendToPython({ type: 'update_config', force: true, config });
+  } catch (e) {
+    console.warn('[Main] Failed to reload config before start:', e && e.message);
   }
   const ok = sendToPython({ type: 'start_recording' });
   if (ok) isRecordingFlag = true;

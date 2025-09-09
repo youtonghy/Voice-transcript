@@ -355,22 +355,40 @@
         </div>
 
         <form id="settingsForm">
-            <div class="section-title">🔑 API 配置</div>
+            <div class="section-title">🔑 API Configuration</div>
             
             <div class="form-group">
-                <label for="apiKey">OpenAI API 密钥</label>
+                <label for="transcribeSource">Transcribe Source</label>
+                <select id="transcribeSource" name="transcribe_source">
+                    <option value="openai" selected>OpenAI</option>
+                    <option value="soniox">Soniox</option>
+                    <option value="qwen3-asr">Qwen3-ASR</option>
+                </select>
+                <div class="form-note">Choose the transcription provider</div>
+            </div>
+            
+            <div class="form-group provider-openai">
+                <label for="apiKey">OpenAI API Key</label>
                 <input type="password" id="apiKey" name="openai_api_key" placeholder="sk-...">
-                <div class="form-note">
-                    您的API密钥将安全存储在本地配置文件中
-                </div>
+                <div class="form-note">Stored locally in config.json</div>
             </div>
 
-            <div class="form-group">
-                <label for="apiUrl">API 地址（可选）</label>
+            <div class="form-group provider-openai">
+                <label for="apiUrl">API Base URL (optional)</label>
                 <input type="url" id="apiUrl" name="openai_base_url" placeholder="https://api.openai.com/v1">
-                <div class="form-note">
-                    留空使用默认地址，支持兼容 OpenAI API 的服务
-                </div>
+                <div class="form-note">Leave empty for the default OpenAI endpoint</div>
+            </div>
+
+            <div class="form-group provider-soniox" style="display:none;">
+                <label for="sonioxApiKey">Soniox API Key</label>
+                <input type="password" id="sonioxApiKey" name="soniox_api_key" placeholder="sxk-...">
+                <div class="form-note">Used only when Transcribe Source is Soniox</div>
+            </div>
+
+            <div class="form-group provider-qwen3-asr" style="display:none;">
+                <label for="qwenApiKey">Qwen3-ASR (DashScope) API Key</label>
+                <input type="password" id="qwenApiKey" name="dashscope_api_key" placeholder="sk-...">
+                <div class="form-note">Set your DashScope API key to use Qwen3-ASR</div>
             </div>
 
             <div class="divider"></div>

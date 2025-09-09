@@ -3,7 +3,9 @@ let lastTranscription = '';
 let lastTranslation = '';
 let pythonServiceStatus = 'unknown'; // 'starting', 'running', 'error', 'stopped'
 let isVoiceActive = false; // Added: track voice activity status
-let openaiConfigured = false; // Used to display "whether openai transcription is configured"
+let openaiConfigured = false; // Whether OpenAI is configured (when required)
+let sonioxConfigured = false; // Whether Soniox is configured (when required)
+let qwenConfigured = false;   // Whether Qwen (DashScope) is configured (when required)
 let translationEnabled = true; // Read from config, used to control combined display
 let currentResultNode = null; // Current combined result bubble
 let resultNodes = new Map(); // Result node mapping table, key is result_id, value is DOM element
@@ -40,25 +42,47 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-// Check OpenAI configuration status
+// Check provider configuration status
 async function checkOpenAIConfig() {
     if (window.electronAPI && window.electronAPI.getConfig) {
         try {
             const cfg = await window.electronAPI.getConfig();
             currentConfig = cfg || {};
-            
-            const newOpenaiConfigured = !!(cfg && cfg.openai_api_key && cfg.openai_api_key.trim() && 
-                                           cfg.openai_api_key.startsWith('sk-') && cfg.openai_api_key.length > 20);
+            const transcribeSource = (cfg && cfg.transcribe_source) || 'openai';
             const newTranslationEnabled = cfg && cfg.enable_translation !== false;
-            
-            // Only output logs when not configured; don't output when configured
-            if (openaiConfigured !== newOpenaiConfigured) {
+
+            // Determine which providers are required
+            // When using Soniox as transcribe source, only require Soniox key in UI
+            const openaiRequired = (transcribeSource === 'openai');
+            const sonioxRequired = (transcribeSource === 'soniox');
+            const qwenRequired = (transcribeSource === 'qwen3-asr');
+
+            const newOpenaiConfigured = !!(cfg && cfg.openai_api_key && cfg.openai_api_key.trim());
+            const newSonioxConfigured = !!(cfg && cfg.soniox_api_key && cfg.soniox_api_key.trim());
+            const newQwenConfigured = !!(cfg && (cfg.dashscope_api_key || cfg.qwen_api_key) && (cfg.dashscope_api_key || cfg.qwen_api_key).trim());
+
+            // Only warn when required and not configured
+            if (openaiRequired && openaiConfigured !== newOpenaiConfigured) {
                 openaiConfigured = newOpenaiConfigured;
                 if (!openaiConfigured) {
-                    addLogEntry('warning', 'OpenAI transcription: not configured');
+                    addLogEntry('warning', 'OpenAI not configured (required for selected source)');
                 }
             }
-            
+
+            if (sonioxRequired && sonioxConfigured !== newSonioxConfigured) {
+                sonioxConfigured = newSonioxConfigured;
+                if (!sonioxConfigured) {
+                    addLogEntry('warning', 'Soniox not configured (current source: Soniox)');
+                }
+            }
+
+            if (qwenRequired && qwenConfigured !== newQwenConfigured) {
+                qwenConfigured = newQwenConfigured;
+                if (!qwenConfigured) {
+                    addLogEntry('warning', 'Qwen3-ASR not configured (current source: Qwen3-ASR)');
+                }
+            }
+
             translationEnabled = newTranslationEnabled;
             
         } catch (error) {
@@ -66,7 +90,7 @@ async function checkOpenAIConfig() {
             if (openaiConfigured !== false) {
                 openaiConfigured = false;
                 translationEnabled = true;
-                addLogEntry('warning', 'OpenAI transcription: not configured');
+                addLogEntry('warning', 'Failed to load configuration');
             }
         }
     }
@@ -261,8 +285,27 @@ function handlePythonMessage(message) {
                     }
                 } else {
                     // No translation: only display transcription
-                    renderResultEntry(message.transcription);
+                    const resultNode = renderResultEntry(message.transcription);
+                    if (message.result_id) {
+                        resultNodes.set(message.result_id, resultNode);
+                    }
                 }
+            } else if (message.transcription_pending && message.result_id) {
+                // Placeholder for transcription; ensure order by creating an empty bubble
+                const resultNode = renderResultEntry(null /* transcription */, null /* translation */, false /* translationPending */, true /* transcriptionPending */);
+                resultNodes.set(message.result_id, resultNode);
+                if (message.transcription_order) {
+                    resultNode.dataset.transcriptionOrder = message.transcription_order;
+                }
+            }
+            break;
+        case 'transcription_update':
+            if (message.result_id && resultNodes.has(message.result_id)) {
+                const resultNode = resultNodes.get(message.result_id);
+                updateTranscriptionInBubble(resultNode, message.transcription);
+                console.log('Updated transcription:', message.result_id);
+            } else {
+                console.warn('Transcription update received but result node not found:', message.result_id);
             }
             break;
         case 'translation_update':
@@ -348,13 +391,32 @@ function updateTranslationInBubble(bubble, translation) {
     logContainer.scrollTop = logContainer.scrollHeight;
 }
 
-function renderResultEntry(transcription, translation = null, translationPending = false) {
+function updateTranscriptionInBubble(bubble, transcription) {
+    let transDiv = bubble.querySelector('.result-part.transcription');
+    if (transDiv) {
+        transDiv.className = 'result-part transcription';
+        transDiv.textContent = transcription;
+    } else {
+        transDiv = document.createElement('div');
+        transDiv.className = 'result-part transcription';
+        transDiv.textContent = transcription;
+        bubble.insertBefore(transDiv, bubble.firstChild);
+    }
+    logContainer.scrollTop = logContainer.scrollHeight;
+}
+
+function renderResultEntry(transcription, translation = null, translationPending = false, transcriptionPending = false) {
     const entry = document.createElement('div');
     entry.className = 'log-entry result-entry';
 
     const transDiv = document.createElement('div');
-    transDiv.className = 'result-part transcription';
-    transDiv.textContent = transcription;
+    if (transcriptionPending || !transcription) {
+        transDiv.className = 'result-part transcription pending';
+        transDiv.textContent = 'Transcribing...';
+    } else {
+        transDiv.className = 'result-part transcription';
+        transDiv.textContent = transcription;
+    }
     entry.appendChild(transDiv);
 
     if (translation) {
