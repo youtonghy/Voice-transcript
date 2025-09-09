@@ -376,7 +376,19 @@
             <div class="form-group provider-openai">
                 <label for="apiUrl">API Base URL (optional)</label>
                 <input type="url" id="apiUrl" name="openai_base_url" placeholder="https://api.openai.com/v1">
-                <div class="form-note">Leave empty for the default OpenAI endpoint</div>
+                <div class="form-note">Leave empty for the default OpenAI endpoint, end wtih /v1</div>
+            </div>
+
+            <div class="form-group provider-openai">
+                <label for="openaiTranscribeModel">Transcribe Model</label>
+                <input type="text" id="openaiTranscribeModel" name="openai_transcribe_model" placeholder="gpt-4o-transcribe">
+                <div class="form-note">Model used for audio transcription (default: gpt-4o-transcribe)</div>
+            </div>
+
+            <div class="form-group provider-openai">
+                <label for="openaiTranslateModel">Translate Model</label>
+                <input type="text" id="openaiTranslateModel" name="openai_translate_model" placeholder="gpt-4o-mini">
+                <div class="form-note">Model used for text translation (default: gpt-4o-mini)</div>
             </div>
 
             <div class="form-group provider-soniox" style="display:none;">

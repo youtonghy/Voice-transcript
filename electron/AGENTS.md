@@ -20,6 +20,7 @@ This repository contains an Electron desktop app with a bundled Python transcrip
 - Test media EXE: `node test-media-transcribe.js` (expects `dist-python/win/media_transcribe.exe`)
 
 ## Coding Style & Naming Conventions
+- Please use English when coding. Use Chinese for reply.
 - JavaScript/HTML: 2-space indent; semicolons; camelCase for variables/functions; PascalCase for classes; filenames: single-word `*.js` or kebab-case for multiword (e.g., `media-transcribe-renderer.js`).
 - Python: 4-space indent; snake_case for modules/functions; UPPER_SNAKE_CASE for constants.
 - Strings: prefer single quotes in JS; double quotes in JSON.

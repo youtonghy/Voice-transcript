@@ -30,6 +30,8 @@ const configPath = isPackaged
 let config = {
   openai_api_key: '',
   openai_base_url: '',
+  openai_transcribe_model: 'gpt-4o-transcribe',
+  openai_translate_model: 'gpt-4o-mini',
   // Transcription source: 'openai' | 'soniox' | 'qwen3-asr'
   transcribe_source: 'openai',
   // Soniox API key (used when transcribe_source === 'soniox')

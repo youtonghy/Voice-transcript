@@ -317,7 +317,12 @@ class MediaProcessor:
             # Call transcription via models helper
             api_key = os.environ.get("OPENAI_API_KEY") or self.config.get("openai_api_key")
             base_url = os.environ.get("OPENAI_BASE_URL") or self.config.get("openai_base_url")
-            transcription = modles.transcribe_openai(temp_file, 'auto', api_key, base_url)
+            model = None
+            try:
+                model = (self.config.get('openai_transcribe_model') or OPENAI_TRANSCRIBE_MODEL)
+            except Exception:
+                model = OPENAI_TRANSCRIBE_MODEL
+            transcription = modles.transcribe_openai(temp_file, 'auto', api_key, base_url, model=model)
             transcription = (transcription or '').strip()
             
             # Clean up temporary file
@@ -341,7 +346,12 @@ class MediaProcessor:
         try:
             api_key = os.environ.get("OPENAI_API_KEY") or self.config.get("openai_api_key")
             base_url = os.environ.get("OPENAI_BASE_URL") or self.config.get("openai_base_url")
-            return modles.translate_openai(text, target_language, api_key, base_url)
+            model = None
+            try:
+                model = (self.config.get('openai_translate_model') or OPENAI_TRANSLATE_MODEL)
+            except Exception:
+                model = OPENAI_TRANSLATE_MODEL
+            return modles.translate_openai(text, target_language, api_key, base_url, model=model)
         except Exception as e:
             print(f"Translation failed: {e}")
             return None

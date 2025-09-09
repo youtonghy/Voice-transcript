@@ -61,7 +61,7 @@ function setupEventListeners() {
     
     // Add auto-save on blur for all input fields
     const autoSaveInputs = [
-        'apiKey', 'apiUrl', 'targetLanguage', 'customLanguage', 'transcribeLanguage',
+        'apiKey', 'apiUrl', 'openaiTranscribeModel', 'openaiTranslateModel', 'targetLanguage', 'customLanguage', 'transcribeLanguage',
         'translationMode', 'language1', 'language2', 'transcribeSource', 'sonioxApiKey', 'qwenApiKey',
         'silenceThreshold', 'silenceDuration', 'theaterMode'
     ];
@@ -97,6 +97,11 @@ function populateForm(config) {
     if (sonioxEl) sonioxEl.value = config.soniox_api_key || '';
     const qwenEl = document.getElementById('qwenApiKey');
     if (qwenEl) qwenEl.value = (config.dashscope_api_key || config.qwen_api_key || '') || '';
+    // OpenAI model fields
+    const oaiTrModel = document.getElementById('openaiTranscribeModel');
+    if (oaiTrModel) oaiTrModel.value = config.openai_transcribe_model || 'gpt-4o-transcribe';
+    const oaiTlModel = document.getElementById('openaiTranslateModel');
+    if (oaiTlModel) oaiTlModel.value = config.openai_translate_model || 'gpt-4o-mini';
     
     // Translation settings
     const enableTranslation = document.getElementById('enableTranslation');
@@ -326,6 +331,11 @@ function collectFormData() {
     if (sonioxEl) config.soniox_api_key = sonioxEl.value.trim();
     const qwenEl = document.getElementById('qwenApiKey');
     if (qwenEl) config.dashscope_api_key = qwenEl.value.trim();
+    // OpenAI models
+    const oaiTrModel = document.getElementById('openaiTranscribeModel');
+    if (oaiTrModel) config.openai_transcribe_model = (oaiTrModel.value || '').trim();
+    const oaiTlModel = document.getElementById('openaiTranslateModel');
+    if (oaiTlModel) config.openai_translate_model = (oaiTlModel.value || '').trim();
     
     // Translation settings
     config.enable_translation = document.getElementById('enableTranslation').checked;

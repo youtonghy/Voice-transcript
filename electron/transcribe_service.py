@@ -60,7 +60,7 @@ PRE_ROLL_SECONDS = 1.0
 THEATER_MODE_TARGET_RMS = 0.05  # Target RMS volume
 THEATER_MODE_MAX_GAIN = 10.0    # Maximum amplification factor
 
-# OpenAI configuration
+# OpenAI configuration (defaults; can be overridden by config)
 OPENAI_TRANSCRIBE_MODEL = "gpt-4o-transcribe"
 OPENAI_TRANSLATE_MODEL = "gpt-4o-mini"
 
@@ -274,7 +274,13 @@ def _translate_text_openai(text, target_language):
     api_key = (config.get('openai_api_key') if isinstance(config, dict) else None) or os.environ.get('OPENAI_API_KEY')
     base_url = (config.get('openai_base_url') if isinstance(config, dict) else None) or os.environ.get('OPENAI_BASE_URL')
     try:
-        return modles.translate_openai(text, target_language, api_key, base_url)
+        model = None
+        try:
+            if isinstance(config, dict):
+                model = config.get('openai_translate_model') or OPENAI_TRANSLATE_MODEL
+        except Exception:
+            model = OPENAI_TRANSLATE_MODEL
+        return modles.translate_openai(text, target_language, api_key, base_url, model=model)
     except Exception as e:
         log_message("error", f"Translation error: {e}")
         return None
@@ -851,7 +857,13 @@ def translate_text(text, target_language="Chinese"):
     api_key = (config.get('openai_api_key') if isinstance(config, dict) else None) or os.environ.get('OPENAI_API_KEY')
     base_url = (config.get('openai_base_url') if isinstance(config, dict) else None) or os.environ.get('OPENAI_BASE_URL')
     try:
-        return modles.translate_openai(text, target_language, api_key, base_url)
+        model = None
+        try:
+            if isinstance(config, dict):
+                model = config.get('openai_translate_model') or OPENAI_TRANSLATE_MODEL
+        except Exception:
+            model = OPENAI_TRANSLATE_MODEL
+        return modles.translate_openai(text, target_language, api_key, base_url, model=model)
     except Exception as e:
         log_message("error", f"Translation failed: {e}")
         return None
@@ -871,7 +883,13 @@ def transcribe_audio_file(filepath):
         transcribe_language = config.get('transcribe_language', 'auto')
         api_key = (config.get('openai_api_key') if isinstance(config, dict) else None) or os.environ.get('OPENAI_API_KEY')
         base_url = (config.get('openai_base_url') if isinstance(config, dict) else None) or os.environ.get('OPENAI_BASE_URL')
-        return modles.transcribe_openai(filepath, transcribe_language, api_key, base_url)
+        model = None
+        try:
+            if isinstance(config, dict):
+                model = config.get('openai_transcribe_model') or OPENAI_TRANSCRIBE_MODEL
+        except Exception:
+            model = OPENAI_TRANSCRIBE_MODEL
+        return modles.transcribe_openai(filepath, transcribe_language, api_key, base_url, model=model)
     except Exception as e:
         log_message("error", f"Transcription failed: {e}")
         return None

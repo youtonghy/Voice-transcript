@@ -76,10 +76,16 @@ def _create_openai_client(api_key: Optional[str], base_url: Optional[str]):
     return OpenAIClient(api_key=api_key, base_url=base_url) if base_url else OpenAIClient(api_key=api_key)
 
 
-def transcribe_openai(filepath: str, language: Optional[str], api_key: Optional[str], base_url: Optional[str]) -> Optional[str]:
+def transcribe_openai(
+    filepath: str,
+    language: Optional[str],
+    api_key: Optional[str],
+    base_url: Optional[str],
+    model: Optional[str] = None,
+) -> Optional[str]:
     client = _create_openai_client(api_key, base_url)
     params = {
-        'model': 'gpt-4o-transcribe',
+        'model': (model or 'gpt-4o-transcribe'),
         'file': None,
         'response_format': 'text',
     }
@@ -91,7 +97,13 @@ def transcribe_openai(filepath: str, language: Optional[str], api_key: Optional[
     return getattr(result, 'text', str(result))
 
 
-def translate_openai(text: str, target_language: str, api_key: Optional[str], base_url: Optional[str]) -> Optional[str]:
+def translate_openai(
+    text: str,
+    target_language: str,
+    api_key: Optional[str],
+    base_url: Optional[str],
+    model: Optional[str] = None,
+) -> Optional[str]:
     if not text or not text.strip():
         return None
     client = _create_openai_client(api_key, base_url)
@@ -102,7 +114,7 @@ def translate_openai(text: str, target_language: str, api_key: Optional[str], ba
         f"3) If already in {target_language}, return as-is\n4) Return only the translation"
     )
     resp = client.chat.completions.create(
-        model='gpt-4o-mini',
+        model=(model or 'gpt-4o-mini'),
         messages=[
             {'role': 'system', 'content': system_prompt},
             {'role': 'user', 'content': text},
