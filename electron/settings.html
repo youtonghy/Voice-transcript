@@ -355,52 +355,60 @@
         </div>
 
         <form id="settingsForm">
-            <div class="section-title">🔑 API Configuration</div>
-            
+            <div class="section-title">🎙️ 识别引擎</div>
             <div class="form-group">
-                <label for="transcribeSource">Transcribe Source</label>
-                <select id="transcribeSource" name="transcribe_source">
+                <label for="recognitionEngine">识别引擎</label>
+                <select id="recognitionEngine" name="recognition_engine">
                     <option value="openai" selected>OpenAI</option>
                     <option value="soniox">Soniox</option>
                     <option value="qwen3-asr">Qwen3-ASR</option>
                 </select>
-                <div class="form-note">Choose the transcription provider</div>
+                <div class="form-note">选择用于语音识别（转写）的提供方</div>
             </div>
-            
-            <div class="form-group provider-openai">
-                <label for="apiKey">OpenAI API Key</label>
-                <input type="password" id="apiKey" name="openai_api_key" placeholder="sk-...">
-                <div class="form-note">Stored locally in config.json</div>
-            </div>
-
-            <div class="form-group provider-openai">
-                <label for="apiUrl">API Base URL (optional)</label>
-                <input type="url" id="apiUrl" name="openai_base_url" placeholder="https://api.openai.com/v1">
-                <div class="form-note">Leave empty for the default OpenAI endpoint, end wtih /v1</div>
-            </div>
-
-            <div class="form-group provider-openai">
+            <div class="form-group provider-openai-rec">
                 <label for="openaiTranscribeModel">Transcribe Model</label>
                 <input type="text" id="openaiTranscribeModel" name="openai_transcribe_model" placeholder="gpt-4o-transcribe">
-                <div class="form-note">Model used for audio transcription (default: gpt-4o-transcribe)</div>
+                <div class="form-note">音频转写所用模型（默认：gpt-4o-transcribe）</div>
             </div>
-
-            <div class="form-group provider-openai">
-                <label for="openaiTranslateModel">Translate Model</label>
-                <input type="text" id="openaiTranslateModel" name="openai_translate_model" placeholder="gpt-4o-mini">
-                <div class="form-note">Model used for text translation (default: gpt-4o-mini)</div>
-            </div>
-
             <div class="form-group provider-soniox" style="display:none;">
                 <label for="sonioxApiKey">Soniox API Key</label>
                 <input type="password" id="sonioxApiKey" name="soniox_api_key" placeholder="sxk-...">
-                <div class="form-note">Used only when Transcribe Source is Soniox</div>
+                <div class="form-note">仅当识别引擎为 Soniox 时需要</div>
             </div>
-
             <div class="form-group provider-qwen3-asr" style="display:none;">
                 <label for="qwenApiKey">Qwen3-ASR (DashScope) API Key</label>
                 <input type="password" id="qwenApiKey" name="dashscope_api_key" placeholder="sk-...">
-                <div class="form-note">Set your DashScope API key to use Qwen3-ASR</div>
+                <div class="form-note">仅当识别引擎为 Qwen3-ASR 时需要</div>
+            </div>
+
+            <div class="divider"></div>
+
+            <div class="section-title">🌐 翻译引擎</div>
+            <div class="form-group">
+                <label for="translationEngine">翻译引擎</label>
+                <select id="translationEngine" name="translation_engine">
+                    <option value="openai" selected>OpenAI（默认 gpt-4o-mini）</option>
+                </select>
+                <div class="form-note">选择用于文本翻译的提供方（当前仅支持 OpenAI）</div>
+            </div>
+            <div class="form-group provider-openai-trans">
+                <label for="openaiTranslateModel">Translate Model</label>
+                <input type="text" id="openaiTranslateModel" name="openai_translate_model" placeholder="gpt-4o-mini">
+                <div class="form-note">文本翻译所用模型</div>
+            </div>
+
+            <div class="divider"></div>
+
+            <div class="section-title">🔑 OpenAI 通用配置</div>
+            <div class="form-group provider-openai-common">
+                <label for="apiKey">OpenAI API Key</label>
+                <input type="password" id="apiKey" name="openai_api_key" placeholder="sk-...">
+                <div class="form-note">保存在本地 config.json；识别与翻译均可共用</div>
+            </div>
+            <div class="form-group provider-openai-common">
+                <label for="apiUrl">API Base URL（可选）</label>
+                <input type="url" id="apiUrl" name="openai_base_url" placeholder="https://api.openai.com/v1">
+                <div class="form-note">留空使用 OpenAI 默认地址；自定义时以 /v1 结尾</div>
             </div>
 
             <div class="divider"></div>

@@ -32,7 +32,12 @@ let config = {
   openai_base_url: '',
   openai_transcribe_model: 'gpt-4o-transcribe',
   openai_translate_model: 'gpt-4o-mini',
-  // Transcription source: 'openai' | 'soniox' | 'qwen3-asr'
+  // Engines
+  // recognition_engine: 'openai' | 'soniox' | 'qwen3-asr'
+  recognition_engine: 'openai',
+  // translation_engine: currently only 'openai'
+  translation_engine: 'openai',
+  // Legacy compatibility for older builds
   transcribe_source: 'openai',
   // Soniox API key (used when transcribe_source === 'soniox')
   soniox_api_key: '',
@@ -55,6 +60,13 @@ function loadConfig() {
       const data = fs.readFileSync(configPath, 'utf8');
       const parsed = JSON.parse(data);
       config = { ...config, ...parsed };
+      // Backfill legacy -> new keys if needed
+      if (!config.recognition_engine && config.transcribe_source) {
+        config.recognition_engine = config.transcribe_source;
+      }
+      if (!config.transcribe_source && config.recognition_engine) {
+        config.transcribe_source = config.recognition_engine;
+      }
     }
   } catch (err) {
     console.error('Failed to load config:', err);
@@ -286,7 +298,7 @@ function startPythonService() {
     pythonProcess.on('spawn', () => {
       // Send initial config immediately on spawn
       try {
-        const source = config.transcribe_source || 'openai';
+        const source = config.recognition_engine || config.transcribe_source || 'openai';
         const oai = !!(config.openai_api_key && config.openai_api_key.trim());
         const sxi = !!(config.soniox_api_key && config.soniox_api_key.trim());
         const qwn = !!((config.dashscope_api_key || config.qwen_api_key) && (config.dashscope_api_key || config.qwen_api_key).trim());
@@ -441,7 +453,7 @@ ipcMain.handle('start-recording', async () => {
   try {
     loadConfig();
     console.log('[Main] Reloaded config before start:', {
-      source: config.transcribe_source || 'openai',
+      source: config.recognition_engine || config.transcribe_source || 'openai',
       openaiKeySet: !!(config.openai_api_key && config.openai_api_key.trim()),
       sonioxKeySet: !!(config.soniox_api_key && config.soniox_api_key.trim()),
       qwenKeySet: !!((config.dashscope_api_key || config.qwen_api_key) && (config.dashscope_api_key || config.qwen_api_key).trim()),
@@ -582,6 +594,10 @@ ipcMain.handle('process-media-file', async (_event, { filePath, settings }) => {
     args.push(...resolved.args);
     args.push('--file', filePath);
     args.push('--output', outPath);
+    const source = (config && (config.recognition_engine || config.transcribe_source)) || 'openai';
+    if (source) {
+      args.push('--source', String(source));
+    }
     if (settings && settings.enableTranslation) args.push('--translate');
     if (settings && settings.targetLanguage) {
       args.push('--language', settings.targetLanguage);

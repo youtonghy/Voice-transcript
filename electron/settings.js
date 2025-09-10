@@ -49,20 +49,28 @@ function setupEventListeners() {
     // API URL changes also trigger real-time detection
     document.getElementById('apiUrl').addEventListener('input', autoSave);
     
-    // Transcribe source switching (toggle provider fields)
-    const transcribeSource = document.getElementById('transcribeSource');
-    if (transcribeSource) {
-        transcribeSource.addEventListener('change', () => {
+    // 引擎切换（识别/翻译）
+    const recognitionEngine = document.getElementById('recognitionEngine');
+    const translationEngine = document.getElementById('translationEngine');
+    if (recognitionEngine) {
+        recognitionEngine.addEventListener('change', () => {
             updateProviderVisibility();
             autoSave();
-            try { console.log('[Settings] Transcribe source changed to', transcribeSource.value); } catch {}
+            try { console.log('[Settings] Recognition engine ->', recognitionEngine.value); } catch {}
+        });
+    }
+    if (translationEngine) {
+        translationEngine.addEventListener('change', () => {
+            updateProviderVisibility();
+            autoSave();
+            try { console.log('[Settings] Translation engine ->', translationEngine.value); } catch {}
         });
     }
     
     // Add auto-save on blur for all input fields
     const autoSaveInputs = [
         'apiKey', 'apiUrl', 'openaiTranscribeModel', 'openaiTranslateModel', 'targetLanguage', 'customLanguage', 'transcribeLanguage',
-        'translationMode', 'language1', 'language2', 'transcribeSource', 'sonioxApiKey', 'qwenApiKey',
+        'translationMode', 'language1', 'language2', 'recognitionEngine', 'translationEngine', 'sonioxApiKey', 'qwenApiKey',
         'silenceThreshold', 'silenceDuration', 'theaterMode'
     ];
     
@@ -85,10 +93,14 @@ async function loadCurrentConfig() {
 }
 
 function populateForm(config) {
-    // API configuration
+    // 引擎配置（兼容旧字段 transcribe_source）
     (function(){
-        const el = document.getElementById('transcribeSource');
-        if (el) el.value = config.transcribe_source || 'openai';
+        const recEl = document.getElementById('recognitionEngine');
+        const tlEl = document.getElementById('translationEngine');
+        const rec = (config.recognition_engine || config.transcribe_source || 'openai');
+        const tl = (config.translation_engine || 'openai');
+        if (recEl) recEl.value = rec;
+        if (tlEl) tlEl.value = tl;
         updateProviderVisibility();
     })();
     document.getElementById('apiKey').value = config.openai_api_key || '';
@@ -234,15 +246,27 @@ function updateTranscribeLanguageAvailability() {
 }
 
 function updateProviderVisibility() {
-    const source = (document.getElementById('transcribeSource') || {}).value || 'openai';
-    const isOpenAI = source === 'openai';
-    const openaiBlocks = document.querySelectorAll('.provider-openai');
-    const sonioxBlocks = document.querySelectorAll('.provider-soniox');
-    const qwenBlocks = document.querySelectorAll('.provider-qwen3-asr');
-
-    openaiBlocks.forEach(el => el.style.display = isOpenAI ? '' : 'none');
-    sonioxBlocks.forEach(el => el.style.display = source === 'soniox' ? '' : 'none');
-    qwenBlocks.forEach(el => el.style.display = source === 'qwen3-asr' ? '' : 'none');
+    const rec = (document.getElementById('recognitionEngine') || {}).value || 'openai';
+    const tl = (document.getElementById('translationEngine') || {}).value || 'openai';
+    // OpenAI 通用配置：任一引擎为 OpenAI 时显示
+    document.querySelectorAll('.provider-openai-common').forEach(el => {
+        el.style.display = (rec === 'openai' || tl === 'openai') ? '' : 'none';
+    });
+    // OpenAI 识别模型：当识别引擎为 OpenAI 时显示
+    document.querySelectorAll('.provider-openai-rec').forEach(el => {
+        el.style.display = (rec === 'openai') ? '' : 'none';
+    });
+    // OpenAI 翻译模型：当翻译引擎为 OpenAI 时显示
+    document.querySelectorAll('.provider-openai-trans').forEach(el => {
+        el.style.display = (tl === 'openai') ? '' : 'none';
+    });
+    // Soniox/Qwen3-ASR 凭据：仅识别引擎对应时显示
+    document.querySelectorAll('.provider-soniox').forEach(el => {
+        el.style.display = (rec === 'soniox') ? '' : 'none';
+    });
+    document.querySelectorAll('.provider-qwen3-asr').forEach(el => {
+        el.style.display = (rec === 'qwen3-asr') ? '' : 'none';
+    });
 }
 
 function validateApiKey() {
@@ -323,8 +347,11 @@ async function saveSettingsInternal(silent = false) {
 function collectFormData() {
     const config = {};
     
-    // API configuration
-    config.transcribe_source = (document.getElementById('transcribeSource') || { value: 'openai' }).value;
+    // 引擎配置
+    config.recognition_engine = (document.getElementById('recognitionEngine') || { value: 'openai' }).value;
+    config.translation_engine = (document.getElementById('translationEngine') || { value: 'openai' }).value;
+    // 向后兼容字段
+    config.transcribe_source = config.recognition_engine;
     config.openai_api_key = document.getElementById('apiKey').value.trim();
     config.openai_base_url = document.getElementById('apiUrl').value.trim();
     const sonioxEl = document.getElementById('sonioxApiKey');

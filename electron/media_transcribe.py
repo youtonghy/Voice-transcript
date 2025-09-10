@@ -3,7 +3,26 @@
 """
 Media file transcription and translation tool
 Supports importing video/audio files, extracting audio, detecting valid speech segments (supports theater mode),
-using OpenAI for transcription and translation, supports multi-threaded synchronous processing while maintaining order, supports one-click export to TXT.
+multi-threaded processing, and one-click export to TXT.
+
+Engines & configuration (for extension):
+- recognition_engine: 'openai' | 'soniox' | 'qwen3-asr'
+  * openai_api_key: str (env OPENAI_API_KEY fallback)
+  * openai_base_url: str (optional; env OPENAI_BASE_URL)
+  * openai_transcribe_model: str (default gpt-4o-transcribe)
+  * soniox_api_key: str (env SONIOX_API_KEY)
+  * dashscope_api_key/qwen_api_key: str (env DASHSCOPE_API_KEY)
+  * transcribe_language: str (e.g. 'auto', 'zh', 'en', ... for Qwen)
+
+- translation_engine: 'openai' (default)
+  * openai_api_key / openai_base_url (shared)
+  * openai_translate_model: str (default gpt-4o-mini)
+
+Legacy compatibility:
+- transcribe_source (legacy key) maps to recognition_engine when missing.
+
+To add a new engine, implement transcribe_<provider>()/translate_<provider>()
+in modles.py, then wire it in transcribe_audio_segment()/translate_text().
 
 Added verbose terminal logging to help diagnose failures when invoked from Electron.
 """
@@ -151,8 +170,9 @@ VIDEO_FORMATS = ['.mp4', '.avi', '.mov', '.mkv', '.flv', '.wmv', '.webm', '.m4v'
 class MediaProcessor:
     """Media file processor"""
     
-    def __init__(self):
+    def __init__(self, source_override: Optional[str] = None):
         self.config = self.load_config()
+        self.source_override = (source_override or '').strip().lower() if source_override else None
         cfg_keys = ', '.join(sorted(list(self.config.keys()))) if isinstance(self.config, dict) else 'N/A'
         _log_if("info", f"Loaded config keys: {cfg_keys or 'empty'}")
         
@@ -392,7 +412,7 @@ class MediaProcessor:
         return segments
 
     def transcribe_audio_segment(self, audio_segment: np.ndarray, segment_id: str) -> Optional[str]:
-        """Transcribe audio segment via OpenAI using central models helper"""
+        """Transcribe audio segment using selected provider (openai | soniox | qwen3-asr)"""
         
         try:
             # Save as temporary file
@@ -401,18 +421,33 @@ class MediaProcessor:
             
             sf.write(temp_file, audio_segment, SAMPLE_RATE)
             
-            # Call transcription via models helper
-            api_key = os.environ.get("OPENAI_API_KEY") or self.config.get("openai_api_key")
-            base_url = os.environ.get("OPENAI_BASE_URL") or self.config.get("openai_base_url")
-            model = None
-            try:
-                model = (self.config.get('openai_transcribe_model') or OPENAI_TRANSCRIBE_MODEL)
-            except Exception:
-                model = OPENAI_TRANSCRIBE_MODEL
-
-            key_set = bool(api_key and str(api_key).strip())
-            _log_if("info", f"Transcribing segment {segment_id}: model={model}, key_set={key_set}, base_url={'set' if base_url else 'unset'}")
-            transcription = modles.transcribe_openai(temp_file, 'auto', api_key, base_url, model=model)
+            # Select provider (prefer new recognition_engine; fallback to legacy transcribe_source)
+            source = (self.source_override or self.config.get('recognition_engine') or self.config.get('transcribe_source') or 'openai').strip().lower()
+            transcription = None
+            if source == 'openai':
+                api_key = os.environ.get('OPENAI_API_KEY') or self.config.get('openai_api_key')
+                base_url = os.environ.get('OPENAI_BASE_URL') or self.config.get('openai_base_url')
+                try:
+                    model = (self.config.get('openai_transcribe_model') or OPENAI_TRANSCRIBE_MODEL)
+                except Exception:
+                    model = OPENAI_TRANSCRIBE_MODEL
+                key_set = bool(api_key and str(api_key).strip())
+                _log_if('info', f"Transcribing segment {segment_id} via OpenAI: model={model}, key_set={key_set}, base_url={'set' if base_url else 'unset'}")
+                transcription = modles.transcribe_openai(temp_file, 'auto', api_key, base_url, model=model)
+            elif source == 'soniox':
+                s_key = os.environ.get('SONIOX_API_KEY') or self.config.get('soniox_api_key')
+                _log_if('info', f"Transcribing segment {segment_id} via Soniox: key_set={bool(s_key)}")
+                transcription = modles.transcribe_soniox(temp_file, s_key)
+            elif source in ('qwen3-asr', 'qwen', 'dashscope'):
+                q_key = (self.config.get('dashscope_api_key') or self.config.get('qwen_api_key') or os.environ.get('DASHSCOPE_API_KEY'))
+                language = self.config.get('transcribe_language') or 'auto'
+                _log_if('info', f"Transcribing segment {segment_id} via Qwen3-ASR: lang={language}, key_set={bool(q_key)}")
+                transcription = modles.transcribe_qwen(temp_file, language, q_key)
+            else:
+                _log('warning', f"Unknown transcribe_source '{source}', falling back to OpenAI")
+                api_key = os.environ.get('OPENAI_API_KEY') or self.config.get('openai_api_key')
+                base_url = os.environ.get('OPENAI_BASE_URL') or self.config.get('openai_base_url')
+                transcription = modles.transcribe_openai(temp_file, 'auto', api_key, base_url, model=OPENAI_TRANSCRIBE_MODEL)
             transcription = (transcription or '').strip()
             
             # Clean up temporary file
@@ -434,11 +469,14 @@ class MediaProcessor:
             return None
 
     def translate_text(self, text: str, target_language: str = "中文") -> Optional[str]:
-        """Translate text"""
+        """Translate text via the configured translation engine (currently OpenAI)."""
         if not text.strip():
             return None
 
         try:
+            engine = (self.config.get('translation_engine') or 'openai').strip().lower()
+            if engine != 'openai':
+                _log("warning", f"Unsupported translation engine '{engine}', falling back to OpenAI")
             api_key = os.environ.get("OPENAI_API_KEY") or self.config.get("openai_api_key")
             base_url = os.environ.get("OPENAI_BASE_URL") or self.config.get("openai_base_url")
             model = None
@@ -892,10 +930,22 @@ class MediaTranscribeGUI:
             messagebox.showerror("错误", "文件不存在")
             return
         
-        # Check OpenAI configuration
-        if not self.processor.openai_client:
-            messagebox.showerror("错误", "OpenAI客户端未配置，请检查API密钥设置")
-            return
+        # Check provider configuration based on selected source
+        try:
+            cfg = self.processor.config or {}
+            source = (self.processor.source_override or cfg.get('recognition_engine') or cfg.get('transcribe_source') or 'openai').strip().lower()
+            ok = True
+            if source == 'openai':
+                ok = bool((cfg.get('openai_api_key') or os.environ.get('OPENAI_API_KEY')))
+            elif source == 'soniox':
+                ok = bool((cfg.get('soniox_api_key') or os.environ.get('SONIOX_API_KEY')))
+            elif source in ('qwen3-asr', 'qwen', 'dashscope'):
+                ok = bool((cfg.get('dashscope_api_key') or cfg.get('qwen_api_key') or os.environ.get('DASHSCOPE_API_KEY')))
+            if not ok:
+                messagebox.showerror("错误", f"所选识别提供方未配置必要凭据: {source}")
+                return
+        except Exception:
+            pass
         
         # Clear previous results
         self.clear_results()
@@ -989,12 +1039,13 @@ def main():
     parser.add_argument('--language', default='中文', help='Target translation language')
     parser.add_argument('--theater-mode', action='store_true', help='Enable theater mode')
     parser.add_argument('--gui', action='store_true', help='Launch GUI mode')
+    parser.add_argument('--source', choices=['openai', 'soniox', 'qwen3-asr', 'qwen', 'dashscope'], help='Transcription provider')
     parser.add_argument('--verbose', action='store_true', help='Enable verbose debug logging')
     parser.add_argument('--log-level', choices=['debug', 'info', 'warning', 'error'], help='Set log level')
     
     # Parse arguments, default to GUI if no arguments provided
     if len(sys.argv) == 1:
-        args = argparse.Namespace(gui=True, file=None, output=None, translate=False, language='中文', theater_mode=False, verbose=False, log_level=None)
+        args = argparse.Namespace(gui=True, file=None, output=None, translate=False, language='中文', theater_mode=False, verbose=False, log_level=None, source=None)
     else:
         args = parser.parse_args()
 
@@ -1058,7 +1109,7 @@ def main():
         return
     
     # Command line mode: process single file
-    _log_if("info", f"CLI mode: file={args.file}, output={args.output}, translate={args.translate}, theater_mode={getattr(args, 'theater_mode', False)}")
+    _log_if("info", f"CLI mode: file={args.file}, output={args.output}, translate={args.translate}, theater_mode={getattr(args, 'theater_mode', False)}, source={getattr(args, 'source', None) or 'config/default'}")
     
     # Check if file exists
     if not os.path.exists(args.file):
@@ -1074,7 +1125,7 @@ def main():
     
     try:
         # Create processor
-        processor = MediaProcessor()
+        processor = MediaProcessor(source_override=getattr(args, 'source', None))
         
         # No direct openai client here; models helper checks API key lazily
         api_key_present = bool((processor.config or {}).get('openai_api_key') or os.environ.get('OPENAI_API_KEY'))
