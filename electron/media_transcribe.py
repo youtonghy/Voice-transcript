@@ -3,7 +3,9 @@
 """
 Media file transcription and translation tool
 Supports importing video/audio files, extracting audio, detecting valid speech segments (supports theater mode),
-using OpenAI for transcription and translation, supports multi-threaded synchronous processing while maintaining order, supports one-click export to TXT
+using OpenAI for transcription and translation, supports multi-threaded synchronous processing while maintaining order, supports one-click export to TXT.
+
+Added verbose terminal logging to help diagnose failures when invoked from Electron.
 """
 
 import os
@@ -18,10 +20,60 @@ import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import List, Tuple, Optional, Dict, Any
-import tkinter as tk
-from tkinter import ttk, filedialog, messagebox, scrolledtext
 import numpy as np
 import soundfile as sf
+
+# Optional GUI imports (only needed in GUI mode)
+try:
+    import tkinter as tk  # type: ignore
+    from tkinter import ttk, filedialog, messagebox, scrolledtext  # type: ignore
+    TK_AVAILABLE = True
+    _TK_IMPORT_ERROR = None
+except Exception as _e:
+    TK_AVAILABLE = False
+    tk = None  # type: ignore
+    ttk = filedialog = messagebox = scrolledtext = None  # type: ignore
+    _TK_IMPORT_ERROR = _e
+
+# Try OpenAI SDK presence (for diagnostics only)
+try:
+    from openai import OpenAI as _OpenAIClient  # type: ignore
+    OPENAI_AVAILABLE = True
+except Exception:
+    _OpenAIClient = None
+    OPENAI_AVAILABLE = False
+
+# Console encoding + logging helpers
+def _setup_console_encoding():
+    try:
+        os.environ.setdefault('PYTHONIOENCODING', 'utf-8')
+        if hasattr(sys.stdout, 'reconfigure'):
+            sys.stdout.reconfigure(encoding='utf-8', errors='replace')  # type: ignore[attr-defined]
+        if hasattr(sys.stderr, 'reconfigure'):
+            sys.stderr.reconfigure(encoding='utf-8', errors='replace')  # type: ignore[attr-defined]
+    except Exception:
+        pass
+
+_setup_console_encoding()
+
+_LOG_LEVELS = {"debug": 10, "info": 20, "warning": 30, "error": 40}
+_LOG_LEVEL = _LOG_LEVELS.get(os.environ.get("MEDIA_LOG_LEVEL", "info").lower(), 20)
+
+def _log(level: str, message: str, *, stderr: bool = False):
+    try:
+        lvl = level.lower()
+        now = datetime.now().strftime('%H:%M:%S')
+        text = f"[{now}] {lvl.upper():7} {message}"
+        if stderr:
+            print(text, file=sys.stderr, flush=True)
+        else:
+            print(text, flush=True)
+    except Exception:
+        pass
+
+def _log_if(level: str, message: str):
+    if _LOG_LEVELS.get(level.lower(), 99) >= _LOG_LEVEL:
+        _log(level, message)
 
 # Pre-parse and set ffmpeg path (support Nuitka onefile/standalone and development environment)
 def _resolve_ffmpeg_path():
@@ -43,8 +95,10 @@ def _resolve_ffmpeg_path():
         project_root = os.path.dirname(os.path.abspath(__file__))
         candidates.append(os.path.join(project_root, "ffmpeg.exe"))
 
+        _log_if("debug", f"Resolving ffmpeg path, candidates: {candidates}")
         for c in candidates:
             if os.path.exists(c):
+                _log_if("info", f"ffmpeg selected: {c}")
                 return c
     except Exception:
         pass
@@ -54,8 +108,12 @@ _ffmpeg_path = _resolve_ffmpeg_path()
 if _ffmpeg_path and not os.environ.get("IMAGEIO_FFMPEG_EXE"):
     # Prioritize setting imageio-ffmpeg environment variable, MoviePy will read it
     os.environ["IMAGEIO_FFMPEG_EXE"] = _ffmpeg_path
+    _log_if("debug", f"IMAGEIO_FFMPEG_EXE set -> {_ffmpeg_path}")
 
 # Audio/video processing: unified use of FFmpeg to extract audio, no longer depends on MoviePy
+
+_log_if("info", f"Python: {sys.version.split()[0]} | exe: {getattr(sys, 'executable', sys.argv[0])}")
+_log_if("info", f"Working dir: {os.getcwd()}")
 
 # Model helpers
 import modles
@@ -95,6 +153,8 @@ class MediaProcessor:
     
     def __init__(self):
         self.config = self.load_config()
+        cfg_keys = ', '.join(sorted(list(self.config.keys()))) if isinstance(self.config, dict) else 'N/A'
+        _log_if("info", f"Loaded config keys: {cfg_keys or 'empty'}")
         
         # Thread management
         self.processing_queue = queue.PriorityQueue()
@@ -119,9 +179,16 @@ class MediaProcessor:
         if os.path.exists(config_file):
             try:
                 with open(config_file, 'r', encoding='utf-8') as f:
-                    return json.load(f)
+                    cfg = json.load(f)
+                    # Mask secrets in logs
+                    api_key_present = bool(cfg.get('openai_api_key'))
+                    base_url = cfg.get('openai_base_url')
+                    _log_if("info", f"Config: openai_key_set={api_key_present}, base_url={'set' if base_url else 'unset'}")
+                    return cfg
             except Exception as e:
-                print(f"Failed to read configuration file: {e}")
+                _log("warning", f"Failed to read configuration file: {e}")
+        else:
+            _log_if("warning", "config.json not found next to executable; environment variables will be used if set")
         return {}
 
     def init_openai_client(self) -> bool:
@@ -147,15 +214,20 @@ class MediaProcessor:
                 "-f", "wav",
                 output_path
             ]
+            _log_if("info", f"Running ffmpeg to extract audio -> {os.path.basename(video_path)}")
+            _log_if("debug", f"ffmpeg cmd: {' '.join(cmd)}")
             import subprocess
+            t0 = time.time()
             proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            dt = time.time() - t0
             if proc.returncode == 0 and os.path.exists(output_path):
+                _log_if("info", f"ffmpeg extracted audio -> {output_path} ({dt:.2f}s)")
                 return output_path
             else:
                 err = proc.stderr.decode("utf-8", errors="ignore")
-                print(f"FFmpeg audio extraction failed: {err}")
+                _log("error", f"FFmpeg audio extraction failed (code {proc.returncode}): {err[:400]}...")
         except Exception as e:
-            print(f"FFmpeg call failed: {e}")
+            _log("error", f"FFmpeg call failed: {e}")
 
         return None
 
@@ -184,10 +256,12 @@ class MediaProcessor:
         """Load audio file"""
         try:
             audio_data, sample_rate = sf.read(file_path)
+            _log_if("info", f"Loaded audio: sr={sample_rate}Hz, shape={getattr(audio_data, 'shape', None)}")
             
             # Convert to mono
             if len(audio_data.shape) > 1:
                 audio_data = np.mean(audio_data, axis=1)
+                _log_if("debug", "Converted to mono by averaging channels")
             
             # Resample to target sample rate
             if sample_rate != SAMPLE_RATE:
@@ -195,20 +269,26 @@ class MediaProcessor:
                     try:
                         num_samples = int(len(audio_data) * SAMPLE_RATE / sample_rate)
                         audio_data = signal.resample(audio_data, num_samples)
-                        print(f"Audio resampled (scipy): {sample_rate}Hz -> {SAMPLE_RATE}Hz")
+                        _log_if("info", f"Audio resampled (scipy): {sample_rate}Hz -> {SAMPLE_RATE}Hz")
                     except Exception as e:
-                        print(f"scipy resampling failed, using simple resampling: {e}")
+                        _log("warning", f"scipy resampling failed, using simple resampling: {e}")
                         audio_data = self.simple_resample(audio_data, sample_rate, SAMPLE_RATE)
-                        print(f"Audio resampled (simple): {sample_rate}Hz -> {SAMPLE_RATE}Hz")
+                        _log_if("info", f"Audio resampled (simple): {sample_rate}Hz -> {SAMPLE_RATE}Hz")
                 else:
                     # Use simple resampling as fallback
                     audio_data = self.simple_resample(audio_data, sample_rate, SAMPLE_RATE)
-                    print(f"Audio resampled (simple): {sample_rate}Hz -> {SAMPLE_RATE}Hz")
+                    _log_if("info", f"Audio resampled (simple): {sample_rate}Hz -> {SAMPLE_RATE}Hz")
             
+            try:
+                rms = float(np.sqrt(np.mean(np.square(audio_data))))
+                _log_if("debug", f"Audio stats: len={len(audio_data)}, RMS={rms:.5f}, min={float(np.min(audio_data)):.3f}, max={float(np.max(audio_data)):.3f}")
+            except Exception:
+                pass
+
             return audio_data.astype(np.float32), SAMPLE_RATE
             
         except Exception as e:
-            print(f"Audio file loading failed: {e}")
+            _log("error", f"Audio file loading failed: {e}")
             return None, None
 
     def amplify_audio_for_theater_mode(self, audio_data: np.ndarray, target_rms: float = THEATER_MODE_TARGET_RMS) -> np.ndarray:
@@ -234,12 +314,12 @@ class MediaProcessor:
             amplified_audio = audio_data * gain
             amplified_audio = np.clip(amplified_audio, -1.0, 1.0)
             
-            print(f"Theater mode: audio amplified {gain:.2f}x (RMS: {current_rms:.4f} -> {np.sqrt(np.mean(np.square(amplified_audio))):.4f})")
+            _log_if("info", f"Theater mode: audio amplified {gain:.2f}x (RMS: {current_rms:.4f} -> {np.sqrt(np.mean(np.square(amplified_audio))):.4f})")
             
             return amplified_audio
             
         except Exception as e:
-            print(f"Audio amplification failed: {e}")
+            _log("warning", f"Audio amplification failed: {e}")
             return audio_data
 
     def detect_speech_segments(self, audio_data: np.ndarray, sample_rate: int, theater_mode: bool = False) -> List[Tuple[int, int]]:
@@ -247,6 +327,7 @@ class MediaProcessor:
         if theater_mode:
             audio_data = self.amplify_audio_for_theater_mode(audio_data)
         
+        _log_if("debug", f"Segmentation params: win=100ms hop=50ms, min_silence={MIN_SILENCE_SEC_FOR_SPLIT}s, threshold={SILENCE_RMS_THRESHOLD}")
         segments = []
         
         # Calculate RMS window
@@ -302,6 +383,12 @@ class MediaProcessor:
             if end_sample - start_sample > sample_rate * 0.5:
                 segments.append((start_sample, end_sample))
         
+        _log_if("info", f"Detected {len(segments)} speech segments")
+        if segments:
+            # Log first few segments (start/end times in seconds)
+            sr = float(sample_rate)
+            preview = [f"#{i+1}@{start/ sr:.2f}-{end/ sr:.2f}s" for i, (start, end) in enumerate(segments[:5])]
+            _log_if("debug", f"Segments preview: {', '.join(preview)}{' ...' if len(segments) > 5 else ''}")
         return segments
 
     def transcribe_audio_segment(self, audio_segment: np.ndarray, segment_id: str) -> Optional[str]:
@@ -322,6 +409,9 @@ class MediaProcessor:
                 model = (self.config.get('openai_transcribe_model') or OPENAI_TRANSCRIBE_MODEL)
             except Exception:
                 model = OPENAI_TRANSCRIBE_MODEL
+
+            key_set = bool(api_key and str(api_key).strip())
+            _log_if("info", f"Transcribing segment {segment_id}: model={model}, key_set={key_set}, base_url={'set' if base_url else 'unset'}")
             transcription = modles.transcribe_openai(temp_file, 'auto', api_key, base_url, model=model)
             transcription = (transcription or '').strip()
             
@@ -335,7 +425,12 @@ class MediaProcessor:
             return transcription
             
         except Exception as e:
-            print(f"Transcription failed {segment_id}: {e}")
+            _log("error", f"Transcription failed {segment_id}: {e}")
+            try:
+                import traceback as _tb
+                _log("error", f"Details: {_tb.format_exc()}")
+            except Exception:
+                pass
             return None
 
     def translate_text(self, text: str, target_language: str = "中文") -> Optional[str]:
@@ -351,9 +446,10 @@ class MediaProcessor:
                 model = (self.config.get('openai_translate_model') or OPENAI_TRANSLATE_MODEL)
             except Exception:
                 model = OPENAI_TRANSLATE_MODEL
+            _log_if("info", f"Translating to {target_language} using model={model}")
             return modles.translate_openai(text, target_language, api_key, base_url, model=model)
         except Exception as e:
-            print(f"Translation failed: {e}")
+            _log("error", f"Translation failed: {e}")
             return None
 
         try:
@@ -388,7 +484,7 @@ Translation requirements:
     def process_file(self, file_path: str, theater_mode: bool = False, enable_translation: bool = True, target_language: str = "中文", progress_callback=None) -> bool:
         """Process media file"""
         try:
-            print(f"Starting to process file: {file_path}")
+            _log("info", f"Starting to process file: {file_path}")
             
             # Reset counters and results
             self.task_counter = 0
@@ -400,31 +496,31 @@ Translation requirements:
             file_ext = Path(file_path).suffix.lower()
             
             if file_ext in VIDEO_FORMATS:
-                print("Detected video file, using FFmpeg to extract audio...")
+                _log_if("info", "Detected video file, using FFmpeg to extract audio...")
                 if progress_callback:
                     progress_callback("Extracting audio...")
 
                 audio_path = self.extract_audio_from_video(file_path)
                 if not audio_path:
-                    print("Audio extraction failed")
+                    _log("error", "Audio extraction failed")
                     return False
                 cleanup_audio = True
             elif file_ext in AUDIO_FORMATS:
-                print("Detected audio file")
+                _log_if("info", "Detected audio file")
                 audio_path = file_path
                 cleanup_audio = False
             else:
-                print(f"Unsupported file format: {file_ext}")
+                _log("error", f"Unsupported file format: {file_ext}")
                 return False
             
             # Load audio
-            print("Loading audio file...")
+            _log_if("info", "Loading audio file...")
             if progress_callback:
                 progress_callback("Loading audio...")
             
             audio_data, sample_rate = self.load_audio_file(audio_path)
             if audio_data is None:
-                print("Audio loading failed")
+                _log("error", "Audio loading failed")
                 if cleanup_audio:
                     try:
                         os.unlink(audio_path)
@@ -434,12 +530,11 @@ Translation requirements:
                 return False
             
             # Detect speech segments
-            print("Detecting speech segments...")
+            _log_if("info", "Detecting speech segments...")
             if progress_callback:
                 progress_callback("Detecting speech segments...")
             
             segments = self.detect_speech_segments(audio_data, sample_rate, theater_mode)
-            print(f"Detected {len(segments)} speech segments")
             
             if not segments:
                 print("No valid speech segments detected")
@@ -453,6 +548,7 @@ Translation requirements:
             
             # Start worker threads
             self.start_worker_threads(enable_translation, target_language)
+            _log_if("info", f"Worker threads started: transcribe=2, translate={'1' if enable_translation else '0'}")
             
             # Add speech segments to processing queue
             for i, (start, end) in enumerate(segments):
@@ -484,16 +580,21 @@ Translation requirements:
             # Wait for all tasks to complete
             total_tasks = len(segments)
             completed_tasks = 0
+            failed_tasks = 0
             
             while completed_tasks < total_tasks:
                 time.sleep(0.1)
                 with self.results_lock:
-                    completed_tasks = sum(1 for result in self.results.values() 
-                                        if result['status'] == 'completed')
+                    statuses = [result['status'] for result in self.results.values()]
+                    completed_tasks = sum(1 for s in statuses if s == 'completed')
+                    failed_tasks = sum(1 for s in statuses if s == 'failed')
                 
                 if progress_callback:
                     progress = (completed_tasks / total_tasks) * 100
                     progress_callback(f"Processing progress: {completed_tasks}/{total_tasks} ({progress:.1f}%)")
+                if failed_tasks and (completed_tasks + failed_tasks) >= total_tasks:
+                    _log("warning", f"Some segments failed: completed={completed_tasks}, failed={failed_tasks}, total={total_tasks}")
+                    break
             
             # Stop worker threads
             self.stop_worker_threads()
@@ -509,14 +610,17 @@ Translation requirements:
                 except:
                     pass
             
-            print("File processing completed")
+            if failed_tasks:
+                _log("warning", f"File processing finished with failures. Completed: {completed_tasks}, Failed: {failed_tasks}")
+            else:
+                _log("info", "File processing completed")
             if progress_callback:
                 progress_callback("Processing completed")
             
-            return True
+            return failed_tasks == 0
             
         except Exception as e:
-            print(f"File processing failed: {e}")
+            _log("error", f"File processing failed: {e}")
             if progress_callback:
                 progress_callback(f"Processing failed: {e}")
             return False
@@ -581,6 +685,7 @@ Translation requirements:
                         self.results[task_id]['status'] = 'transcribing'
                 
                 # Execute transcription
+                _log_if("debug", f"Transcribing #{order}: task_id={task_id}")
                 transcription = self.transcribe_audio_segment(audio_segment, task_id)
                 
                 if transcription:
@@ -589,7 +694,7 @@ Translation requirements:
                         if task_id in self.results:
                             self.results[task_id]['transcription'] = transcription
                     
-                    print(f"Transcription completed #{order}: {transcription[:50]}...")
+                    _log_if("info", f"Transcription completed #{order}: {transcription[:50]}...")
                     
                     # If translation enabled, add to translation queue
                     if enable_translation and target_language:
@@ -608,7 +713,7 @@ Translation requirements:
                             if task_id in self.results:
                                 self.results[task_id]['status'] = 'completed'
                 else:
-                    print(f"Transcription failed #{order}")
+                    _log("error", f"Transcription failed #{order}")
                     with self.results_lock:
                         if task_id in self.results:
                             self.results[task_id]['status'] = 'failed'
@@ -616,7 +721,7 @@ Translation requirements:
             except queue.Empty:
                 continue
             except Exception as e:
-                print(f"Transcription thread error: {e}")
+                _log("error", f"Transcription thread error: {e}")
 
     def translation_worker(self, target_language: str):
         """Translation worker thread"""
@@ -637,6 +742,7 @@ Translation requirements:
                         self.results[task_id]['status'] = 'translating'
                 
                 # Execute translation
+                _log_if("debug", f"Translating #{order} -> {target_language}")
                 translation = self.translate_text(transcription, target_language)
                 
                 # Update results
@@ -646,14 +752,14 @@ Translation requirements:
                         self.results[task_id]['status'] = 'completed'
                 
                 if translation:
-                    print(f"Translation completed #{order}: {translation[:50]}...")
+                    _log_if("info", f"Translation completed #{order}: {translation[:50]}...")
                 else:
-                    print(f"Translation failed #{order}")
+                    _log("warning", f"Translation failed #{order}")
                 
             except queue.Empty:
                 continue
             except Exception as e:
-                print(f"Translation thread error: {e}")
+                _log("error", f"Translation thread error: {e}")
 
     def prepare_export_data(self):
         """Prepare export data"""
@@ -687,11 +793,11 @@ Translation requirements:
                         f.write(f"翻译: {entry['translation']}\n")
                     f.write("\n")
             
-            print(f"Results exported to: {output_path}")
+            _log_if("info", f"Results exported to: {output_path}")
             return True
             
         except Exception as e:
-            print(f"Export failed: {e}")
+            _log("error", f"Export failed: {e}")
             return False
 
     def get_results(self) -> List[Dict[str, Any]]:
@@ -883,12 +989,21 @@ def main():
     parser.add_argument('--language', default='中文', help='Target translation language')
     parser.add_argument('--theater-mode', action='store_true', help='Enable theater mode')
     parser.add_argument('--gui', action='store_true', help='Launch GUI mode')
+    parser.add_argument('--verbose', action='store_true', help='Enable verbose debug logging')
+    parser.add_argument('--log-level', choices=['debug', 'info', 'warning', 'error'], help='Set log level')
     
     # Parse arguments, default to GUI if no arguments provided
     if len(sys.argv) == 1:
-        args = argparse.Namespace(gui=True, file=None, output=None, translate=False, language='中文', theater_mode=False)
+        args = argparse.Namespace(gui=True, file=None, output=None, translate=False, language='中文', theater_mode=False, verbose=False, log_level=None)
     else:
         args = parser.parse_args()
+
+    # Apply logging level early
+    global _LOG_LEVEL
+    if getattr(args, 'verbose', False):
+        _LOG_LEVEL = _LOG_LEVELS['debug']
+    if getattr(args, 'log_level', None):
+        _LOG_LEVEL = _LOG_LEVELS.get(args.log_level, _LOG_LEVEL)
     
     # If GUI mode is specified or necessary command line arguments are not provided, launch graphical interface
     if args.gui or not args.file or not args.output:
@@ -904,6 +1019,8 @@ def main():
             missing_deps.append("openai")
         if not SCIPY_AVAILABLE:
             optional_deps.append("scipy")
+        if not TK_AVAILABLE:
+            optional_deps.append("tkinter (GUI)")
         
         if missing_deps:
             print("Error: Missing required dependencies:")
@@ -930,6 +1047,8 @@ def main():
         
         # Launch GUI
         try:
+            if not TK_AVAILABLE:
+                raise RuntimeError(f"tkinter not available: {_TK_IMPORT_ERROR}")
             app = MediaTranscribeGUI()
             app.run()
         except KeyboardInterrupt:
@@ -939,10 +1058,7 @@ def main():
         return
     
     # Command line mode: process single file
-    print(f"Starting to process file: {args.file}")
-    print(f"Output path: {args.output}")
-    print(f"Translation enabled: {args.translate}")
-    print(f"Theater mode: {getattr(args, 'theater_mode', False)}")
+    _log_if("info", f"CLI mode: file={args.file}, output={args.output}, translate={args.translate}, theater_mode={getattr(args, 'theater_mode', False)}")
     
     # Check if file exists
     if not os.path.exists(args.file):
@@ -952,17 +1068,18 @@ def main():
     # Check file size
     try:
         file_size = os.path.getsize(args.file)
-        print(f"File size: {file_size / 1024 / 1024:.2f} MB")
+        _log_if("info", f"File size: {file_size / 1024 / 1024:.2f} MB")
     except Exception as e:
-        print(f"Warning: Unable to get file size - {e}")
+        _log("warning", f"Unable to get file size: {e}")
     
     try:
         # Create processor
         processor = MediaProcessor()
         
-        if not processor.openai_client:
-            print("Error: OpenAI client not configured, please set API key")
-            sys.exit(1)
+        # No direct openai client here; models helper checks API key lazily
+        api_key_present = bool((processor.config or {}).get('openai_api_key') or os.environ.get('OPENAI_API_KEY'))
+        if not api_key_present:
+            _log("warning", "OpenAI API key not set; transcription may fail. Set OPENAI_API_KEY in environment or config.json.")
         
         # Process file
         def progress_callback(message):
@@ -981,19 +1098,22 @@ def main():
             if processor.export_to_txt(args.output):
                 print(f"Processing completed, results saved to: {args.output}")
             else:
-                print("Export failed")
+                print("Error: Export failed")
                 sys.exit(1)
         else:
-            print("File processing failed")
+            print("Error: File processing failed")
             sys.exit(1)
             
     except KeyboardInterrupt:
         print("\nUser interrupted processing")
         sys.exit(1)
     except Exception as e:
-        print(f"Processing failed: {e}")
+        print(f"Error: Processing failed: {e}")
         import traceback
-        traceback.print_exc()
+        try:
+            traceback.print_exc()
+        except Exception:
+            pass
         sys.exit(1)
 
 

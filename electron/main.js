@@ -588,29 +588,31 @@ ipcMain.handle('process-media-file', async (_event, { filePath, settings }) => {
     }
     if (settings && settings.theaterMode) args.push('--theater-mode');
 
-    const env = { ...process.env, PYTHONUNBUFFERED: '1', PYTHONIOENCODING: 'utf-8' };
-    const cwd = isPackaged ? userDataPath : __dirname;
+  const env = { ...process.env, PYTHONUNBUFFERED: '1', PYTHONIOENCODING: 'utf-8' };
+  const cwd = isPackaged ? userDataPath : __dirname;
 
-    const child = spawn(resolved.command, args, { stdio: ['ignore', 'pipe', 'pipe'], cwd, env });
+  const child = spawn(resolved.command, args, { stdio: ['ignore', 'pipe', 'pipe'], cwd, env });
 
-    let stdoutBuf = '';
-    child.stdout.on('data', (data) => {
-      stdoutBuf += data.toString('utf8');
-      const lines = stdoutBuf.split(/\r?\n/);
-      stdoutBuf = lines.pop() || '';
-      for (const line of lines) {
-        const text = line.trim();
-        if (!text) continue;
-        if (text.startsWith('Progress: ')) {
-          const msg = text.replace(/^Progress:\s*/, '');
-          win.webContents.send('media-progress', { type: 'progress', message: msg });
-        } else if (text.startsWith('Processing completed')) {
-          win.webContents.send('media-progress', { type: 'complete' });
-        } else if (text.startsWith('Error:')) {
-          win.webContents.send('media-progress', { type: 'error', message: text });
-        }
+  let stdoutBuf = '';
+  child.stdout.on('data', (data) => {
+    stdoutBuf += data.toString('utf8');
+    const lines = stdoutBuf.split(/\r?\n/);
+    stdoutBuf = lines.pop() || '';
+    for (const line of lines) {
+      const text = line.trim();
+      if (!text) continue;
+      if (text.startsWith('Progress: ')) {
+        const msg = text.replace(/^Progress:\s*/, '');
+        win.webContents.send('media-progress', { type: 'progress', message: msg });
+      } else if (text.startsWith('Processing completed')) {
+        win.webContents.send('media-progress', { type: 'complete' });
+      } else if (text.startsWith('Error:')) {
+        win.webContents.send('media-progress', { type: 'error', message: text });
+      } else if (process.argv.includes('--dev') || process.env.NODE_ENV === 'development') {
+        try { console.log('[media]', text); } catch {}
       }
-    });
+    }
+  });
     child.stderr.on('data', (data) => {
       const errLine = data.toString('utf8').trim();
       if (errLine) win.webContents.send('media-progress', { type: 'error', message: errLine });
