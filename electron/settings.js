@@ -67,6 +67,25 @@ function setupEventListeners() {
         });
     }
     
+    // Voice input listeners
+    const viEnabledEl = document.getElementById('voiceInputEnabled');
+    const viHotkeyEl = document.getElementById('voiceInputHotkey');
+    const viEngineEl = document.getElementById('voiceInputEngine');
+    const viLangEl = document.getElementById('voiceInputLanguage');
+    const viTlChk = document.getElementById('voiceInputTranslate');
+    const viTlLang = document.getElementById('voiceInputTranslateLanguage');
+    const viTlGroup = document.getElementById('voiceInputTranslateLanguageGroup');
+    if (viEnabledEl) viEnabledEl.addEventListener('change', autoSave);
+    if (viHotkeyEl) { viHotkeyEl.addEventListener('blur', autoSave); viHotkeyEl.addEventListener('change', autoSave); }
+    if (viEngineEl) viEngineEl.addEventListener('change', autoSave);
+    if (viLangEl) viLangEl.addEventListener('change', autoSave);
+    if (viTlChk) viTlChk.addEventListener('change', () => {
+        if (viTlGroup) viTlGroup.style.display = viTlChk.checked ? 'block' : 'none';
+        autoSave();
+    });
+    if (viTlLang) viTlLang.addEventListener('input', autoSave);
+    // No trigger mode switch (global toggle only)
+    
     // Add auto-save on blur for all input fields
     const autoSaveInputs = [
         'apiKey', 'apiUrl', 'openaiTranscribeModel', 'openaiTranslateModel', 'targetLanguage', 'customLanguage', 'transcribeLanguage',
@@ -159,6 +178,26 @@ function populateForm(config) {
     document.getElementById('silenceDuration').value = config.min_silence_seconds || 1.0;
     document.getElementById('theaterMode').checked = config.theater_mode === true;
     
+    // Voice input settings
+    try {
+        const viEnabledEl = document.getElementById('voiceInputEnabled');
+        const viHotkeyEl = document.getElementById('voiceInputHotkey');
+        const viEngineEl = document.getElementById('voiceInputEngine');
+        const viLangEl = document.getElementById('voiceInputLanguage');
+        const viTlChk = document.getElementById('voiceInputTranslate');
+        const viTlLang = document.getElementById('voiceInputTranslateLanguage');
+        const viTlGroup = document.getElementById('voiceInputTranslateLanguageGroup');
+
+        if (viEnabledEl) viEnabledEl.checked = !!(config.voice_input_enabled);
+        if (viHotkeyEl) viHotkeyEl.value = (config.voice_input_hotkey || 'F3');
+        if (viEngineEl) viEngineEl.value = (config.voice_input_engine || config.recognition_engine || config.transcribe_source || 'openai');
+        if (viLangEl) viLangEl.value = (config.voice_input_language || 'auto');
+        if (viTlChk) viTlChk.checked = !!config.voice_input_translate;
+        if (viTlLang) viTlLang.value = (config.voice_input_translate_language || config.translate_language || 'Chinese');
+        if (viTlGroup) viTlGroup.style.display = (viTlChk && viTlChk.checked) ? 'block' : 'none';
+        // Trigger mode removed; always global toggle
+    } catch {}
+
     // Update UI based on current settings (guarded)
     try { toggleTranslationSettings(); } catch {}
     try { updateCustomLanguageVisibility(); } catch {}
@@ -398,9 +437,29 @@ function collectFormData() {
     }
     
     config.theater_mode = document.getElementById('theaterMode').checked;
-    
+
+    // Voice input
+    try {
+        const viEnabledEl = document.getElementById('voiceInputEnabled');
+        const viHotkeyEl = document.getElementById('voiceInputHotkey');
+        const viEngineEl = document.getElementById('voiceInputEngine');
+        const viLangEl = document.getElementById('voiceInputLanguage');
+        const viTlChk = document.getElementById('voiceInputTranslate');
+        const viTlLang = document.getElementById('voiceInputTranslateLanguage');
+        if (viEnabledEl) config.voice_input_enabled = viEnabledEl.checked;
+        if (viHotkeyEl) config.voice_input_hotkey = (viHotkeyEl.value || '').trim() || 'F3';
+        if (viEngineEl) config.voice_input_engine = viEngineEl.value;
+        if (viLangEl) config.voice_input_language = viLangEl.value;
+        if (viTlChk) config.voice_input_translate = viTlChk.checked;
+        if (viTlLang) config.voice_input_translate_language = (viTlLang.value || '').trim();
+        // Always use global toggle; no extra field needed
+    } catch {}
+
     return config;
 }
+
+// Extend populateForm to handle voice input UI
+// (Removed duplicate function definitions added later)
 
 function showTopNotification(message, type = 'info') {
     // Remove existing notifications

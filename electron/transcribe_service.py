@@ -70,6 +70,12 @@ audio_data = []
 recording_thread = None
 config = {}
 initial_config_applied = False
+simple_recording_mode = False  # Simple recording (no VAD), for voice input
+current_recording_context = 'default'  # 'default' or 'voice_input'
+override_source_for_recording = None
+override_transcribe_language = None
+override_translate = False
+override_translate_language = None
 
 # Configuration is sent via initial update_config from Electron; no hot reload
 
@@ -256,7 +262,7 @@ def transcribe_with_soniox(filepath):
 
 
 def transcribe_with_qwen(filepath):
-    """Transcribe using Qwen3-ASR via models module."""
+    """Transcribe using Qwen3-ASR via models module with timeout and logs."""
     try:
         api_key = (
             (config.get('dashscope_api_key') if isinstance(config, dict) else None)
@@ -264,7 +270,42 @@ def transcribe_with_qwen(filepath):
             or os.environ.get('DASHSCOPE_API_KEY')
         )
         lang = (config.get('transcribe_language') if isinstance(config, dict) else None)
-        return modles.transcribe_qwen(filepath, lang, api_key)
+        if not api_key:
+            log_message("warning", "Qwen3-ASR API key not set; cannot transcribe")
+            return None
+
+        # Call in a worker thread to avoid blocking the main thread indefinitely
+        q = queue.Queue(maxsize=1)
+
+        def _worker():
+            try:
+                text = modles.transcribe_qwen(filepath, lang, api_key)
+                q.put(text)
+            except Exception as e:
+                try:
+                    log_message("error", f"Qwen3-ASR transcription exception: {e}")
+                except Exception:
+                    pass
+                try:
+                    q.put(None)
+                except Exception:
+                    pass
+
+        t = threading.Thread(target=_worker, daemon=True)
+        t.start()
+        t.join(15.0)  # seconds
+        if t.is_alive():
+            log_message("warning", "Qwen3-ASR transcription timed out after 15s")
+            return None
+        try:
+            result = q.get_nowait()
+        except Exception:
+            result = None
+        if result and isinstance(result, str) and result.strip():
+            return result.strip()
+        else:
+            log_message("warning", "Qwen3-ASR returned empty transcription")
+            return None
     except Exception as e:
         log_message("error", f"Qwen3-ASR transcription error: {e}")
         return None
@@ -388,7 +429,7 @@ def translation_worker():
             if task is None:
                 break
                 
-            order, result_id, transcription, target_language = task
+            order, result_id, transcription, target_language, context = task
             
             # Check if this is the task in expected order
             if order == next_expected_order:
@@ -400,13 +441,16 @@ def translation_worker():
                 
                 if translation:
                     # Send translation update message
-                    send_message({
+                    t_payload = {
                         "type": "translation_update",
                         "result_id": result_id,
                         "translation": translation.strip(),
                         "order": order,
                         "timestamp": datetime.now().isoformat()
-                    })
+                    }
+                    if context:
+                        t_payload["context"] = context
+                    send_message(t_payload)
                     log_message("info", f"Translation completed #{order}: {result_id}")
                 else:
                     log_message("warning", f"Translation failed #{order}: {result_id}")
@@ -433,18 +477,21 @@ def translation_worker():
                                 # Found next task
                                 found_next = True
                                 # Process this task immediately
-                                _, t_result_id, t_transcription, t_target_language = t
+                                _, t_result_id, t_transcription, t_target_language, t_context = t
                                 log_message("info", f"Processing waiting translation task #{t_order}: {t_result_id}")
                                 
                                 t_translation = _translate_text_openai(t_transcription, t_target_language)
                                 if t_translation:
-                                    send_message({
+                                    t_payload2 = {
                                         "type": "translation_update",
                                         "result_id": t_result_id,
                                         "translation": t_translation.strip(),
                                         "order": t_order,
                                         "timestamp": datetime.now().isoformat()
-                                    })
+                                    }
+                                    if t_context:
+                                        t_payload2["context"] = t_context
+                                    send_message(t_payload2)
                                     log_message("info", f"Translation completed #{t_order}: {t_result_id}")
                                 else:
                                     log_message("warning", f"Translation failed #{t_order}: {t_result_id}")
@@ -479,7 +526,7 @@ def translation_worker():
     
     log_message("info", "Translation worker thread stopped")
 
-def queue_translation(result_id, transcription, target_language):
+def queue_translation(result_id, transcription, target_language, context=None):
     """Queue translation task, ensure processing in order"""
     global translation_counter
     
@@ -490,8 +537,8 @@ def queue_translation(result_id, transcription, target_language):
     translation_counter += 1
     order = translation_counter
     
-    # Create task, format: (order, result_id, transcription, target_language)
-    task = (order, result_id, transcription, target_language)
+    # Create task, format: (order, result_id, transcription, target_language, context)
+    task = (order, result_id, transcription, target_language, context)
     
     try:
         # Use priority queue, priority is order number, ensure processing in order
@@ -513,9 +560,17 @@ def audio_callback(indata, frames, time, status):
     
     if not is_recording:
         return
-    
+
     try:
         with audio_lock:
+            # Simple mode: accumulate raw audio only
+            if simple_recording_mode:
+                try:
+                    if indata is not None and len(indata) > 0:
+                        audio_data.append(indata.copy())
+                except Exception as e:
+                    log_message("warning", f"Simple mode append failed: {e}")
+                return
             try:
                 # Ensure input data is a valid numpy array
                 if indata is None or len(indata) == 0:
@@ -595,11 +650,17 @@ def start_recording():
     global segment_frames, silence_frames_contig, split_requested, segment_index
     global segment_active, new_segment_requested, pre_roll_chunks, pre_roll_frames
     global translation_counter
-    
+
     if is_recording:
         log_message("warning", "Recording already in progress")
         return
-    
+
+    # Trace start request parameters
+    try:
+        log_message("info", f"Start recording request (simple_mode={simple_recording_mode}, context={current_recording_context})")
+    except Exception:
+        pass
+
     # Check audio device
     if not check_audio_device():
         log_message("error", "Audio device check failed, cannot start recording")
@@ -610,14 +671,18 @@ def start_recording():
         })
         return
     
-    # Reset translation worker/queue to avoid ordering waits across sessions
+    # Reset translation worker/queue depending on context and overrides
     try:
-        if config.get('enable_translation', True) and bool(config.get('openai_api_key') or os.environ.get('OPENAI_API_KEY')):
-            # Restart worker to ensure clean state; preserve order numbering across sessions
+        openai_ok = bool(config.get('openai_api_key') or os.environ.get('OPENAI_API_KEY'))
+        if current_recording_context == 'voice_input':
+            should_translate = bool(override_translate) and openai_ok
+        else:
+            should_translate = bool(config.get('enable_translation', True)) and openai_ok
+
+        if should_translate:
             restart_translation_worker()
             log_message("info", f"Translation worker restarted; next order will be #{translation_next_expected}")
         else:
-            # If translation disabled or not configured, stop worker; preserve counter for future sessions
             stop_translation_worker()
             # Clear any lingering queue items
             while not translation_queue.empty():
@@ -625,7 +690,7 @@ def start_recording():
                     translation_queue.get_nowait()
                 except queue.Empty:
                     break
-            log_message("info", "Translation disabled or OpenAI key missing; cleared queue, preserved order state")
+            log_message("info", "Translation worker stopped (by context or config); cleared queue")
     except Exception as _e:
         log_message("warning", f"Failed to reset translation worker: {_e}")
     
@@ -749,17 +814,21 @@ def process_segment_chunks(chunks, seg_idx=None, from_split=False):
         transcription_counter += 1
         trans_order = transcription_counter
         result_id = str(uuid.uuid4())
-        try:
-            send_message({
-                "type": "result",
-                "result_id": result_id,
-                "transcription": "",
-                "transcription_pending": True,
-                "transcription_order": trans_order,
-                "timestamp": datetime.now().isoformat()
-            })
-        except Exception:
-            pass
+        if not simple_recording_mode:
+            try:
+                payload = {
+                    "type": "result",
+                    "result_id": result_id,
+                    "transcription": "",
+                    "transcription_pending": True,
+                    "transcription_order": trans_order,
+                    "timestamp": datetime.now().isoformat()
+                }
+                if current_recording_context == 'voice_input':
+                    payload["context"] = "voice_input"
+                send_message(payload)
+            except Exception:
+                pass
 
         process_combined_audio(combined_audio, seg_idx, from_split, result_id=result_id, trans_order=trans_order)
     except Exception as e:
@@ -784,31 +853,68 @@ def process_combined_audio(combined_audio, seg_idx=None, from_split=False, resul
 
         sf.write(filepath, combined_audio, SAMPLE_RATE)
 
-        # Transcribe audio
-        transcription = transcribe_audio_file(filepath)
+        # Transcribe audio, with possible overrides in voice-input simple mode
+        original_source = None
+        original_lang = None
+        try:
+            original_source = config.get('transcribe_source') if isinstance(config, dict) else None
+            original_lang = config.get('transcribe_language') if isinstance(config, dict) else None
+        except Exception:
+            pass
+        try:
+            if override_source_for_recording:
+                try: config['transcribe_source'] = override_source_for_recording
+                except Exception: pass
+            if override_transcribe_language:
+                try: config['transcribe_language'] = override_transcribe_language
+                except Exception: pass
+            transcription = transcribe_audio_file(filepath)
+        finally:
+            try:
+                if original_source is not None:
+                    config['transcribe_source'] = original_source
+            except Exception:
+                pass
+            try:
+                if original_lang is not None:
+                    config['transcribe_language'] = original_lang
+            except Exception:
+                pass
         if transcription:
             # Use existing result_id/order if provided (placeholder flow)
             if not result_id:
                 result_id = str(uuid.uuid4())
             # Send transcription update to fill the placeholder
             try:
-                send_message({
+                payload = {
                     "type": "transcription_update",
                     "result_id": result_id,
                     "transcription": transcription.strip(),
                     "order": trans_order or 0,
                     "timestamp": datetime.now().isoformat()
-                })
+                }
+                if current_recording_context == 'voice_input':
+                    payload["context"] = "voice_input"
+                send_message(payload)
             except Exception:
                 pass
 
-            # Check if translation is enabled
-            if config.get('enable_translation', True):
+            # Translation policy
+            if current_recording_context == 'voice_input':
+                # Only translate when explicitly requested for voice input
+                if override_translate:
+                    target_language = override_translate_language or config.get('translate_language', 'Chinese')
+                    if target_language and target_language.strip() and translation_worker_running:
+                        ctx = ("voice_input" if current_recording_context == 'voice_input' else None)
+                        queue_success, translation_order = queue_translation(result_id, transcription, target_language, context=ctx)
+                        if queue_success:
+                            log_message("info", f"VoiceInput: queued translation (order #{translation_order}) for result {result_id}")
+            elif config.get('enable_translation', True):
                 translation_mode = config.get('translation_mode', 'fixed')
                 
                 if translation_mode == 'smart':
                     # Smart translation mode
-                    language1 = config.get('smart_language1', '涓枃')
+                    language1 = config.get('smart_language1', 'Chinese')
                     language2 = config.get('smart_language2', 'English')
                     
                     # Determine transcription text language and target translation
@@ -816,7 +922,8 @@ def process_combined_audio(combined_audio, seg_idx=None, from_split=False, resul
                     
                     if smart_target:
                         # Asynchronously queue translation task, get translation order
-                        queue_success, translation_order = queue_translation(result_id, transcription, smart_target)
+                        ctx = ("voice_input" if current_recording_context == 'voice_input' else None)
+                        queue_success, translation_order = queue_translation(result_id, transcription, smart_target, context=ctx)
                         
                         # For translation, we rely on translation_update later; placeholder already exists
                         # If queue fails, do nothing further here
@@ -824,14 +931,26 @@ def process_combined_audio(combined_audio, seg_idx=None, from_split=False, resul
                         # Smart translation failed; keep transcription only
                         pass
                 else:
-                    # Fixed translation mode (original logic)
-                    target_language = config.get('translate_language', '涓枃')
+                    # Fixed translation mode (non-voice_input)
+                    target_language = config.get('translate_language', 'Chinese')
                     if target_language and target_language.strip() and translation_worker_running:
                         # Asynchronously queue translation task, get translation order
-                        queue_success, translation_order = queue_translation(result_id, transcription, target_language)
+                        ctx = ("voice_input" if current_recording_context == 'voice_input' else None)
+                        queue_success, translation_order = queue_translation(result_id, transcription, target_language, context=ctx)
                         # If queue fails, we keep transcription only
             else:
                 # Translation not enabled: nothing else to do; placeholder already filled
+                pass
+        else:
+            # No transcription produced
+            try:
+                req_src = None
+                try:
+                    req_src = override_source_for_recording if override_source_for_recording else (config.get('transcribe_source') if isinstance(config, dict) else None)
+                except Exception:
+                    req_src = None
+                log_message("warning", f"Transcription empty (requested_source={req_src}, context={current_recording_context})")
+            except Exception:
                 pass
 
             # Delete audio file
@@ -904,10 +1023,34 @@ def handle_message(message):
         
         if msg_type == "start_recording":
             log_message("info", "Executing start recording command")
+            # Normal mode
+            global simple_recording_mode, current_recording_context
+            simple_recording_mode = False
+            current_recording_context = 'default'
             start_recording()
         elif msg_type == "stop_recording":
             log_message("info", "Executing stop recording command")
             stop_recording()
+        elif msg_type == "start_voice_input":
+            log_message("info", "Start simple voice input recording")
+            global override_source_for_recording, override_transcribe_language, override_translate, override_translate_language
+            simple_recording_mode = True
+            current_recording_context = 'voice_input'
+            override_source_for_recording = message.get('override_source')
+            override_transcribe_language = message.get('transcribe_language')
+            override_translate = bool(message.get('translate', False))
+            override_translate_language = message.get('translate_language')
+            start_recording()
+        elif msg_type == "stop_voice_input":
+            log_message("info", "Stop simple voice input recording")
+            stop_recording()
+            # Reset overrides
+            simple_recording_mode = False
+            current_recording_context = 'default'
+            override_source_for_recording = None
+            override_transcribe_language = None
+            override_translate = False
+            override_translate_language = None
         elif msg_type == "shutdown":
             # Graceful exit: if recording, stop first; then stop translation thread and exit
             log_message("info", "Received service shutdown command, preparing graceful exit")

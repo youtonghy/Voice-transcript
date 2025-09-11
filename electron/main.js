@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Menu, clipboard, globalShortcut, Tray, nativeImage } = require('electron');
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
@@ -12,6 +12,8 @@ if (!app.requestSingleInstanceLock()) {
 let mainWindow = null;
 let settingsWindow = null;
 let mediaTranscribeWindow = null;
+let tray = null;
+let isQuitting = false;
 
 // Python service state
 let pythonProcess = null;
@@ -19,6 +21,11 @@ let pythonReady = false;
 let pythonBuffer = '';
 let pendingMessages = []; // queued outbound messages until ready
 let isRecordingFlag = false;
+let isVoiceInputRecording = false;
+let pendingVoiceInsert = new Map();
+let voiceInsertAwaiting = false; // set true after stop pressed; insert on next final pieces
+let lastVoiceTranscription = '';
+let lastVoiceResultId = null;
 
 // Config
 const isPackaged = app.isPackaged;
@@ -51,7 +58,15 @@ let config = {
   transcribe_language: 'auto',
   silence_rms_threshold: 0.010,
   min_silence_seconds: 1.0,
-  theater_mode: false
+  theater_mode: false,
+  // Voice input defaults
+  voice_input_enabled: false,
+  voice_input_hotkey: 'F3',
+  // Global toggle only: press to start, press again to stop
+  voice_input_engine: 'openai',
+  voice_input_language: 'auto',
+  voice_input_translate: false,
+  voice_input_translate_language: 'Chinese'
 };
 
 function loadConfig() {
@@ -85,6 +100,92 @@ function saveConfig() {
   }
 }
 
+// Global hotkey: toggle start/stop (only mode retained)
+let lastVoiceHotkeyAt = 0; // simple debounce to avoid accidental double-fire
+let lastVoiceStopAt = 0;   // small guard after stop to prevent bounce
+function registerVoiceInputShortcut() {
+  try {
+    globalShortcut.unregisterAll();
+  } catch {}
+  if (!config.voice_input_enabled) return;
+  const acc = String(config.voice_input_hotkey || 'F3').trim();
+  if (!acc) return;
+  const ok = globalShortcut.register(acc, () => {
+    const now = Date.now();
+    if (now - lastVoiceHotkeyAt < 500) {
+      // Ignore repeated callbacks within 500ms
+      return;
+    }
+    lastVoiceHotkeyAt = now;
+    console.log('[VoiceHotkey] pressed', acc, '(toggle)');
+    if (!isVoiceInputRecording) handleVoiceHotkeyDown(); else handleVoiceHotkeyUp();
+  });
+  console.log('[VoiceHotkey] register', acc, ok ? 'OK' : 'FAILED');
+}
+
+// Hold mode (app focused only): detect keydown/keyup via before-input-event
+// (Hold mode removed)
+
+function handleVoiceHotkeyDown() {
+  if (isVoiceInputRecording) return;
+  const now = Date.now();
+  if (now - lastVoiceStopAt < 200) {
+    console.log('[VoiceHotkey] ignore start (debounce after stop)');
+    return;
+  }
+  isVoiceInputRecording = true;
+  // Clear any pending insertion state from previous session
+  try { pendingVoiceInsert.clear(); } catch {}
+  voiceInsertAwaiting = false;
+  lastVoiceTranscription = '';
+  lastVoiceResultId = null;
+  try { loadConfig(); } catch {}
+  if (!pythonProcess) {
+    console.log('[VoiceHotkey] backend not running, starting...');
+    startPythonService();
+  }
+  const voiceEngine = config.voice_input_engine || config.recognition_engine || config.transcribe_source || 'openai';
+  const voiceLang = config.voice_input_language || 'auto';
+  const wantTranslate = !!config.voice_input_translate;
+  const translateLang = config.voice_input_translate_language || config.translate_language || 'Chinese';
+  console.log('[VoiceHotkey] starting voice input:', { voiceEngine, voiceLang, wantTranslate, translateLang });
+  // Push latest config before starting
+  sendToPython({ type: 'update_config', force: true, config });
+  const ok = sendToPython({
+    type: 'start_voice_input',
+    override_source: voiceEngine,
+    transcribe_language: voiceLang,
+    translate: wantTranslate,
+    translate_language: translateLang
+  });
+  if (!ok) {
+    console.warn('[VoiceHotkey] start_voice_input not sent (backend not ready yet). It will be queued if backend starts.');
+  }
+  try { updateTrayMenu(); } catch {}
+}
+
+function handleVoiceHotkeyUp() {
+  if (!isVoiceInputRecording) return;
+  isVoiceInputRecording = false;
+  lastVoiceStopAt = Date.now();
+  voiceInsertAwaiting = true;
+  console.log('[VoiceInsert] stop pressed; will insert after final result. bufferedTranscriptionLen=', (lastVoiceTranscription||'').length);
+  const ok = sendToPython({ type: 'stop_voice_input' });
+  if (!ok) console.warn('[VoiceHotkey] stop_voice_input not sent (backend not ready)');
+  try { updateTrayMenu(); } catch {}
+}
+
+function insertTextAtCursor(text) {
+  if (typeof text !== 'string' || !text.trim()) return false;
+  clipboard.writeText(text);
+  if (process.platform === 'win32') {
+    const ps = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', "$wshell = New-Object -ComObject wscript.shell; $wshell.SendKeys('^v')"], { stdio: 'ignore' });
+    ps.on('error', () => {});
+  }
+  console.log('[VoiceInsert] inserted text:', text.length > 60 ? (text.slice(0,60)+'...') : text);
+  return true;
+}
+
 // Window creators
 function createMainWindow() {
   mainWindow = new BrowserWindow({
@@ -97,6 +198,22 @@ function createMainWindow() {
   });
 
   mainWindow.loadFile(path.join(__dirname, 'index.html'));
+
+  // 关闭按钮最小化到托盘
+  mainWindow.on('close', (e) => {
+    if (!isQuitting) {
+      e.preventDefault();
+      mainWindow.hide();
+      try { mainWindow.setSkipTaskbar(true); } catch {}
+      try { updateTrayMenu(); } catch {}
+      return;
+    }
+  });
+
+  mainWindow.on('show', () => {
+    try { mainWindow.setSkipTaskbar(false); } catch {}
+    try { updateTrayMenu(); } catch {}
+  });
 
   mainWindow.on('closed', () => {
     mainWindow = null;
@@ -223,9 +340,18 @@ function processPythonStdout(data) {
          String(obj.message || '').includes('waiting for commands'))
       ) {
         pythonReady = true;
-        // Flush any queued messages
+        // Flush any queued messages with state-aware filtering
         while (pendingMessages.length > 0) {
           const msg = pendingMessages.shift();
+          if (!msg || !msg.type) continue;
+          if (msg.type === 'start_voice_input' && !isVoiceInputRecording) {
+            console.log('[Main->Py] drop queued start_voice_input (not recording anymore)');
+            continue;
+          }
+          if (msg.type === 'stop_voice_input' && isVoiceInputRecording === false) {
+            console.log('[Main->Py] drop queued stop_voice_input (already stopped)');
+            continue;
+          }
           sendToPythonDirect(msg);
         }
       }
@@ -242,6 +368,17 @@ function processPythonStdout(data) {
       if (mainWindow && !mainWindow.isDestroyed()) {
         mainWindow.webContents.send('python-message', obj);
       }
+      // Voice input insertion handler
+      try { maybeHandleVoiceInputInsertion(obj); } catch {}
+      // Extra terminal status for voice input context
+      try {
+        if (obj && obj.context === 'voice_input') {
+          if (obj.type === 'log') console.log('[VoiceInput][PY-LOG]', obj.level, obj.message);
+          if (obj.type === 'transcription_update') console.log('[VoiceInput] transcription:', (obj.transcription||'').slice(0,80));
+          if (obj.type === 'translation_update') console.log('[VoiceInput] translation:', (obj.translation||'').slice(0,80));
+          if (obj.type === 'recording_error') console.error('[VoiceInput] recording_error:', obj.message);
+        }
+      } catch {}
     } catch (e) {
       // Non-JSON or parse error; ignore
     }
@@ -427,6 +564,7 @@ ipcMain.handle('save-config', async (_event, newConfig) => {
       console.log('[Main] Config saved:', { source, openaiKeySet: oai, sonioxKeySet: sxi, qwenKeySet: qwn });
       if (pythonProcess) console.log('[Main] Restart the backend (Ctrl+R or app relaunch) to apply provider changes.');
     } catch {}
+    try { registerVoiceInputShortcut(); } catch {}
     return { success: true };
   } catch (err) {
     return { success: false, error: String(err.message || err) };
@@ -471,6 +609,16 @@ ipcMain.handle('stop-recording', async () => {
   const ok = sendToPython({ type: 'stop_recording' });
   if (ok) isRecordingFlag = false;
   return ok;
+});
+
+// Optional explicit voice-input control from renderer
+ipcMain.handle('start-voice-input', async () => {
+  handleVoiceHotkeyDown();
+  return true;
+});
+ipcMain.handle('stop-voice-input', async () => {
+  handleVoiceHotkeyUp();
+  return true;
 });
 
 // IPC Handlers - audio devices (stub)
@@ -711,6 +859,11 @@ app.whenReady().then(() => {
   createMainWindow();
   setupAppMenu();
   startPythonService();
+  // Register global shortcut (toggle)
+  registerVoiceInputShortcut();
+  // Hold mode removed; global toggle works regardless of focus
+  // Create tray icon for background mode
+  createTray();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -726,13 +879,229 @@ app.on('second-instance', () => {
   }
 });
 
+// 保持后台驻留：不因窗口全关而退出
 app.on('window-all-closed', async () => {
-  if (process.platform !== 'darwin') {
-    await stopPythonService(true);
-    app.quit();
-  }
+  // no-op: keep running in tray
 });
 
 app.on('before-quit', async () => {
+  isQuitting = true;
   await stopPythonService(true);
+  try { globalShortcut.unregisterAll(); } catch {}
 });
+
+// Handle voice input insertion based on backend messages
+function maybeHandleVoiceInputInsertion(obj) {
+  try {
+    if (!obj || obj.context !== 'voice_input') return;
+    const translateOn = !!config.voice_input_translate;
+    // Always keep latest transcription for fallback
+    if (obj.type === 'transcription_update') {
+      if (typeof obj.transcription === 'string' && obj.transcription.trim()) {
+        lastVoiceTranscription = obj.transcription.trim();
+        if (obj.result_id) lastVoiceResultId = obj.result_id;
+        console.log('[VoiceInsert] transcription_update received. len=', lastVoiceTranscription.length, 'awaiting=', voiceInsertAwaiting);
+      }
+    }
+
+    // Only insert after the user has stopped recording (toggle end)
+    if (isVoiceInputRecording) return;
+
+    if (obj.type === 'result') {
+      const t = (typeof obj.transcription === 'string') ? obj.transcription.trim() : '';
+      if (!translateOn) {
+        if (t) {
+          console.log('[VoiceInsert] inserting transcription from result. len=', t.length);
+          insertTextAtCursor(t);
+          voiceInsertAwaiting = false;
+        } else {
+          console.log('[VoiceInsert] result has no transcription; will fallback to buffered transcription if available. len=', (lastVoiceTranscription||'').length);
+          if (lastVoiceTranscription) {
+            insertTextAtCursor(lastVoiceTranscription);
+            voiceInsertAwaiting = false;
+          }
+        }
+      } else if (obj.result_id) {
+        pendingVoiceInsert.set(obj.result_id, { wantTranslation: true });
+        console.log('[VoiceInsert] result received; waiting translation for result_id=', obj.result_id);
+      }
+    } else if (obj.type === 'translation_update') {
+      const text = (typeof obj.translation === 'string') ? obj.translation.trim() : '';
+      const hasPending = obj.result_id && pendingVoiceInsert.has(obj.result_id);
+      // In voice_input simple mode, backend does not emit 'result'; accept translation directly after stop
+      if (translateOn && voiceInsertAwaiting && text) {
+        console.log('[VoiceInsert] inserting translation (direct post-stop). result_id=', obj.result_id || '(none)', ' len=', text.length);
+        insertTextAtCursor(text);
+        if (obj.result_id) pendingVoiceInsert.delete(obj.result_id);
+        voiceInsertAwaiting = false;
+      } else if (hasPending) {
+        const info = pendingVoiceInsert.get(obj.result_id);
+        if (info && info.wantTranslation && text) {
+          console.log('[VoiceInsert] inserting translation for result_id=', obj.result_id, ' len=', text.length);
+          insertTextAtCursor(text);
+          pendingVoiceInsert.delete(obj.result_id);
+          voiceInsertAwaiting = false;
+        }
+      }
+    } else if (obj.type === 'transcription_update') {
+      // If no translation requested, and we are awaiting insert, use the first update after stop as final
+      if (!translateOn && voiceInsertAwaiting && lastVoiceTranscription) {
+        console.log('[VoiceInsert] inserting transcription from update (post-stop). len=', lastVoiceTranscription.length);
+        insertTextAtCursor(lastVoiceTranscription);
+        voiceInsertAwaiting = false;
+      }
+    } else if (obj.type === 'recording_stopped') {
+      // Fallback: if stop occurred and we never got a post-stop update, insert buffered transcription
+      if (!translateOn && voiceInsertAwaiting && lastVoiceTranscription) {
+        console.log('[VoiceInsert] inserting transcription on recording_stopped fallback. len=', lastVoiceTranscription.length);
+        insertTextAtCursor(lastVoiceTranscription);
+        voiceInsertAwaiting = false;
+      } else if (translateOn && voiceInsertAwaiting) {
+        console.log('[VoiceInsert] waiting for translation after recording_stopped; pending ids=', pendingVoiceInsert.size);
+      }
+      try { isRecordingFlag = false; updateTrayMenu(); } catch {}
+    }
+  } catch (e) {
+    try { console.warn('[VoiceInsert] error:', e && e.message); } catch {}
+  }
+}
+
+// 托盘与后台驻留
+function resolveTrayIconPath() {
+  // 优先使用 .ico（Windows），其他平台用 .png
+  const ico = path.join(__dirname, 'assets', 'icons', 'icon.ico');
+  const png = path.join(__dirname, 'assets', 'icons', 'icon.png');
+  try {
+    if (process.platform === 'win32' && fs.existsSync(ico)) return ico;
+    if (fs.existsSync(png)) return png;
+    if (fs.existsSync(ico)) return ico;
+  } catch {}
+  // 打包后可能位于 resourcesPath 下（需根据实际打包配置调整）
+  try {
+    const pIco = path.join(process.resourcesPath || '', 'assets', 'icons', 'icon.ico');
+    const pPng = path.join(process.resourcesPath || '', 'assets', 'icons', 'icon.png');
+    if (process.platform === 'win32' && fs.existsSync(pIco)) return pIco;
+    if (fs.existsSync(pPng)) return pPng;
+    if (fs.existsSync(pIco)) return pIco;
+  } catch {}
+  return null;
+}
+
+function getTrayMenuTemplate() {
+  const hasWindow = !!(mainWindow && !mainWindow.isDestroyed());
+  const isShown = hasWindow && mainWindow.isVisible();
+  const items = [];
+  items.push({
+    label: isShown ? '隐藏主界面' : '显示主界面',
+    click: () => {
+      if (!mainWindow) {
+        createMainWindow();
+      } else {
+        if (mainWindow.isVisible()) {
+          mainWindow.hide();
+          try { mainWindow.setSkipTaskbar(true); } catch {}
+        } else {
+          mainWindow.show();
+          try { mainWindow.setSkipTaskbar(false); } catch {}
+        }
+      }
+      try { updateTrayMenu(); } catch {}
+    }
+  });
+
+  items.push({ type: 'separator' });
+
+  // 录音切换
+  items.push({
+    label: isRecordingFlag ? '⏹️ 停止录音' : '🎤 开始录音',
+    click: async () => {
+      if (isRecordingFlag) {
+        try { sendToPython({ type: 'stop_recording' }); isRecordingFlag = false; } catch {}
+        try { updateTrayMenu(); } catch {}
+      } else {
+        try {
+          if (!pythonProcess) startPythonService();
+          try { loadConfig(); sendToPython({ type: 'update_config', force: true, config }); } catch {}
+          const ok = sendToPython({ type: 'start_recording' });
+          if (ok) isRecordingFlag = true;
+        } catch {}
+        try { updateTrayMenu(); } catch {}
+      }
+    }
+  });
+
+  // 语音输入切换（全局热键外的托盘开关）
+  items.push({
+    label: isVoiceInputRecording ? '🛑 停止语音输入' : '🎙️ 开始语音输入',
+    click: () => {
+      if (isVoiceInputRecording) handleVoiceHotkeyUp(); else handleVoiceHotkeyDown();
+      try { updateTrayMenu(); } catch {}
+    }
+  });
+
+  items.push({ type: 'separator' });
+
+  items.push({
+    label: '设置...',
+    click: () => createSettingsWindow()
+  });
+  items.push({
+    label: '媒体转写...',
+    click: () => createMediaTranscribeWindow()
+  });
+
+  items.push({ type: 'separator' });
+
+  items.push({
+    label: '退出',
+    click: async () => {
+      isQuitting = true;
+      try { if (tray && tray.destroy) tray.destroy(); } catch {}
+      try { await stopPythonService(true); } catch {}
+      try { globalShortcut.unregisterAll(); } catch {}
+      app.quit();
+    }
+  });
+
+  return items;
+}
+
+function updateTrayMenu() {
+  if (!tray) return;
+  try {
+    const template = getTrayMenuTemplate();
+    const menu = Menu.buildFromTemplate(template);
+    tray.setContextMenu(menu);
+    const tip = isVoiceInputRecording
+      ? '语音输入中（再次按快捷键或托盘停止）'
+      : (isRecordingFlag ? '录音中' : '语音转写');
+    tray.setToolTip(tip);
+  } catch (e) {
+    try { console.warn('[Tray] update failed:', e && e.message); } catch {}
+  }
+}
+
+function createTray() {
+  try {
+    const iconPath = resolveTrayIconPath();
+    const image = iconPath ? nativeImage.createFromPath(iconPath) : null;
+    tray = new Tray(image || undefined);
+    tray.setToolTip('语音转写');
+    tray.on('click', () => {
+      // 单击切换显示/隐藏
+      if (!mainWindow) {
+        createMainWindow();
+      } else if (mainWindow.isVisible()) {
+        mainWindow.hide();
+        try { mainWindow.setSkipTaskbar(true); } catch {}
+      } else {
+        mainWindow.show();
+        try { mainWindow.setSkipTaskbar(false); } catch {}
+      }
+      updateTrayMenu();
+    });
+    updateTrayMenu();
+  } catch (e) {
+    try { console.warn('[Tray] create failed:', e && e.message); } catch {}
+  }
+}

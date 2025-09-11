@@ -3,6 +3,8 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('electronAPI', {
   startRecording: () => ipcRenderer.invoke('start-recording'),
   stopRecording: () => ipcRenderer.invoke('stop-recording'),
+  startVoiceInput: () => ipcRenderer.invoke('start-voice-input'),
+  stopVoiceInput: () => ipcRenderer.invoke('stop-voice-input'),
   getConfig: () => ipcRenderer.invoke('get-config'),
   getServiceStatus: () => ipcRenderer.invoke('get-service-status'),
   saveConfig: (config) => ipcRenderer.invoke('save-config', config),

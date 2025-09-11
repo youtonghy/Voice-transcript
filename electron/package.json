@@ -1,6 +1,6 @@
 {
   "name": "Voice-Transcript-Translate",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Voice transcription and translation desktop app",
   "author": {
     "name": "youtonghy",
@@ -13,11 +13,12 @@
     "dev": "electron . --dev",
     "build": "electron-builder",
     "dist:win": "npm run build:py:win && electron-builder --win",
-    "build:py:transcribe": ".venv\\Scripts\\python.exe -m nuitka --onefile --windows-console-mode=disable --include-module=modles --output-dir=dist-python\\win --output-filename=transcribe_service.exe transcribe_service.py",
-    "build:py:media": ".venv\\Scripts\\python.exe -m nuitka --onefile --windows-console-mode=disable --include-module=modles --include-data-files=ffmpeg.exe=ffmpeg\\ffmpeg.exe --output-dir=dist-python\\win --output-filename=media_transcribe.exe media_transcribe.py",
+    "kill:pyexe": "node scripts/kill-python-exes.js",
+    "build:py:transcribe": "npm run kill:pyexe && .venv\\Scripts\\python.exe -m nuitka --onefile --windows-console-mode=disable --include-module=modles --include-module=dashscope --output-dir=dist-python\\win --output-filename=transcribe_service.exe transcribe_service.py",
+    "build:py:media": "npm run kill:pyexe && .venv\\Scripts\\python.exe -m nuitka --onefile --windows-console-mode=disable --include-module=modles --include-module=dashscope --include-data-files=ffmpeg.exe=ffmpeg\\ffmpeg.exe --output-dir=dist-python\\win --output-filename=media_transcribe.exe media_transcribe.py",
     "build:py:win": "npm run build:py:transcribe && npm run build:py:media && npm run copy:runtime",
-    "build:pyi:transcribe": ".venv\\Scripts\\python.exe -m PyInstaller --noconfirm --onefile --name transcribe_service --hidden-import modles --distpath dist-python\\win --workpath dist-python\\build --clean --noconsole transcribe_service.py",
-    "build:pyi:media": ".venv\\Scripts\\python.exe -m PyInstaller --noconfirm --onefile --name media_transcribe --hidden-import modles --distpath dist-python\\win --workpath dist-python\\build --clean --noconsole media_transcribe.py",
+    "build:pyi:transcribe": "npm run kill:pyexe && .venv\\Scripts\\python.exe -m PyInstaller --noconfirm --onefile --name transcribe_service --hidden-import modles --hidden-import dashscope --distpath dist-python\\win --workpath dist-python\\build --clean --noconsole transcribe_service.py",
+    "build:pyi:media": "npm run kill:pyexe && .venv\\Scripts\\python.exe -m PyInstaller --noconfirm --onefile --name media_transcribe --hidden-import modles --hidden-import dashscope --distpath dist-python\\win --workpath dist-python\\build --clean --noconsole media_transcribe.py",
     "copy:runtime": "node -e \"const fs=require('fs'),p='dist-python\\\\win';fs.mkdirSync(p,{recursive:true});try{fs.copyFileSync('ffmpeg.exe',p+'\\\\ffmpeg.exe');}catch(e){}try{fs.copyFileSync('soniox_realtime.py',p+'\\\\soniox_realtime.py');}catch(e){}\"",
     "build:pyi:win": "npm run build:pyi:transcribe && npm run build:pyi:media && npm run copy:runtime"
   },

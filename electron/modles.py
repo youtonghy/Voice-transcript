@@ -8,6 +8,8 @@ from __future__ import annotations
 import os
 import re
 from typing import Optional
+import json
+from datetime import datetime
 
 
 def _file_url_from_path(path: str) -> str:
@@ -151,6 +153,57 @@ def detect_language_openai(text: str, language1: str, language2: str, api_key: O
 
 # ---------------------------- Qwen (DashScope) ----------------------------
 
+def _extract_text_from_qwen_output_struct(output: dict) -> Optional[str]:
+    """Extract plain text from Qwen 'output' structure.
+
+    Expected structure (per SDK examples):
+    {
+      "choices": [
+        {
+          "finish_reason": "stop",
+          "message": {
+            "content": [ {"text": "..."}, ... ]
+          }
+        }
+      ]
+    }
+    Also supports direct fields like output["text"] or output["output_text"].
+    """
+    try:
+        if not isinstance(output, dict):
+            return None
+        # Direct fields first
+        direct = output.get('text') or output.get('output_text')
+        if isinstance(direct, str) and direct.strip():
+            return direct.strip()
+
+        choices = output.get('choices')
+        if isinstance(choices, list) and choices:
+            for ch in choices:
+                if not isinstance(ch, dict):
+                    continue
+                msg = ch.get('message')
+                if not isinstance(msg, dict):
+                    continue
+                content = msg.get('content')
+                if isinstance(content, list):
+                    parts = []
+                    for item in content:
+                        if isinstance(item, dict):
+                            txt = item.get('text') or item.get('content') or ''
+                            if isinstance(txt, str) and txt.strip():
+                                parts.append(txt.strip())
+                        elif isinstance(item, str) and item.strip():
+                            parts.append(item.strip())
+                    if parts:
+                        return '\n'.join(parts).strip()
+                elif isinstance(content, str) and content.strip():
+                    return content.strip()
+        return None
+    except Exception:
+        return None
+
+
 def transcribe_qwen(filepath: str, language: Optional[str], api_key: Optional[str]) -> Optional[str]:
     """Transcribe audio using Qwen3-ASR per Qwen3-ASR.py sample.
 
@@ -190,43 +243,54 @@ def transcribe_qwen(filepath: str, language: Optional[str], api_key: Optional[st
     except Exception:
         return None
 
-    # Extract text in the typical 'message' result_format shape
+    # Coerce SDK response to a dict-like 'output' and extract text
+    output = None
     try:
-        output = getattr(response, 'output', None)
-        if isinstance(output, dict):
-            # Some SDK versions expose direct text fields
-            direct = output.get('text') or output.get('output_text')
-            if isinstance(direct, str) and direct.strip():
-                return direct.strip()
+        out_attr = getattr(response, 'output', None)
+        if isinstance(out_attr, dict):
+            output = out_attr
+        elif isinstance(response, dict) and isinstance(response.get('output'), dict):
+            output = response.get('output')
+        else:
+            # Sometimes the SDK stringifies to JSON
+            try:
+                as_str = str(response)
+                obj = json.loads(as_str)
+                if isinstance(obj, dict) and isinstance(obj.get('output'), dict):
+                    output = obj.get('output')
+            except Exception:
+                output = None
+    except Exception:
+        output = None
 
-            choices = output.get('choices')
-            if isinstance(choices, list) and choices:
-                choice0 = choices[0] if isinstance(choices[0], dict) else None
-                if isinstance(choice0, dict):
-                    msg = choice0.get('message')
-                    if isinstance(msg, dict):
-                        content = msg.get('content')
-                        if isinstance(content, list):
-                            parts = []
-                            for item in content:
-                                if isinstance(item, str):
-                                    parts.append(item)
-                                elif isinstance(item, dict):
-                                    txt = item.get('text') or item.get('content') or ''
-                                    if isinstance(txt, str) and txt:
-                                        parts.append(txt)
-                            text = '\n'.join([p for p in parts if p]).strip()
-                            if text:
-                                return text
+    text = _extract_text_from_qwen_output_struct(output) if output is not None else None
+    if text:
+        return text
+
+    # Log full raw response JSON to stdout for debugging if no text extracted
+    try:
+        raw = None
+        if output is not None:
+            raw = output
+        else:
+            try:
+                raw = json.loads(str(response))
+            except Exception:
+                try:
+                    raw = response.__dict__
+                except Exception:
+                    raw = str(response)
+        msg = {
+            "type": "log",
+            "level": "info",
+            "message": "Qwen raw response: " + (json.dumps(raw, ensure_ascii=False) if not isinstance(raw, str) else raw),
+            "timestamp": datetime.now().isoformat()
+        }
+        print(json.dumps(msg, ensure_ascii=False), flush=True)
     except Exception:
         pass
 
-    # As a minimal fallback, try stringifying the response
-    try:
-        s = str(response)
-        return s if s.strip() else None
-    except Exception:
-        return None
+    return None
 
 
 # ---------------------------- Soniox ----------------------------
