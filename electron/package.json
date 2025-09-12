@@ -19,7 +19,7 @@
     "build:py:win": "npm run build:py:transcribe && npm run build:py:media && npm run copy:runtime",
     "build:pyi:transcribe": "npm run kill:pyexe && .venv\\Scripts\\python.exe -m PyInstaller --noconfirm --onefile --name transcribe_service --hidden-import modles --hidden-import dashscope --distpath dist-python\\win --workpath dist-python\\build --clean --noconsole transcribe_service.py",
     "build:pyi:media": "npm run kill:pyexe && .venv\\Scripts\\python.exe -m PyInstaller --noconfirm --onefile --name media_transcribe --hidden-import modles --hidden-import dashscope --distpath dist-python\\win --workpath dist-python\\build --clean --noconsole media_transcribe.py",
-    "copy:runtime": "node -e \"const fs=require('fs'),p='dist-python\\\\win';fs.mkdirSync(p,{recursive:true});try{fs.copyFileSync('ffmpeg.exe',p+'\\\\ffmpeg.exe');}catch(e){}try{fs.copyFileSync('soniox_realtime.py',p+'\\\\soniox_realtime.py');}catch(e){}\"",
+    "copy:runtime": "node -e \"const fs=require('fs'),p='dist-python\\\\win';fs.mkdirSync(p,{recursive:true});try{fs.copyFileSync('ffmpeg.exe',p+'\\\\ffmpeg.exe');}catch(e){}\"",
     "build:pyi:win": "npm run build:pyi:transcribe && npm run build:pyi:media && npm run copy:runtime"
   },
   "devDependencies": {
@@ -40,7 +40,8 @@
       "settings.js",
       "media-transcribe.html",
       "media-transcribe-renderer.js",
-      "package.json"
+      "package.json",
+      "assets/**/*"
     ],
     "extraResources": [
       {
@@ -55,8 +56,7 @@
         "from": ".",
         "to": "python",
         "filter": [
-          "ffmpeg.exe",
-          "soniox_realtime.py"
+          "ffmpeg.exe"
         ]
       }
     ],
