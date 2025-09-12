@@ -5,7 +5,7 @@ let pythonServiceStatus = 'unknown'; // 'starting', 'running', 'error', 'stopped
 let isVoiceActive = false; // Added: track voice activity status
 let openaiConfigured = false; // Whether OpenAI is configured (when required)
 let sonioxConfigured = false; // Whether Soniox is configured (when required)
-let qwenConfigured = false;   // Whether Qwen (DashScope) is configured (when required)
+// Qwen3-ASR removed
 let translationEnabled = true; // Read from config, used to control combined display
 let currentResultNode = null; // Current combined result bubble
 let resultNodes = new Map(); // Result node mapping table, key is result_id, value is DOM element
@@ -55,11 +55,11 @@ async function checkOpenAIConfig() {
             // When using Soniox as transcribe source, only require Soniox key in UI
             const openaiRequired = (transcribeSource === 'openai');
             const sonioxRequired = (transcribeSource === 'soniox');
-            const qwenRequired = (transcribeSource === 'qwen3-asr');
+            const qwenRequired = false; // removed
 
             const newOpenaiConfigured = !!(cfg && cfg.openai_api_key && cfg.openai_api_key.trim());
             const newSonioxConfigured = !!(cfg && cfg.soniox_api_key && cfg.soniox_api_key.trim());
-            const newQwenConfigured = !!(cfg && (cfg.dashscope_api_key || cfg.qwen_api_key) && (cfg.dashscope_api_key || cfg.qwen_api_key).trim());
+            const newQwenConfigured = false;
 
             // Only warn when required and not configured
             if (openaiRequired && openaiConfigured !== newOpenaiConfigured) {
@@ -76,12 +76,7 @@ async function checkOpenAIConfig() {
                 }
             }
 
-            if (qwenRequired && qwenConfigured !== newQwenConfigured) {
-                qwenConfigured = newQwenConfigured;
-                if (!qwenConfigured) {
-                    addLogEntry('warning', 'Qwen3-ASR not configured (current source: Qwen3-ASR)');
-                }
-            }
+            // Qwen3-ASR support removed
 
             translationEnabled = newTranslationEnabled;
             
@@ -215,14 +210,22 @@ function updateUI() {
         } else {
             recordButton.className = 'control-bar-btn record-btn stop recording-idle';
         }
-        statusDot.className = 'status-dot recording';
-        statusText.textContent = '录音中...';
+        if (typeof statusDot !== 'undefined' && statusDot) {
+            statusDot.className = 'status-dot recording';
+        }
+        if (typeof statusText !== 'undefined' && statusText) {
+            statusText.textContent = '录音中...';
+        }
     } else {
         recordButton.textContent = '🎤';
         recordButton.title = '开始录音';
         recordButton.className = 'control-bar-btn record-btn start';
-        statusDot.className = 'status-dot idle';
-        statusText.textContent = pythonServiceStatus === 'running' ? '就绪' : '服务未就绪';
+        if (typeof statusDot !== 'undefined' && statusDot) {
+            statusDot.className = 'status-dot idle';
+        }
+        if (typeof statusText !== 'undefined' && statusText) {
+            statusText.textContent = pythonServiceStatus === 'running' ? '就绪' : '服务未就绪';
+        }
     }
 }
 
@@ -501,5 +504,18 @@ function openMediaTranscribe() {
     }
   } catch (error) {
     console.error('Failed to open media transcribe:', error);
+  }
+}
+
+// Quick entry to voice input settings (dedicated page)
+function openKeyboardSettings() {
+  try {
+    if (window.electronAPI && window.electronAPI.openVoiceInputSettings) {
+      window.electronAPI.openVoiceInputSettings();
+    } else {
+      console.warn('Electron API not available');
+    }
+  } catch (error) {
+    console.error('Failed to open keyboard/voice settings:', error);
   }
 }

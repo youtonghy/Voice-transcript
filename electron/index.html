@@ -45,114 +45,49 @@
             margin: 0 auto;
         }
 
-        /* 控制条按钮基础样式 */
+        /* 控制条按钮（仅图标） */
         .control-bar-btn {
             width: 45px;
             height: 45px;
-            border: 2px solid #e5e5e5;
-            border-radius: 50%;
-            font-size: 1.5rem;
+            font-size: 1.6rem;
             cursor: pointer;
-            transition: all 0.2s ease;
+            transition: color 0.2s ease, transform 0.2s ease;
             display: flex;
             align-items: center;
             justify-content: center;
             position: relative;
-            background: #ffffff;
+            background: transparent;
+            border: none;
+            border-radius: 0;
             color: #666;
         }
 
         .control-bar-btn:hover {
-            border-color: #333;
-            color: #333;
+            color: #111;
             transform: translateY(-1px);
         }
 
-        /* 录音按钮样式 */
-        .record-btn.start {
-            background: #ffffff;
-            border-color: #333;
-            color: #333;
+        /* 录音按钮（仅图标） */
+        .record-btn.start { color: #333; }
+        .record-btn.stop { color: #d32f2f; }
+        .record-btn.recording-active { color: #d32f2f; animation: pulse-icon 1.6s ease-in-out infinite; }
+        .record-btn.recording-idle { color: #d32f2f; }
+        .record-btn.disabled { color: #ccc !important; cursor: not-allowed !important; animation: none !important; }
+
+        /* 其他按钮（仅图标） */
+        .settings-btn, .media-btn, .keyboard-btn { color: #666; }
+        .settings-btn:hover, .media-btn:hover, .keyboard-btn:hover { color: #111; }
+
+        /* 脉冲动画（图标缩放） */
+        @keyframes pulse-icon {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.12); }
+            100% { transform: scale(1); }
         }
 
-        .record-btn.start:hover {
-            background: #f5f5f5;
-            border-color: #000;
-            color: #000;
-        }
-
-        .record-btn.stop {
-            background: #333;
-            border-color: #333;
-            color: white;
-        }
-
-        .record-btn.recording-active {
-            background: #333;
-            border-color: #333;
-            color: white;
-            animation: pulse-btn 2s infinite;
-        }
-
-        .record-btn.recording-idle {
-            background: #333;
-            border-color: #333;
-            color: white;
-        }
-
-        .record-btn.disabled {
-            background: #f5f5f5 !important;
-            border-color: #e5e5e5 !important;
-            color: #ccc !important;
-            cursor: not-allowed !important;
-            animation: none !important;
-        }
-
-        /* 设置按钮样式 */
-        .settings-btn {
-            background: #ffffff;
-            border-color: #666;
-            color: #666;
-        }
-
-        .settings-btn:hover {
-            background: #f5f5f5;
-            border-color: #333;
-            color: #333;
-        }
-
-        /* 媒体转写按钮样式 */
-        .media-btn {
-            background: #ffffff;
-            border-color: #666;
-            color: #666;
-        }
-
-        .media-btn:hover {
-            background: #f5f5f5;
-            border-color: #333;
-            color: #333;
-        }
-
-        /* 脉冲动画 */
-        @keyframes pulse-btn {
-            0% { box-shadow: 0 0 0 0 rgba(51, 51, 51, 0.7); }
-            70% { box-shadow: 0 0 0 15px rgba(51, 51, 51, 0); }
-            100% { box-shadow: 0 0 0 0 rgba(51, 51, 51, 0); }
-        }
-
-        /* 状态指示器 */
+        /* 状态指示器（首页隐藏“就绪”提示） */
         .status-indicator {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            padding: 8px 16px;
-            background: #f8f9fa;
-            border-radius: 20px;
-            border: 1px solid #e5e5e5;
-            font-size: 0.9rem;
-            color: #666;
-            font-weight: 500;
+          display: none;
         }
 
         .status-dot {
@@ -178,9 +113,33 @@
 
         /* 主内容区域 */
         .main-content {
-            padding-top: 60px; /* 为固定控制条留出空间 */
-            height: 100vh;
-            overflow: hidden;
+          padding-top: 60px; /* 为固定控制条留出空间 */
+          padding-right: 72px; /* 为右侧边栏留出空间 */
+          height: 100vh;
+          overflow: hidden;
+        }
+
+        /* 右侧边栏 */
+        .right-sidebar {
+          position: fixed;
+          top: 60px; /* 避开顶部栏 */
+          right: 0;
+          bottom: 0;
+          width: 72px;
+          background: #ffffff;
+          border-left: 1px solid #e5e5e5;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 12px;
+          padding: 12px 12px;
+          box-shadow: 0 0 0 rgba(0,0,0,0); /* 占位，便于将来扩展 */
+        }
+
+        /* 边栏按钮（复用基础按钮样式） */
+        .right-sidebar .control-bar-btn {
+          width: 45px;
+          height: 45px;
         }
 
         /* 日志面板 */
@@ -336,30 +295,21 @@
     </style>
 </head>
 <body>
-    <!-- 固定顶部控制条 -->
+    <!-- 固定顶部控制条（仅保留麦克风按钮） -->
     <div class="control-bar">
         <div class="control-bar-content">
             <!-- 录音控制 -->
             <button class="control-bar-btn record-btn start" id="recordButton" title="开始录音">
                 🎤
             </button>
-
-            <!-- 状态指示器 -->
-            <div class="status-indicator" title="服务状态">
-                <div class="status-dot idle" id="statusDot"></div>
-                <span class="status-text" id="statusText">就绪</span>
-            </div>
-
-            <!-- 设置按钮 -->
-            <button class="control-bar-btn settings-btn" onclick="openSettings()" title="设置">
-                ⚙️
-            </button>
-
-            <!-- 媒体转写按钮 -->
-            <button class="control-bar-btn media-btn" onclick="openMediaTranscribe()" title="媒体文件转写">
-                🎬
-            </button>
         </div>
+    </div>
+
+    <!-- 右侧边栏：设置与媒体转写置顶 -->
+    <div class="right-sidebar">
+      <button class="control-bar-btn keyboard-btn" onclick="openKeyboardSettings()" title="语音输入设置">⌨️</button>
+      <button class="control-bar-btn settings-btn" onclick="openSettings()" title="设置">⚙️</button>
+      <button class="control-bar-btn media-btn" onclick="openMediaTranscribe()" title="媒体文件转写">🎬</button>
     </div>
 
     <!-- 主内容区域 -->

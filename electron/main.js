@@ -12,6 +12,7 @@ if (!app.requestSingleInstanceLock()) {
 let mainWindow = null;
 let settingsWindow = null;
 let mediaTranscribeWindow = null;
+let voiceInputWindow = null;
 let tray = null;
 let isQuitting = false;
 
@@ -40,7 +41,7 @@ let config = {
   openai_transcribe_model: 'gpt-4o-transcribe',
   openai_translate_model: 'gpt-4o-mini',
   // Engines
-  // recognition_engine: 'openai' | 'soniox' | 'qwen3-asr'
+  // recognition_engine: 'openai' | 'soniox'
   recognition_engine: 'openai',
   // translation_engine: currently only 'openai'
   translation_engine: 'openai',
@@ -48,8 +49,9 @@ let config = {
   transcribe_source: 'openai',
   // Soniox API key (used when transcribe_source === 'soniox')
   soniox_api_key: '',
-  // Qwen3-ASR (DashScope) API key (used when transcribe_source === 'qwen3-asr')
+  // Qwen3-ASR (DashScope)
   dashscope_api_key: '',
+  qwen3_asr_model: 'qwen3-asr-flash',
   enable_translation: true,
   translate_language: 'Chinese',
   translation_mode: 'fixed',
@@ -144,7 +146,7 @@ function handleVoiceHotkeyDown() {
     console.log('[VoiceHotkey] backend not running, starting...');
     startPythonService();
   }
-  const voiceEngine = config.voice_input_engine || config.recognition_engine || config.transcribe_source || 'openai';
+  let voiceEngine = config.voice_input_engine || config.recognition_engine || config.transcribe_source || 'openai';
   const voiceLang = config.voice_input_language || 'auto';
   const wantTranslate = !!config.voice_input_translate;
   const translateLang = config.voice_input_translate_language || config.translate_language || 'Chinese';
@@ -220,7 +222,7 @@ function createMainWindow() {
   });
 }
 
-function createSettingsWindow() {
+function createSettingsWindow(section) {
   if (settingsWindow && !settingsWindow.isDestroyed()) {
     settingsWindow.focus();
     return;
@@ -235,7 +237,15 @@ function createSettingsWindow() {
       preload: path.join(__dirname, 'preload.js')
     }
   });
-  settingsWindow.loadFile(path.join(__dirname, 'settings.html'));
+  if (section) {
+    try {
+      settingsWindow.loadFile(path.join(__dirname, 'settings.html'), { hash: String(section) });
+    } catch (_) {
+      settingsWindow.loadFile(path.join(__dirname, 'settings.html'));
+    }
+  } else {
+    settingsWindow.loadFile(path.join(__dirname, 'settings.html'));
+  }
   settingsWindow.on('closed', () => {
     settingsWindow = null;
   });
@@ -259,6 +269,27 @@ function createMediaTranscribeWindow() {
   mediaTranscribeWindow.loadFile(path.join(__dirname, 'media-transcribe.html'));
   mediaTranscribeWindow.on('closed', () => {
     mediaTranscribeWindow = null;
+  });
+}
+
+function createVoiceInputWindow() {
+  if (voiceInputWindow && !voiceInputWindow.isDestroyed()) {
+    voiceInputWindow.focus();
+    return;
+  }
+  voiceInputWindow = new BrowserWindow({
+    width: 720,
+    height: 640,
+    parent: mainWindow || undefined,
+    modal: false,
+    webPreferences: {
+      contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js')
+    }
+  });
+  voiceInputWindow.loadFile(path.join(__dirname, 'voice-input.html'));
+  voiceInputWindow.on('closed', () => {
+    voiceInputWindow = null;
   });
 }
 
@@ -438,8 +469,8 @@ function startPythonService() {
         const source = config.recognition_engine || config.transcribe_source || 'openai';
         const oai = !!(config.openai_api_key && config.openai_api_key.trim());
         const sxi = !!(config.soniox_api_key && config.soniox_api_key.trim());
-        const qwn = !!((config.dashscope_api_key || config.qwen_api_key) && (config.dashscope_api_key || config.qwen_api_key).trim());
-        console.log('[Main] Python spawned. Sending initial config:', { source, openaiKeySet: oai, sonioxKeySet: sxi, qwenKeySet: qwn });
+      const dsc = !!(config.dashscope_api_key && config.dashscope_api_key.trim());
+      console.log('[Main] Python spawned. Sending initial config:', { source, openaiKeySet: oai, sonioxKeySet: sxi, dashscopeKeySet: dsc });
       } catch {}
       sendToPythonDirect({ type: 'update_config', config });
     });
@@ -537,13 +568,18 @@ async function stopPythonService(graceful = true) {
 }
 
 // IPC Handlers - app/windows
-ipcMain.handle('open-settings', async () => {
-  createSettingsWindow();
+ipcMain.handle('open-settings', async (_event, section) => {
+  createSettingsWindow(section);
   return true;
 });
 
 ipcMain.handle('open-media-transcribe', async () => {
   createMediaTranscribeWindow();
+  return true;
+});
+
+ipcMain.handle('open-voice-input-settings', async () => {
+  createVoiceInputWindow();
   return true;
 });
 
@@ -560,8 +596,7 @@ ipcMain.handle('save-config', async (_event, newConfig) => {
       const source = config.transcribe_source || 'openai';
       const oai = !!(config.openai_api_key && config.openai_api_key.trim());
       const sxi = !!(config.soniox_api_key && config.soniox_api_key.trim());
-      const qwn = !!((config.dashscope_api_key || config.qwen_api_key) && (config.dashscope_api_key || config.qwen_api_key).trim());
-      console.log('[Main] Config saved:', { source, openaiKeySet: oai, sonioxKeySet: sxi, qwenKeySet: qwn });
+      console.log('[Main] Config saved:', { source, openaiKeySet: oai, sonioxKeySet: sxi });
       if (pythonProcess) console.log('[Main] Restart the backend (Ctrl+R or app relaunch) to apply provider changes.');
     } catch {}
     try { registerVoiceInputShortcut(); } catch {}
@@ -594,7 +629,7 @@ ipcMain.handle('start-recording', async () => {
       source: config.recognition_engine || config.transcribe_source || 'openai',
       openaiKeySet: !!(config.openai_api_key && config.openai_api_key.trim()),
       sonioxKeySet: !!(config.soniox_api_key && config.soniox_api_key.trim()),
-      qwenKeySet: !!((config.dashscope_api_key || config.qwen_api_key) && (config.dashscope_api_key || config.qwen_api_key).trim()),
+      dashscopeKeySet: !!(config.dashscope_api_key && config.dashscope_api_key.trim()),
     });
     sendToPython({ type: 'update_config', force: true, config });
   } catch (e) {

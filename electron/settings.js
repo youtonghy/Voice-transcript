@@ -1,10 +1,12 @@
-let currentConfig = {};
+﻿let currentConfig = {};
 let autoSaveTimeout = null; // Debounce timer
 
 document.addEventListener('DOMContentLoaded', () => {
     loadCurrentConfig();
     setupEventListeners();
     try { updateProviderVisibility(); } catch {}
+    try { scrollToHashSection(); } catch {}
+    try { attachGlobalAutoSave(); } catch {}
 });
 
 function setupEventListeners() {
@@ -49,7 +51,7 @@ function setupEventListeners() {
     // API URL changes also trigger real-time detection
     document.getElementById('apiUrl').addEventListener('input', autoSave);
     
-    // 引擎切换（识别/翻译）
+    // 寮曟搸鍒囨崲锛堣瘑鍒?缈昏瘧锛?
     const recognitionEngine = document.getElementById('recognitionEngine');
     const translationEngine = document.getElementById('translationEngine');
     if (recognitionEngine) {
@@ -89,7 +91,7 @@ function setupEventListeners() {
     // Add auto-save on blur for all input fields
     const autoSaveInputs = [
         'apiKey', 'apiUrl', 'openaiTranscribeModel', 'openaiTranslateModel', 'targetLanguage', 'customLanguage', 'transcribeLanguage',
-        'translationMode', 'language1', 'language2', 'recognitionEngine', 'translationEngine', 'sonioxApiKey', 'qwenApiKey',
+        'translationMode', 'language1', 'language2', 'recognitionEngine', 'translationEngine', 'sonioxApiKey', 'dashscopeApiKey', 'qwen3AsrModel',
         'silenceThreshold', 'silenceDuration', 'theaterMode'
     ];
     
@@ -102,17 +104,46 @@ function setupEventListeners() {
     });
 }
 
+// Scroll to anchor section if hash exists (e.g., #voice-input)
+function scrollToHashSection() {
+  const hash = (window.location.hash || '').replace(/^#/, '');
+  if (!hash) return;
+  const el = document.getElementById(hash);
+  if (el && typeof el.scrollIntoView === 'function') {
+    setTimeout(() => {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      try { el.focus({ preventScroll: true }); } catch {}
+    }, 50);
+  }
+}
+
+// 瀵硅缃〃鍗曞唴鎵€鏈夋帶浠舵坊鍔犲け鐒﹀嵆淇濆瓨
+function attachGlobalAutoSave() {
+  const form = document.getElementById('settingsForm');
+  if (!form) return;
+  const controls = form.querySelectorAll('input, select, textarea');
+  controls.forEach(el => {
+    el.addEventListener('blur', autoSave);
+    el.addEventListener('change', autoSave);
+    if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
+      el.addEventListener('input', debounce(autoSave, 600));
+    }
+  });
+}
+
+function debounce(fn, ms) { let h=null; return (...args)=>{ if (h) clearTimeout(h); h=setTimeout(()=>fn(...args), ms); }; }
+
 async function loadCurrentConfig() {
     try {
         currentConfig = await window.electronAPI.getConfig();
         populateForm(currentConfig);
     } catch (error) {
-        showTopNotification(`❌ 加载配置失败: ${error.message}`, 'error');
+        showTopNotification(`Failed to load configuration: ${error.message}`, 'error');
     }
 }
 
 function populateForm(config) {
-    // 引擎配置（兼容旧字段 transcribe_source）
+    // 寮曟搸閰嶇疆锛堝吋瀹规棫瀛楁 transcribe_source锛?
     (function(){
         const recEl = document.getElementById('recognitionEngine');
         const tlEl = document.getElementById('translationEngine');
@@ -126,8 +157,12 @@ function populateForm(config) {
     document.getElementById('apiUrl').value = config.openai_base_url || '';
     const sonioxEl = document.getElementById('sonioxApiKey');
     if (sonioxEl) sonioxEl.value = config.soniox_api_key || '';
-    const qwenEl = document.getElementById('qwenApiKey');
-    if (qwenEl) qwenEl.value = (config.dashscope_api_key || config.qwen_api_key || '') || '';
+    
+    const dashscopeEl = document.getElementById('dashscopeApiKey');
+    if (dashscopeEl) dashscopeEl.value = config.dashscope_api_key || '';
+    const qwenModelEl = document.getElementById('qwen3AsrModel');
+    if (qwenModelEl) qwenModelEl.value = config.qwen3_asr_model || 'qwen3-asr-flash';
+    
     // OpenAI model fields
     const oaiTrModel = document.getElementById('openaiTranscribeModel');
     if (oaiTrModel) oaiTrModel.value = config.openai_transcribe_model || 'gpt-4o-transcribe';
@@ -141,7 +176,8 @@ function populateForm(config) {
     // Target language: if not in dropdown options, switch to custom
     const targetLanguage = document.getElementById('targetLanguage');
     const customLanguage = document.getElementById('customLanguage');
-    const savedLang = config.translate_language || '中文';
+    let savedLang = config.translate_language || 'Chinese';
+    if (savedLang === '中文') savedLang = 'Chinese';
     const options = Array.from(targetLanguage.options).map(o => o.value);
     if (options.includes(savedLang)) {
         targetLanguage.value = savedLang;
@@ -170,7 +206,7 @@ function populateForm(config) {
     })();
     
     // Smart translation language settings
-    document.getElementById('language1').value = config.smart_language1 || '中文';
+    document.getElementById('language1').value = config.smart_language1 || 'Chinese';
     document.getElementById('language2').value = config.smart_language2 || 'English';
     
     // Advanced settings
@@ -190,7 +226,10 @@ function populateForm(config) {
 
         if (viEnabledEl) viEnabledEl.checked = !!(config.voice_input_enabled);
         if (viHotkeyEl) viHotkeyEl.value = (config.voice_input_hotkey || 'F3');
-        if (viEngineEl) viEngineEl.value = (config.voice_input_engine || config.recognition_engine || config.transcribe_source || 'openai');
+    if (viEngineEl) {
+        let eng = (config.voice_input_engine || config.recognition_engine || config.transcribe_source || 'openai');
+        viEngineEl.value = eng;
+    }
         if (viLangEl) viLangEl.value = (config.voice_input_language || 'auto');
         if (viTlChk) viTlChk.checked = !!config.voice_input_translate;
         if (viTlLang) viTlLang.value = (config.voice_input_translate_language || config.translate_language || 'Chinese');
@@ -276,7 +315,7 @@ function updateTranscribeLanguageAvailability() {
     if (enableEl.checked && modeEl.value === 'smart' && transcribeContainer) {
         const note = document.createElement('div');
         note.className = 'mode-note';
-        note.textContent = '智能翻译模式下，转录语言将自动检测';
+        note.textContent = 'In Smart translation mode, transcription language is auto-detected';
         note.style.fontSize = '12px';
         note.style.color = '#666';
         note.style.marginTop = '5px';
@@ -287,22 +326,23 @@ function updateTranscribeLanguageAvailability() {
 function updateProviderVisibility() {
     const rec = (document.getElementById('recognitionEngine') || {}).value || 'openai';
     const tl = (document.getElementById('translationEngine') || {}).value || 'openai';
-    // OpenAI 通用配置：任一引擎为 OpenAI 时显示
+    // OpenAI 通用设置：任一引擎为 OpenAI 时显示
     document.querySelectorAll('.provider-openai-common').forEach(el => {
         el.style.display = (rec === 'openai' || tl === 'openai') ? '' : 'none';
     });
-    // OpenAI 识别模型：当识别引擎为 OpenAI 时显示
+    // OpenAI 语音识别模型：仅当识别引擎为 OpenAI 时显示
     document.querySelectorAll('.provider-openai-rec').forEach(el => {
         el.style.display = (rec === 'openai') ? '' : 'none';
     });
-    // OpenAI 翻译模型：当翻译引擎为 OpenAI 时显示
+    // OpenAI 翻译模型：仅当翻译引擎为 OpenAI 时显示
     document.querySelectorAll('.provider-openai-trans').forEach(el => {
         el.style.display = (tl === 'openai') ? '' : 'none';
     });
-    // Soniox/Qwen3-ASR 凭据：仅识别引擎对应时显示
+    // Soniox：仅当识别引擎为 Soniox 时显示
     document.querySelectorAll('.provider-soniox').forEach(el => {
         el.style.display = (rec === 'soniox') ? '' : 'none';
     });
+    // Qwen3-ASR：仅当识别引擎为 Qwen3-ASR 时显示
     document.querySelectorAll('.provider-qwen3-asr').forEach(el => {
         el.style.display = (rec === 'qwen3-asr') ? '' : 'none';
     });
@@ -320,10 +360,10 @@ function validateApiKey() {
     }
     
     if (apiKey.startsWith('sk-') && apiKey.length > 20) {
-        indicator.textContent = '✓ 格式正确';
+        indicator.textContent = 'Valid format';
         indicator.className = 'valid';
     } else {
-        indicator.textContent = '✗ 格式无效';
+        indicator.textContent = 'Invalid format';
         indicator.className = 'invalid';
     }
 }
@@ -360,7 +400,7 @@ async function saveSettingsInternal(silent = false) {
             
             if (!targetLang.trim()) {
                 if (!silent) {
-                    showTopNotification('❌ 请设置翻译目标语言', 'error');
+                    showTopNotification('Please set the target translation language', 'error');
                 }
                 return false;
             }
@@ -370,13 +410,13 @@ async function saveSettingsInternal(silent = false) {
         currentConfig = config;
         
         if (!silent) {
-            showTopNotification('✅ 设置已保存', 'success');
+            showTopNotification('Settings saved', 'success');
         }
         return true;
         
     } catch (error) {
         if (!silent) {
-            showTopNotification(`❌ 保存失败: ${error.message}`, 'error');
+            showTopNotification(`Save failed: ${error.message}`, 'error');
         }
         console.error('Save settings error:', error);
         return false;
@@ -386,17 +426,21 @@ async function saveSettingsInternal(silent = false) {
 function collectFormData() {
     const config = {};
     
-    // 引擎配置
+    // 寮曟搸閰嶇疆
     config.recognition_engine = (document.getElementById('recognitionEngine') || { value: 'openai' }).value;
     config.translation_engine = (document.getElementById('translationEngine') || { value: 'openai' }).value;
-    // 向后兼容字段
+    // 鍚戝悗鍏煎瀛楁
     config.transcribe_source = config.recognition_engine;
     config.openai_api_key = document.getElementById('apiKey').value.trim();
     config.openai_base_url = document.getElementById('apiUrl').value.trim();
     const sonioxEl = document.getElementById('sonioxApiKey');
     if (sonioxEl) config.soniox_api_key = sonioxEl.value.trim();
-    const qwenEl = document.getElementById('qwenApiKey');
-    if (qwenEl) config.dashscope_api_key = qwenEl.value.trim();
+    
+    const dashscopeEl = document.getElementById('dashscopeApiKey');
+    if (dashscopeEl) config.dashscope_api_key = dashscopeEl.value.trim();
+    const qwenModelEl = document.getElementById('qwen3AsrModel');
+    if (qwenModelEl) config.qwen3_asr_model = (qwenModelEl.value || '').trim();
+    
     // OpenAI models
     const oaiTrModel = document.getElementById('openaiTranscribeModel');
     if (oaiTrModel) config.openai_transcribe_model = (oaiTrModel.value || '').trim();
@@ -511,3 +555,8 @@ function showTopNotification(message, type = 'info') {
         }
     }, 3000);
 }
+
+
+
+
+

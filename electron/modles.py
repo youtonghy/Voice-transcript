@@ -6,64 +6,9 @@ Centralizes third-party model calls so transcribe_service.py stays focused on au
 from __future__ import annotations
 
 import os
-import re
 from typing import Optional
 import json
 from datetime import datetime
-
-
-def _file_url_from_path(path: str) -> str:
-    """Return a file URI string compatible with DashScope on all platforms.
-
-    Windows:  file://C:/path/file.wav
-    POSIX:    file:///absolute/path/file.wav
-    """
-    try:
-        abspath = os.path.abspath(path).replace('\\', '/')
-        if os.name == 'nt':
-            if re.match(r'^[A-Za-z]:/', abspath):
-                return f"file://{abspath}"
-            if abspath.startswith('//'):
-                return f"file:{abspath}"
-            return f"file://{abspath}"
-        if not abspath.startswith('/'):
-            abspath = '/' + abspath
-        return f"file://{abspath}"
-    except Exception:
-        return f"file://{path}"
-
-
-def _map_language_to_qwen_code(lang: Optional[str]) -> str:
-    """Map human language names/codes to Qwen codes using ASCII-only matching."""
-    if not lang:
-        return ''
-    l = str(lang).strip().lower().replace('_', '-')
-    synonyms = {
-        'zh': ['zh', 'zh-cn', 'zh-hans', 'zh-hant', 'cn', 'chinese', 'simplified chinese', 'traditional chinese'],
-        'en': ['en', 'eng', 'english'],
-        'ja': ['ja', 'jp', 'jpn', 'japanese'],
-        'ko': ['ko', 'kr', 'kor', 'korean'],
-        'es': ['es', 'spa', 'spanish', 'espanol'],
-        'fr': ['fr', 'fra', 'fre', 'french'],
-        'de': ['de', 'deu', 'ger', 'german', 'deutsch'],
-        'it': ['it', 'ita', 'italian', 'italiano'],
-        'pt': ['pt', 'por', 'portuguese', 'portugues'],
-        'ru': ['ru', 'rus', 'russian'],
-        'ar': ['ar', 'ara', 'arabic'],
-        'hi': ['hi', 'hin', 'hindi'],
-        'th': ['th', 'tha', 'thai'],
-        'vi': ['vi', 'vie', 'vietnamese', 'vietnam'],
-        'id': ['id', 'ind', 'indonesian', 'indonesia', 'indo'],
-        'tr': ['tr', 'tur', 'turkish', 'turk'],
-        'nl': ['nl', 'nld', 'dut', 'dutch', 'nederlands', 'neder'],
-        'pl': ['pl', 'pol', 'polish', 'polski'],
-        'uk': ['uk', 'ukr', 'ukrainian', 'ukrain'],
-        'cs': ['cs', 'ces', 'czech'],
-    }
-    for code, names in synonyms.items():
-        if l == code or l in names:
-            return code
-    return ''
 
 
 # ---------------------------- OpenAI helpers ----------------------------
@@ -151,146 +96,83 @@ def detect_language_openai(text: str, language1: str, language2: str, api_key: O
     return language2
 
 
-# ---------------------------- Qwen (DashScope) ----------------------------
+# ---------------------------- Qwen3-ASR (DashScope) ----------------------------
 
-def _extract_text_from_qwen_output_struct(output: dict) -> Optional[str]:
-    """Extract plain text from Qwen 'output' structure.
-
-    Expected structure (per SDK examples):
-    {
-      "choices": [
-        {
-          "finish_reason": "stop",
-          "message": {
-            "content": [ {"text": "..."}, ... ]
-          }
-        }
-      ]
-    }
-    Also supports direct fields like output["text"] or output["output_text"].
-    """
+def _to_file_uri(path: str) -> str:
     try:
-        if not isinstance(output, dict):
-            return None
-        # Direct fields first
-        direct = output.get('text') or output.get('output_text')
-        if isinstance(direct, str) and direct.strip():
-            return direct.strip()
-
-        choices = output.get('choices')
-        if isinstance(choices, list) and choices:
-            for ch in choices:
-                if not isinstance(ch, dict):
-                    continue
-                msg = ch.get('message')
-                if not isinstance(msg, dict):
-                    continue
-                content = msg.get('content')
-                if isinstance(content, list):
-                    parts = []
-                    for item in content:
-                        if isinstance(item, dict):
-                            txt = item.get('text') or item.get('content') or ''
-                            if isinstance(txt, str) and txt.strip():
-                                parts.append(txt.strip())
-                        elif isinstance(item, str) and item.strip():
-                            parts.append(item.strip())
-                    if parts:
-                        return '\n'.join(parts).strip()
-                elif isinstance(content, str) and content.strip():
-                    return content.strip()
-        return None
+        if not path:
+            return path
+        p = os.path.abspath(path)
+        p = p.replace('\\', '/')
+        # Ensure triple slash for Windows drive paths
+        if ':' in p[:3]:
+            return f"file:///{p}"
+        # Posix absolute
+        if p.startswith('/'):
+            return f"file://{p}"
+        return f"file:///{p}"
     except Exception:
-        return None
+        return f"file://{path}"
 
 
-def transcribe_qwen(filepath: str, language: Optional[str], api_key: Optional[str]) -> Optional[str]:
-    """Transcribe audio using Qwen3-ASR per Qwen3-ASR.py sample.
-
-    - Uses dashscope.MultiModalConversation with model 'qwen3-asr-flash'
-    - Builds file:// URI for local audio
-    - Enables LID and ITN; sets language when provided
-    - Returns plain transcription text if available, else None
-    """
-    # Prefer provided key; fall back to environment like Qwen3-ASR.py
-    key = api_key or os.getenv('DASHSCOPE_API_KEY')
+def transcribe_qwen3_asr(
+    filepath: str,
+    api_key: Optional[str] = None,
+    model: Optional[str] = None,
+    language: Optional[str] = None,
+    enable_lid: bool = True,
+    enable_itn: bool = False,
+) -> Optional[str]:
+    key = api_key or os.environ.get('DASHSCOPE_API_KEY')
     if not key:
-        return None
-
+        raise RuntimeError('Missing DASHSCOPE_API_KEY (DashScope)')
     try:
         import dashscope  # type: ignore
-    except Exception:
-        return None
+    except Exception as e:
+        raise RuntimeError('DashScope SDK (dashscope) not installed') from e
 
-    audio_uri = _file_url_from_path(filepath)
+    file_uri = _to_file_uri(filepath)
     messages = [
         {"role": "system", "content": [{"text": ""}]},
-        {"role": "user", "content": [{"audio": audio_uri}]},
+        {"role": "user", "content": [{"audio": file_uri}]},
     ]
-    asr_options = {"enable_lid": True, "enable_itn": True}
-    code = _map_language_to_qwen_code(language)
-    if code:
-        asr_options["language"] = code
-
+    asr_opts = {
+        "enable_lid": bool(enable_lid),
+        "enable_itn": bool(enable_itn),
+    }
+    # Only pass language if caller provides code like 'zh'/'en'; otherwise rely on LID
+    if language and language.lower() not in ("auto", "automatic"):
+        asr_opts["language"] = language
+    resp = dashscope.MultiModalConversation.call(
+        api_key=key,
+        model=(model or 'qwen3-asr-flash'),
+        messages=messages,
+        result_format='message',
+        asr_options=asr_opts,
+    )
+    # Parse message content -> first text part
     try:
-        response = dashscope.MultiModalConversation.call(
-            api_key=key,
-            model="qwen3-asr-flash",
-            messages=messages,
-            result_format="message",
-            asr_options=asr_options,
-        )
-    except Exception:
-        return None
-
-    # Coerce SDK response to a dict-like 'output' and extract text
-    output = None
-    try:
-        out_attr = getattr(response, 'output', None)
-        if isinstance(out_attr, dict):
-            output = out_attr
-        elif isinstance(response, dict) and isinstance(response.get('output'), dict):
-            output = response.get('output')
-        else:
-            # Sometimes the SDK stringifies to JSON
-            try:
-                as_str = str(response)
-                obj = json.loads(as_str)
-                if isinstance(obj, dict) and isinstance(obj.get('output'), dict):
-                    output = obj.get('output')
-            except Exception:
-                output = None
-    except Exception:
-        output = None
-
-    text = _extract_text_from_qwen_output_struct(output) if output is not None else None
-    if text:
-        return text
-
-    # Log full raw response JSON to stdout for debugging if no text extracted
-    try:
-        raw = None
-        if output is not None:
-            raw = output
-        else:
-            try:
-                raw = json.loads(str(response))
-            except Exception:
-                try:
-                    raw = response.__dict__
-                except Exception:
-                    raw = str(response)
-        msg = {
-            "type": "log",
-            "level": "info",
-            "message": "Qwen raw response: " + (json.dumps(raw, ensure_ascii=False) if not isinstance(raw, str) else raw),
-            "timestamp": datetime.now().isoformat()
-        }
-        print(json.dumps(msg, ensure_ascii=False), flush=True)
+        choices = (resp or {}).get('output', {}).get('choices', [])
+        if not choices:
+            # Some versions may expose attributes
+            output = getattr(resp, 'output', None)
+            if output and isinstance(output, dict):
+                choices = output.get('choices', [])
+        if choices:
+            msg = choices[0].get('message') or {}
+            content = msg.get('content') or []
+            # Find first text entry
+            for item in content:
+                t = item.get('text') if isinstance(item, dict) else None
+                if t and str(t).strip():
+                    return str(t).strip()
     except Exception:
         pass
-
-    return None
+    # Fallback: stringify response
+    try:
+        return json.dumps(resp, ensure_ascii=False)
+    except Exception:
+        return None
 
 
 # ---------------------------- Soniox ----------------------------

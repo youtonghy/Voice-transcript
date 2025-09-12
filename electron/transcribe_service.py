@@ -260,52 +260,47 @@ def transcribe_with_soniox(filepath):
         log_message("error", f"Soniox transcription error: {e}")
         return None
 
-
-def transcribe_with_qwen(filepath):
-    """Transcribe using Qwen3-ASR via models module with timeout and logs."""
+def transcribe_with_qwen3_asr(filepath):
+    """Transcribe using Qwen3-ASR (DashScope)."""
     try:
         api_key = (
-            (config.get('dashscope_api_key') if isinstance(config, dict) else None)
-            or (config.get('qwen_api_key') if isinstance(config, dict) else None)
-            or os.environ.get('DASHSCOPE_API_KEY')
+            os.environ.get('DASHSCOPE_API_KEY')
+            or (config.get('dashscope_api_key') if isinstance(config, dict) else None)
         )
-        lang = (config.get('transcribe_language') if isinstance(config, dict) else None)
-        if not api_key:
-            log_message("warning", "Qwen3-ASR API key not set; cannot transcribe")
-            return None
-
-        # Call in a worker thread to avoid blocking the main thread indefinitely
-        q = queue.Queue(maxsize=1)
-
-        def _worker():
-            try:
-                text = modles.transcribe_qwen(filepath, lang, api_key)
-                q.put(text)
-            except Exception as e:
-                try:
-                    log_message("error", f"Qwen3-ASR transcription exception: {e}")
-                except Exception:
-                    pass
-                try:
-                    q.put(None)
-                except Exception:
-                    pass
-
-        t = threading.Thread(target=_worker, daemon=True)
-        t.start()
-        t.join(15.0)  # seconds
-        if t.is_alive():
-            log_message("warning", "Qwen3-ASR transcription timed out after 15s")
-            return None
+        model = None
         try:
-            result = q.get_nowait()
+            if isinstance(config, dict):
+                model = config.get('qwen3_asr_model') or 'qwen3-asr-flash'
         except Exception:
-            result = None
-        if result and isinstance(result, str) and result.strip():
-            return result.strip()
-        else:
-            log_message("warning", "Qwen3-ASR returned empty transcription")
-            return None
+            model = 'qwen3-asr-flash'
+        # Language: prefer auto (enable_lid) to avoid mismatch with UI labels
+        language = None
+        try:
+            tl = (config.get('transcribe_language') if isinstance(config, dict) else None)
+            if tl and str(tl).strip().lower() not in ('', 'auto', 'automatic'):
+                # Pass through only if already a short code like 'zh'/'en'
+                if len(tl) <= 4 and tl.isalpha():
+                    language = tl
+        except Exception:
+            pass
+        enable_lid = True
+        enable_itn = False
+        try:
+            if isinstance(config, dict):
+                if 'qwen3_asr_enable_lid' in config:
+                    enable_lid = bool(config.get('qwen3_asr_enable_lid'))
+                if 'qwen3_asr_enable_itn' in config:
+                    enable_itn = bool(config.get('qwen3_asr_enable_itn'))
+        except Exception:
+            pass
+        return modles.transcribe_qwen3_asr(
+            filepath,
+            api_key=api_key,
+            model=model,
+            language=language,
+            enable_lid=enable_lid,
+            enable_itn=enable_itn,
+        )
     except Exception as e:
         log_message("error", f"Qwen3-ASR transcription error: {e}")
         return None
@@ -993,9 +988,9 @@ def transcribe_audio_file(filepath):
     if source == 'soniox':
         log_message("info", "Transcribing via Soniox backend")
         return transcribe_with_soniox(filepath)
-    if source == 'qwen3-asr':
-        log_message("info", "Transcribing via Qwen3-ASR (DashScope) backend")
-        return transcribe_with_qwen(filepath)
+    if source in ('qwen3-asr', 'qwen', 'dashscope'):
+        log_message("info", "Transcribing via Qwen3-ASR (DashScope)")
+        return transcribe_with_qwen3_asr(filepath)
 
     # Default: OpenAI via models module
     try:
@@ -1091,8 +1086,7 @@ def handle_message(message):
                 src = config.get('transcribe_source', 'openai')
                 oai_set = bool(config.get('openai_api_key') or os.environ.get('OPENAI_API_KEY'))
                 sxi_set = bool(config.get('soniox_api_key') or os.environ.get('SONIOX_API_KEY'))
-                qwn_set = bool(config.get('dashscope_api_key') or config.get('qwen_api_key') or os.environ.get('DASHSCOPE_API_KEY'))
-                log_message("info", f"Config applied. transcribe_source={src}, openai_key_set={oai_set}, soniox_key_set={sxi_set}, qwen_key_set={qwn_set}")
+                log_message("info", f"Config applied. transcribe_source={src}, openai_key_set={oai_set}, soniox_key_set={sxi_set}")
             except Exception:
                 pass
 

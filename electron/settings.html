@@ -1,9 +1,9 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>设置</title>
+    <title>Settings</title>
     <style>
         * {
             box-sizing: border-box;
@@ -18,7 +18,7 @@
             color: #333;
         }
 
-        /* 顶部导航栏（样式参考 media-transcribe.html） */
+        /* Top navbar (styled like media-transcribe.html)*/
         .nav-bar {
             position: fixed;
             top: 0;
@@ -83,7 +83,7 @@
             border-radius: 12px;
             padding: 30px;
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-            margin-top: 80px; /* 为顶部导航留空 */
+            margin-top: 80px; /* spacing*/
         }
 
         .settings-header {
@@ -165,10 +165,11 @@
             display: flex;
             gap: 15px;
             margin-top: 30px;
+            justify-content: flex-end;
         }
 
         .btn {
-            flex: 1;
+            flex: 0 0 auto;
             padding: 14px 20px;
             border: 1px solid #e5e5e5;
             border-radius: 8px;
@@ -298,7 +299,7 @@
             font-weight: 500;
         }
 
-        /* 顶部通知栏样式 */
+        /* Top notification styles */
         .top-notification {
             position: fixed;
             top: 0;
@@ -332,309 +333,292 @@
             background: #999;
         }
 
-        /* 顶部通知栏不再占据布局，使用绝对定位 */
+        /* Top notification absolute positioning */
+
+        /* Voice input subsection styles */
+        .voice-input-card {
+            background: #fafafa;
+            border: 1px solid #e5e5e5;
+            border-radius: 10px;
+            padding: 16px;
+            margin-top: 10px;
+        }
+
+        .voice-toggle-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+
+        .voice-input-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+
+        @media (max-width: 720px) {
+            .voice-input-grid { grid-template-columns: 1fr; }
+        }
+
+        .inline-note {
+            font-size: 12px;
+            color: #666;
+            margin-top: 6px;
+        }
     </style>
 </head>
 <body>
-    <!-- 顶部导航栏 -->
+    <!-- Top navigation -->
     <div class="nav-bar">
         <div class="nav-content">
             <div class="nav-left">
-                <a href="#" class="back-btn" title="返回主页" onclick="window.close(); return false;">←</a>
-                <div class="nav-title">设置</div>
+                <a href="#" class="back-btn" title="Back to Home" onclick="window.close(); return false;">←</a>
+                <div class="nav-title">Settings</div>
             </div>
         </div>
     </div>
-    <!-- 顶部通知栏 -->
+    <!-- Top notification bar -->
     <div class="top-notification" id="topNotification"></div>
     
     <div class="settings-container">
         <div class="settings-header">
-            <h1>⚙️ 设置</h1>
-            <p>配置API密钥和转写翻译选项</p>
+            <h1>Settings</h1>
+            <p>Configure API keys and transcription/translation options</p>
         </div>
 
         <form id="settingsForm">
-            <div class="section-title">🎙️ 识别引擎</div>
+            <div class="section-title">Recognition Engine</div>
             <div class="form-group">
-                <label for="recognitionEngine">识别引擎</label>
+                <label for="recognitionEngine">Recognition Engine</label>
                 <select id="recognitionEngine" name="recognition_engine">
                     <option value="openai" selected>OpenAI</option>
                     <option value="soniox">Soniox</option>
-                    <option value="qwen3-asr">Qwen3-ASR</option>
+                    <option value="qwen3-asr">Qwen3-ASR (DashScope)</option>
                 </select>
-                <div class="form-note">选择用于语音识别（转写）的提供方</div>
+                <div class="form-note">Choose the provider for speech recognition (transcription)</div>
             </div>
             <div class="form-group provider-openai-rec">
                 <label for="openaiTranscribeModel">Transcribe Model</label>
                 <input type="text" id="openaiTranscribeModel" name="openai_transcribe_model" placeholder="gpt-4o-transcribe">
-                <div class="form-note">音频转写所用模型（默认：gpt-4o-transcribe）</div>
+                <div class="form-note">Audio transcription model (default gpt-4o-transcribe)</div>
             </div>
             <div class="form-group provider-soniox" style="display:none;">
                 <label for="sonioxApiKey">Soniox API Key</label>
                 <input type="password" id="sonioxApiKey" name="soniox_api_key" placeholder="sxk-...">
-                <div class="form-note">仅当识别引擎为 Soniox 时需要</div>
+                <div class="form-note">Required when the recognition engine is Soniox</div>
             </div>
             <div class="form-group provider-qwen3-asr" style="display:none;">
-                <label for="qwenApiKey">Qwen3-ASR (DashScope) API Key</label>
-                <input type="password" id="qwenApiKey" name="dashscope_api_key" placeholder="sk-...">
-                <div class="form-note">仅当识别引擎为 Qwen3-ASR 时需要</div>
+                <label for="dashscopeApiKey">DashScope API Key</label>
+                <input type="password" id="dashscopeApiKey" name="dashscope_api_key" placeholder="sk-...">
+                <div class="form-note">Qwen3-ASR is provided via DashScope. Enter your DashScope API Key (or set environment variable DASHSCOPE_API_KEY).</div>
             </div>
+            <div class="form-group provider-qwen3-asr" style="display:none;">
+                <label for="qwen3AsrModel">Qwen3-ASR Model</label>
+                <input type="text" id="qwen3AsrModel" name="qwen3_asr_model" placeholder="qwen3-asr-flash">
+                <div class="form-note">Default is qwen3-asr-flash; change if you need another model</div>
+            </div>
+            
 
             <div class="divider"></div>
 
-            <div class="section-title">🌐 翻译引擎</div>
+            <div class="section-title">Translation Engine</div>
             <div class="form-group">
-                <label for="translationEngine">翻译引擎</label>
+                <label for="translationEngine">Translation Engine</label>
                 <select id="translationEngine" name="translation_engine">
-                    <option value="openai" selected>OpenAI（默认 gpt-4o-mini）</option>
+                    <option value="openai" selected>OpenAI (default gpt-4o-mini)</option>
                 </select>
-                <div class="form-note">选择用于文本翻译的提供方（当前仅支持 OpenAI）</div>
+                <div class="form-note">Choose the provider for text translation (currently only OpenAI)</div>
             </div>
             <div class="form-group provider-openai-trans">
                 <label for="openaiTranslateModel">Translate Model</label>
                 <input type="text" id="openaiTranslateModel" name="openai_translate_model" placeholder="gpt-4o-mini">
-                <div class="form-note">文本翻译所用模型</div>
+                <div class="form-note">Model used for text translation</div>
             </div>
 
             <div class="divider"></div>
 
-            <div class="section-title">🔑 OpenAI 通用配置</div>
+            <div class="section-title">OpenAI Common Settings</div>
             <div class="form-group provider-openai-common">
                 <label for="apiKey">OpenAI API Key</label>
                 <input type="password" id="apiKey" name="openai_api_key" placeholder="sk-...">
-                <div class="form-note">保存在本地 config.json；识别与翻译均可共用</div>
+                <div class="form-note">Saved to local config.json; shared by transcription and translation</div>
             </div>
             <div class="form-group provider-openai-common">
-                <label for="apiUrl">API Base URL（可选）</label>
+                <label for="apiUrl">API Base URL (optional)</label>
                 <input type="url" id="apiUrl" name="openai_base_url" placeholder="https://api.openai.com/v1">
-                <div class="form-note">留空使用 OpenAI 默认地址；自定义时以 /v1 结尾</div>
+                <div class="form-note">Leave empty to use OpenAI default; if custom, end with /v1</div>
             </div>
 
             <div class="divider"></div>
 
-            <div class="section-title">🌐 翻译设置</div>
+            <div class="section-title">Translation Settings</div>
 
             <div class="checkbox-group">
                 <input type="checkbox" id="enableTranslation" name="enable_translation">
-                <label for="enableTranslation">启用自动翻译</label>
+                <label for="enableTranslation">Enable Auto Translation</label>
             </div>
 
             <div class="form-group" id="translationSettings">
-                <label for="translationMode">翻译模式</label>
+                <label for="translationMode">Translation Mode</label>
                 <select id="translationMode" name="translation_mode">
-                    <option value="fixed" selected>固定翻译</option>
-                    <option value="smart">智能翻译</option>
+                    <option value="fixed" selected>Fixed Translation</option>
+                    <option value="smart">Smart Translation</option>
                 </select>
-                <div class="form-note">
-                    固定翻译：始终翻译为指定语言；智能翻译：双语互译模式
-                </div>
+                <div class="form-note">Fixed: always translate to the target; Smart: better for bilingual conversations</div>
                 
-                <!-- 固定翻译设置 -->
+                <!-- Fixed translation settings -->
                 <div id="fixedTranslationSettings" style="margin-top: 15px;">
-                    <label for="targetLanguage">目标语言</label>
+                    <label for="targetLanguage">Target Language</label>
                     <select id="targetLanguage" name="translate_language">
-                        <option value="中文" selected>中文 (Chinese)</option>
+                        <option value="Chinese" selected>Chinese</option>
                         <option value="English">English</option>
-                        <option value="日本語">日本語 (Japanese)</option>
-                        <option value="한국어">한국어 (Korean)</option>
-                        <option value="Español">Español (Spanish)</option>
-                        <option value="Français">Français (French)</option>
-                        <option value="Deutsch">Deutsch (German)</option>
-                        <option value="Italiano">Italiano (Italian)</option>
-                        <option value="Português">Português (Portuguese)</option>
-                        <option value="Русский">Русский (Russian)</option>
-                        <option value="العربية">العربية (Arabic)</option>
-                        <option value="हिन्दी">हिन्दी (Hindi)</option>
-                        <option value="ไทย">ไทย (Thai)</option>
-                        <option value="Tiếng Việt">Tiếng Việt (Vietnamese)</option>
-                        <option value="Bahasa Indonesia">Bahasa Indonesia</option>
-                        <option value="Türkçe">Türkçe (Turkish)</option>
-                        <option value="Nederlands">Nederlands (Dutch)</option>
-                        <option value="Polski">Polski (Polish)</option>
-                        <option value="Українська">Українська (Ukrainian)</option>
-                        <option value="Čeština">Čeština (Czech)</option>
-                        <option value="__custom__">自定义...</option>
+                        <option value="Japanese">Japanese</option>
+                        <option value="Korean">Korean</option>
+                        <option value="Spanish">Spanish</option>
+                        <option value="French">French</option>
+                        <option value="German">German</option>
+                        <option value="Italian">Italian</option>
+                        <option value="Portuguese">Portuguese</option>
+                        <option value="Russian">Russian</option>
+                        <option value="Arabic">Arabic</option>
+                        <option value="Hindi">Hindi</option>
+                        <option value="Thai">Thai</option>
+                        <option value="Vietnamese">Vietnamese</option>
+                        <option value="Indonesian">Indonesian</option>
+                        <option value="Turkish">Turkish</option>
+                        <option value="Dutch">Dutch</option>
+                        <option value="Polish">Polish</option>
+                        <option value="Ukrainian">Ukrainian</option>
+                        <option value="Czech">Czech</option>
+                        <option value="__custom__">Custom...</option>
                     </select>
-                    <input type="text" id="customLanguage" placeholder="输入自定义语言" style="margin-top:10px; display:none;" />
+                    <input type="text" id="customLanguage" placeholder="Enter custom language" style="margin-top:10px; display:none;" />
                     <div class="form-note">
-                        可选择常用语言或选择"自定义..."后输入任意语言名称
+                        Select a common language or choose "Custom..." and type a language name
                     </div>
                 </div>
-                
-                <!-- 智能翻译设置 -->
+                <!-- Smart translation settings -->
                 <div id="smartTranslationSettings" style="margin-top: 15px; display: none;">
-                    <label for="language1">语言1</label>
+                    <label for="language1">Language 1</label>
                     <select id="language1" name="smart_language1">
-                        <option value="中文" selected>中文 (Chinese)</option>
+                        <option value="Chinese" selected>Chinese</option>
                         <option value="English">English</option>
-                        <option value="日本語">日本語 (Japanese)</option>
-                        <option value="한국어">한국어 (Korean)</option>
-                        <option value="Español">Español (Spanish)</option>
-                        <option value="Français">Français (French)</option>
-                        <option value="Deutsch">Deutsch (German)</option>
+                        <option value="Japanese">Japanese</option>
+                        <option value="Korean">Korean</option>
+                        <option value="Spanish">Spanish</option>
+                        <option value="French">French</option>
+                        <option value="German">German</option>
                         <option value="Italiano">Italiano (Italian)</option>
-                        <option value="Português">Português (Portuguese)</option>
-                        <option value="Русский">Русский (Russian)</option>
-                        <option value="العربية">العربية (Arabic)</option>
-                        <option value="हिन्दी">हिन्दी (Hindi)</option>
-                        <option value="ไทย">ไทย (Thai)</option>
-                        <option value="Tiếng Việt">Tiếng Việt (Vietnamese)</option>
-                        <option value="Bahasa Indonesia">Bahasa Indonesia</option>
-                        <option value="Türkçe">Türkçe (Turkish)</option>
-                        <option value="Nederlands">Nederlands (Dutch)</option>
-                        <option value="Polski">Polski (Polish)</option>
-                        <option value="Українська">Українська (Ukrainian)</option>
-                        <option value="Čeština">Čeština (Czech)</option>
+                        <option value="Portuguese">Portuguese</option>
+                        <option value="Russian">Russian</option>
+                        <option value="Arabic">Arabic</option>
+                        <option value="Hindi">Hindi</option>
+                        <option value="Thai">Thai</option>
+                        <option value="Vietnamese">Vietnamese</option>
+                        <option value="Indonesian">Indonesian</option>
+                        <option value="Turkish">Turkish</option>
+                        <option value="Dutch">Dutch</option>
+                        <option value="Polish">Polish</option>
+                        <option value="Ukrainian">Ukrainian</option>
+                        <option value="Czech">Czech</option>
                     </select>
                     
-                    <label for="language2" style="margin-top: 10px; display: block;">语言2</label>
+                    <label for="language2" style="margin-top: 10px; display: block;">Language 2</label>
                     <select id="language2" name="smart_language2">
-                        <option value="中文">中文 (Chinese)</option>
+                        <option value="Chinese">Chinese</option>
                         <option value="English" selected>English</option>
-                        <option value="日本語">日本語 (Japanese)</option>
-                        <option value="한국어">한국어 (Korean)</option>
-                        <option value="Español">Español (Spanish)</option>
-                        <option value="Français">Français (French)</option>
-                        <option value="Deutsch">Deutsch (German)</option>
-                        <option value="Italiano">Italiano (Italian)</option>
-                        <option value="Português">Português (Portuguese)</option>
-                        <option value="Русский">Русский (Russian)</option>
-                        <option value="العربية">العربية (Arabic)</option>
-                        <option value="हिन्दी">हिन्दी (Hindi)</option>
-                        <option value="ไทย">ไทย (Thai)</option>
-                        <option value="Tiếng Việt">Tiếng Việt (Vietnamese)</option>
-                        <option value="Bahasa Indonesia">Bahasa Indonesia</option>
-                        <option value="Türkçe">Türkçe (Turkish)</option>
-                        <option value="Nederlands">Nederlands (Dutch)</option>
-                        <option value="Polski">Polski (Polish)</option>
-                        <option value="Українська">Українська (Ukrainian)</option>
-                        <option value="Čeština">Čeština (Czech)</option>
+                        <option value="Japanese">Japanese</option>
+                        <option value="Korean">Korean</option>
+                        <option value="Spanish">Spanish</option>
+                        <option value="French">French</option>
+                        <option value="German">German</option>
+                        <option value="Italian">Italian</option>
+                        <option value="Portuguese">Portuguese</option>
+                        <option value="Russian">Russian</option>
+                        <option value="Arabic">Arabic</option>
+                        <option value="Hindi">Hindi</option>
+                        <option value="Thai">Thai</option>
+                        <option value="Vietnamese">Vietnamese</option>
+                        <option value="Indonesian">Indonesian</option>
+                        <option value="Turkish">Turkish</option>
+                        <option value="Dutch">Dutch</option>
+                        <option value="Polish">Polish</option>
+                        <option value="Ukrainian">Ukrainian</option>
+                        <option value="Czech">Czech</option>
                     </select>
                     <div class="form-note">
-                        智能翻译：如果转录为语言1则翻译为语言2，如果转录为语言2则翻译为语言1，适合双语对话场景
+                        
                     </div>
                 </div>
             </div>
 
             <div class="divider"></div>
 
-            <div class="section-title">🎙️ 转录设置</div>
+            <div class="section-title">Transcription Settings</div>
             
             <div class="form-group">
-                <label for="transcribeLanguage">转录语言</label>
+                <label for="transcribeLanguage">Transcription Language</label>
                 <select id="transcribeLanguage" name="transcribe_language">
-                    <option value="auto" selected>自动检测</option>
-                    <option value="中文">中文</option>
+                    <option value="auto" selected>Auto Detect</option>
+                    <option value="Chinese">Chinese</option>
                     <option value="English">English</option>
-                    <option value="日本語">日本語</option>
-                    <option value="한국어">한국어</option>
-                    <option value="Español">Español</option>
-                    <option value="Français">Français</option>
+                    <option value="Japanese">Japanese</option>
+                    <option value="Korean">Korean</option>
+                    <option value="Spanish">Spanish</option>
+                    <option value="French">French</option>
                     <option value="Deutsch">Deutsch</option>
-                    <option value="Italiano">Italiano</option>
-                    <option value="Português">Português</option>
-                    <option value="Русский">Русский</option>
-                    <option value="العربية">العربية</option>
-                    <option value="हिन्दी">हिन्दी</option>
-                    <option value="ไทย">ไทย</option>
-                    <option value="Tiếng Việt">Tiếng Việt</option>
-                    <option value="Bahasa Indonesia">Bahasa Indonesia</option>
-                    <option value="Türkçe">Türkçe</option>
+                    <option value="Italian">Italian</option>
+                    <option value="Portuguese">Portuguese</option>
+                    <option value="Russian">Russian</option>
+                    <option value="Arabic">Arabic</option>
+                    <option value="Hindi">Hindi</option>
+                    <option value="Thai">Thai</option>
+                    <option value="Vietnamese">Vietnamese</option>
+                    <option value="Indonesian">Indonesian</option>
+                    <option value="Turkish">Turkish</option>
                     <option value="Nederlands">Nederlands</option>
                     <option value="Polski">Polski</option>
-                    <option value="Українська">Українська</option>
-                    <option value="Čeština">Čeština</option>
                 </select>
-                <div class="form-note">
-                    选择"自动检测"时不使用提示词，选择特定语言时会使用"请转录为XX语言"作为提示词<br>
-                    <strong>注意：智能翻译模式下，转录语言将被强制设为"自动检测"</strong>
-                </div>
+                <div class="form-note">Choosing "Auto Detect" will not use a prompt; choosing a specific language will use the prompt "Please transcribe in XX language".<br><strong>Note: In Smart translation mode, transcription language will be auto-detected.</strong></div>
             </div>
 
             <div class="divider"></div>
 
-            <div class="section-title">🎙️ 录音设置</div>
+            <div class="section-title">Recording Settings</div>
 
             <div class="form-group">
-                <label for="silenceThreshold">静音阈值</label>
+                <label for="silenceThreshold">Silence Threshold</label>
                 <input type="number" id="silenceThreshold" name="silence_rms_threshold" 
                        min="0.001" max="0.1" step="0.001" value="0.01">
-                <div class="form-note">
-                    数值越小越敏感，建议范围：0.005-0.02
-                </div>
+                <div class="form-note">Smaller is more sensitive. Recommended range: 0.005–0.02</div>
             </div>
 
             <div class="form-group">
-                <label for="silenceDuration">静音分段时长（秒）</label>
+                <label for="silenceDuration">Silence Split Duration (seconds)</label>
                 <input type="number" id="silenceDuration" name="min_silence_seconds" 
                        min="0.5" max="5" step="0.1" value="1.0">
                 <div class="form-note">
-                    连续静音超过此时长将自动分段处理
+                    Split when continuous silence exceeds this duration
                 </div>
             </div>
 
             <div class="checkbox-group">
                 <input type="checkbox" id="theaterMode" name="theater_mode">
-                <label for="theaterMode">🎭 剧场模式</label>
+                <label for="theaterMode">Theater Mode</label>
             </div>
             <div class="form-note" style="margin-left: 32px; margin-top: -15px; margin-bottom: 20px;">
-                自动将录制的音频放大到正常说话音量，提高小音量录音的识别率
+                Amplify quiet audio to normal speech volume to improve recognition.
             </div>
 
             <div class="divider"></div>
 
-            <div class="section-title">语音输入</div>
-
-            <div class="form-group">
-                <label>
-                    <input type="checkbox" id="voiceInputEnabled"> 启用语音输入（全局切换：按一次开始，再按一次停止）
-                </label>
-            </div>
-
-            <div class="form-group">
-                <label for="voiceInputHotkey">快捷键</label>
-                <input type="text" id="voiceInputHotkey" placeholder="例如：F3 或 A">
-                <div class="form-note">仅支持 F1–F24、A–Z、0–9。</div>
-            </div>
-
-            <div class="form-group">
-                <label for="voiceInputEngine">转写引擎</label>
-                <select id="voiceInputEngine">
-                    <option value="openai">OpenAI</option>
-                    <option value="soniox">Soniox</option>
-                    <option value="qwen3-asr">Qwen3-ASR</option>
-                </select>
-            </div>
-
-            <div class="form-group">
-                <label for="voiceInputLanguage">转写语言</label>
-                <select id="voiceInputLanguage">
-                    <option value="auto">自动检测</option>
-                    <option value="Chinese">中文</option>
-                    <option value="English">English</option>
-                </select>
-            </div>
-
-            <div class="checkbox-group">
-                <input type="checkbox" id="voiceInputTranslate">
-                <label for="voiceInputTranslate">完成后插入翻译结果</label>
-            </div>
-
-            <div class="form-group" id="voiceInputTranslateLanguageGroup" style="display:none;">
-                <label for="voiceInputTranslateLanguage">翻译目标语言</label>
-                <input type="text" id="voiceInputTranslateLanguage" placeholder="如 Chinese, English 等">
-            </div>
+            
 
             <div id="statusMessage"></div>
 
             <div class="button-group">
-                <a href="index.html" class="btn btn-secondary" style="text-align:center; display:inline-block; line-height: 20px;">
-                    返回
-                </a>
-                <button type="submit" class="btn btn-primary">
-                    💾 保存设置
-                </button>
+                <a href="#" onclick="window.close(); return false;" class="btn btn-secondary" style="text-align:center; display:inline-block; line-height: 20px;">Back</a>
             </div>
         </form>
     </div>
@@ -642,3 +626,14 @@
     <script src="settings.js"></script>
 </body>
 </html>
+
+
+
+
+
+
+
+
+
+
+
