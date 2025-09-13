@@ -134,7 +134,10 @@ class _RealtimeTranscribePageState extends State<RealtimeTranscribePage> {
     _firstVoiceCandidateAt = null;
     _speechOnsetMsAccum = 0;
     // Calibrate noise floor for a short time
-    _calibrationUntil = _segmentStartAt!.add(Duration(milliseconds: 600));
+    // In RMS mode, we don't need noise-floor calibration; in dB mode we do.
+    _calibrationUntil = vad.useRms
+        ? null
+        : _segmentStartAt!.add(Duration(milliseconds: 600));
 
     _ampSub?.cancel();
     _ampSub = _recorder
@@ -161,8 +164,9 @@ class _RealtimeTranscribePageState extends State<RealtimeTranscribePage> {
           ? 0
           : DateTime.now().difference(startAt).inMilliseconds;
 
-      // If too short and not forced, drop.
-      if (!force && durationMs < max(300, (_settings?.vad.minChunkMs ?? 1500) ~/ 3)) {
+      // If too short and not forced, drop. In forced stop, always process.
+      final bool silentOnly = firstAt == null;
+      if (!force && (silentOnly || durationMs < max(300, (_settings?.vad.minChunkMs ?? 1500) ~/ 3))) {
         if (stoppedPath != null) {
           // cleanup
           try {
@@ -172,18 +176,27 @@ class _RealtimeTranscribePageState extends State<RealtimeTranscribePage> {
       } else {
         final filePath = stoppedPath ?? path;
         // Prepare pre-roll cache (tail of this segment) for next segment bridging
-        try {
-          final s = _settings ?? await _settingsRepo.load();
-          final preStart = (durationMs - s.vad.preRollMs).clamp(0, durationMs);
-          _preRollCachePath = await trimWav(filePath, startMs: preStart, endMs: durationMs);
-        } catch (_) {}
-        final messageId = _nextMsgId++;
-        setState(() {
-          _messages.add(_TranscribeMessage(id: messageId, status: _MsgStatus.processing));
-        });
-        _scrollToBottom();
-        // Process transcription + translation in background
-        unawaited(_processFile(messageId, filePath, segStartAt, finalizeAt, firstAt));
+        if (!silentOnly) {
+          try {
+            final s = _settings ?? await _settingsRepo.load();
+            final preStart = (durationMs - s.vad.preRollMs).clamp(0, durationMs);
+            _preRollCachePath = await trimWav(filePath, startMs: preStart, endMs: durationMs);
+          } catch (_) {}
+        }
+
+        final bool shouldProcess = !silentOnly || force;
+        if (shouldProcess) {
+          final messageId = _nextMsgId++;
+          setState(() {
+            _messages.add(_TranscribeMessage(id: messageId, status: _MsgStatus.processing));
+          });
+          _scrollToBottom();
+          // Process transcription + translation in background
+          unawaited(_processFile(messageId, filePath, segStartAt, finalizeAt, firstAt));
+        } else {
+          // Silent-only and not forced: cleanup
+          try { await File(filePath).delete(); } catch (_) {}
+        }
       }
     } finally {
       _cutting = false;
@@ -198,10 +211,69 @@ class _RealtimeTranscribePageState extends State<RealtimeTranscribePage> {
     final segStart = _segmentStartAt ?? now;
     final segDuration = now.difference(segStart).inMilliseconds;
 
+    // RMS mode: compare linear RMS directly to configured threshold
+    if (vad.useRms) {
+      // Convert incoming amplitude to linear RMS in [0,1]
+      // Heuristic:
+      //  - raw < 0: treat as dBFS, convert to linear
+      //  - 0 <= raw <= 1: treat as already-normalized linear amplitude
+      //  - raw > 1: treat as PCM magnitude and normalize
+      double raw = amp.current;
+      double rms;
+      if (raw < 0) {
+        // dB to linear
+        rms = pow(10, raw / 20).toDouble();
+      } else if (raw <= 1.0) {
+        // Already linear 0..1 (including exact 0)
+        rms = raw;
+      } else {
+        // PCM magnitude
+        rms = (raw / 32767.0);
+      }
+      if (rms.isNaN || rms.isInfinite) rms = 0.0;
+      rms = rms.clamp(0.0, 1.0);
+
+      final bool speakingNow = rms >= vad.silenceRms;
+      if (speakingNow) {
+        _lastVoiceAt = now;
+        _silenceAccumMs = 0;
+        if (!_speechActive) {
+          if (vad.onsetMs <= 0) {
+            _speechActive = true;
+            _firstVoiceAt ??= now;
+          } else {
+            _firstVoiceCandidateAt ??= now;
+            _speechOnsetMsAccum += vad.amplitudeWindowMs;
+            if (_speechOnsetMsAccum >= vad.onsetMs) {
+              _speechActive = true;
+              _firstVoiceAt ??= _firstVoiceCandidateAt ?? now;
+            }
+          }
+        }
+      } else {
+        // Below RMS threshold: count silence and reset onset
+        _speechOnsetMsAccum = 0;
+        _firstVoiceCandidateAt = null;
+        _silenceAccumMs += vad.amplitudeWindowMs;
+        if (!_speechActive && _silenceAccumMs >= vad.minSilenceMs) {
+          unawaited(_finalizeSegment());
+          return;
+        }
+      }
+
+      final bool longEnough = segDuration >= vad.minChunkMs;
+      if (_speechActive && _silenceAccumMs >= vad.minSilenceMs && longEnough) {
+        // Sentence boundary reached
+        unawaited(_finalizeSegment());
+      }
+      return; // Skip dB pathway entirely in RMS mode
+    }
+
     // Normalize level to decibels (approximately)
     final ln10 = log(10);
     double db = amp.current;
-    final isDb = db <= 0 && db >= -200; // heuristic
+    // Treat strictly negative values as dBFS; 0 is ambiguous and treated as linear silence
+    final isDb = db < 0 && db >= -200; // heuristic
     if (!isDb) {
       // Convert linear amplitude to dB scale best-effort
       if (db > 0 && db <= 1) {
@@ -217,7 +289,7 @@ class _RealtimeTranscribePageState extends State<RealtimeTranscribePage> {
     // Smooth with exponential moving average
     _emaDb = _emaDb == null ? db : (0.2 * db + 0.8 * _emaDb!);
 
-    // Calibrate noise floor for a short time at start of each segment
+    // Calibrate noise floor for a short time at start of each segment (dB mode)
     if (_calibrationUntil != null && now.isBefore(_calibrationUntil!)) {
       _noiseFloorDb = _noiseFloorDb == null
           ? _emaDb
@@ -278,6 +350,11 @@ class _RealtimeTranscribePageState extends State<RealtimeTranscribePage> {
       _speechOnsetMsAccum = 0;
       _firstVoiceCandidateAt = null;
       _silenceAccumMs += vad.amplitudeWindowMs;
+      // If we never detected speech in this segment and it remains silent long enough, finalize silently
+      if (!_speechActive && _silenceAccumMs >= vad.minSilenceMs) {
+        unawaited(_finalizeSegment());
+        return;
+      }
     }
 
     final bool longEnough = segDuration >= vad.minChunkMs;

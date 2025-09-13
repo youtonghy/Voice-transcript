@@ -65,7 +65,7 @@ class VADSettings {
         minSilenceMs: (json['minSilenceMs'] as num?)?.toInt() ?? 1000,
         minChunkMs: (json['minChunkMs'] as num?)?.toInt() ?? 1500,
         amplitudeWindowMs: (json['amplitudeWindowMs'] as num?)?.toInt() ?? 120,
-        useRms: (json['useRms'] as bool?) ?? false,
+        useRms: (json['useRms'] as bool?) ?? true,
         silenceRms: (json['silenceRms'] as num?)?.toDouble() ?? 0.010,
         preRollMs: (json['preRollMs'] as num?)?.toInt() ?? 1000,
         onsetMs: (json['onsetMs'] as num?)?.toInt() ?? 120,
