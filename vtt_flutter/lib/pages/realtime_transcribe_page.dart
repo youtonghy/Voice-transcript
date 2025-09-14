@@ -22,6 +22,7 @@ class RealtimeTranscribePage extends StatefulWidget {
 
 class _RealtimeTranscribePageState extends State<RealtimeTranscribePage> {
   final ScrollController _scrollController = ScrollController();
+  final ScrollController _logScrollController = ScrollController();
   final SettingsRepository _settingsRepo = SettingsRepository();
   AppSettings? _settings;
 
@@ -33,20 +34,27 @@ class _RealtimeTranscribePageState extends State<RealtimeTranscribePage> {
   String? _currentPath;
   DateTime? _segmentStartAt;
   int _silenceAccumMs = 0;
-  // VAD state
-  double? _noiseFloorDb; // calibrated noise floor (dB)
-  double? _emaDb; // smoothed dB level
-  DateTime? _calibrationUntil; // until when to collect noise floor
-  bool _speechActive = false; // are we currently in speech
-  DateTime? _lastVoiceAt; // last time we detected voice
-  DateTime? _firstVoiceAt; // first voice time in current segment
-  DateTime? _firstVoiceCandidateAt; // first above-threshold time before confirmation
-  int _speechOnsetMsAccum = 0; // accumulated ms above speech threshold
+  // VAD state (RMS-based)
+  bool _speechActive = false; // whether we are inside an active speech segment
+  DateTime? _lastVoiceAt; // last time voice was detected
+  DateTime? _firstVoiceAt; // first above-threshold time in current segment
+  DateTime? _firstVoiceCandidateAt; // above-threshold time during onset confirmation
+  int _speechOnsetMsAccum = 0; // accumulated ms above threshold for onset confirmation
+  double? _emaDb; // smoothed dB value for logging only
   String? _preRollCachePath; // last segment's tail for pre-roll bridging
 
   // Messages
   int _nextMsgId = 1;
   final List<_TranscribeMessage> _messages = [];
+
+  // Ordered processing queue to ensure FIFO upload/output
+  final List<_SegmentJob> _pendingJobs = [];
+  bool _processingJobs = false;
+
+  // Debug logging
+  bool _logMode = false; // whether to show realtime VAD logs
+  final List<String> _logLines = [];
+  DateTime? _lastLogAt; // last time we emitted a periodic level log
 
   @override
   void initState() {
@@ -58,6 +66,7 @@ class _RealtimeTranscribePageState extends State<RealtimeTranscribePage> {
   void dispose() {
     _ampSub?.cancel();
     _scrollController.dispose();
+    _logScrollController.dispose();
     _recorder.dispose();
     super.dispose();
   }
@@ -109,6 +118,38 @@ class _RealtimeTranscribePageState extends State<RealtimeTranscribePage> {
     });
   }
 
+  void _scrollLogsToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_logScrollController.hasClients) return;
+      _logScrollController.jumpTo(
+        _logScrollController.position.maxScrollExtent,
+      );
+    });
+  }
+
+  String _two(int n) => n.toString().padLeft(2, '0');
+
+  void _appendLog(String line) {
+    final now = DateTime.now();
+    final ts = '${_two(now.hour)}:${_two(now.minute)}:${_two(now.second)}.${now.millisecond.toString().padLeft(3, '0')}';
+    final entry = '[$ts] $line';
+    if (_logMode) {
+      setState(() {
+        _logLines.add(entry);
+        if (_logLines.length > 300) {
+          _logLines.removeRange(0, _logLines.length - 300);
+        }
+      });
+      _scrollLogsToBottom();
+    } else {
+      // Accumulate logs even when hidden so that once shown, history is available
+      _logLines.add(entry);
+      if (_logLines.length > 300) {
+        _logLines.removeRange(0, _logLines.length - 300);
+      }
+    }
+  }
+
   Future<void> _startNewSegment() async {
     final vad = _settings?.vad ?? VADSettings();
     final dir = await getTemporaryDirectory();
@@ -126,23 +167,18 @@ class _RealtimeTranscribePageState extends State<RealtimeTranscribePage> {
     _currentPath = path;
     _segmentStartAt = DateTime.now();
     _silenceAccumMs = 0;
-    _noiseFloorDb = null;
     _emaDb = null;
     _speechActive = false;
     _lastVoiceAt = _segmentStartAt;
     _firstVoiceAt = null;
     _firstVoiceCandidateAt = null;
     _speechOnsetMsAccum = 0;
-    // Calibrate noise floor for a short time
-    // In RMS mode, we don't need noise-floor calibration; in dB mode we do.
-    _calibrationUntil = vad.useRms
-        ? null
-        : _segmentStartAt!.add(Duration(milliseconds: 600));
+    _lastLogAt = null;
 
     _ampSub?.cancel();
     _ampSub = _recorder
         .onAmplitudeChanged(Duration(milliseconds: vad.amplitudeWindowMs))
-        .listen((amp) => _onAmplitude(amp, vad));
+        .listen((amp) => _onAmplitudeRmsSimplified(amp, vad));
   }
 
   Future<void> _finalizeSegment({bool force = false}) async {
@@ -191,8 +227,9 @@ class _RealtimeTranscribePageState extends State<RealtimeTranscribePage> {
             _messages.add(_TranscribeMessage(id: messageId, status: _MsgStatus.processing));
           });
           _scrollToBottom();
-          // Process transcription + translation in background
-          unawaited(_processFile(messageId, filePath, segStartAt, finalizeAt, firstAt));
+          // Enqueue for ordered processing (transcription + translation)
+          _enqueueSegment(messageId, filePath, segStartAt, finalizeAt, firstAt);
+          _appendLog('片段 #$messageId 已生成，开始转写队列处理');
         } else {
           // Silent-only and not forced: cleanup
           try { await File(filePath).delete(); } catch (_) {}
@@ -206,160 +243,76 @@ class _RealtimeTranscribePageState extends State<RealtimeTranscribePage> {
     }
   }
 
-  void _onAmplitude(Amplitude amp, VADSettings vad) {
+  
+
+  // Simplified RMS-based segmentation aligned with transcribe_service.py
+  void _onAmplitudeRmsSimplified(Amplitude amp, VADSettings vad) {
     final now = DateTime.now();
     final segStart = _segmentStartAt ?? now;
-    final segDuration = now.difference(segStart).inMilliseconds;
+    final ln10 = log(10);
 
-    // RMS mode: compare linear RMS directly to configured threshold
-    if (vad.useRms) {
-      // Convert incoming amplitude to linear RMS in [0,1]
-      // Heuristic:
-      //  - raw < 0: treat as dBFS, convert to linear
-      //  - 0 <= raw <= 1: treat as already-normalized linear amplitude
-      //  - raw > 1: treat as PCM magnitude and normalize
-      double raw = amp.current;
-      double rms;
-      if (raw < 0) {
-        // dB to linear
-        rms = pow(10, raw / 20).toDouble();
-      } else if (raw <= 1.0) {
-        // Already linear 0..1 (including exact 0)
-        rms = raw;
-      } else {
-        // PCM magnitude
-        rms = (raw / 32767.0);
+    // Convert amplitude to RMS [0,1] and dB for logging only
+    double raw = amp.current;
+    double curRms;
+    if (raw < 0) {
+      curRms = pow(10, raw / 20).toDouble(); // raw is dBFS
+    } else if (raw <= 1.0) {
+      curRms = raw; // normalized amplitude
+    } else {
+      curRms = (raw / 32767.0); // PCM magnitude
+    }
+    if (curRms.isNaN || curRms.isInfinite) curRms = 0.0;
+    curRms = curRms.clamp(0.0, 1.0);
+    final double curDb = curRms > 0 ? 20 * (log(curRms) / ln10) : -120.0;
+    _emaDb = _emaDb == null ? curDb : (0.2 * curDb + 0.8 * _emaDb!);
+
+    // Periodic level log (once per second)
+    if (_logMode) {
+      if (_lastLogAt == null || now.difference(_lastLogAt!).inMilliseconds >= 1000) {
+        _lastLogAt = now;
+        final thrStr = vad.useRms
+            ? '阈RMS=${vad.silenceRms.toStringAsFixed(3)}'
+            : '阈dB=${vad.silenceDb.toStringAsFixed(1)}';
+        _appendLog('电平 dB=${(_emaDb ?? curDb).toStringAsFixed(1)}  RMS=${curRms.toStringAsFixed(3)}  $thrStr  活动=${_speechActive ? "是" : "否"}');
       }
-      if (rms.isNaN || rms.isInfinite) rms = 0.0;
-      rms = rms.clamp(0.0, 1.0);
+    }
 
-      final bool speakingNow = rms >= vad.silenceRms;
-      if (speakingNow) {
-        _lastVoiceAt = now;
-        _silenceAccumMs = 0;
-        if (!_speechActive) {
-          if (vad.onsetMs <= 0) {
-            _speechActive = true;
-            _firstVoiceAt ??= now;
-          } else {
-            _firstVoiceCandidateAt ??= now;
-            _speechOnsetMsAccum += vad.amplitudeWindowMs;
-            if (_speechOnsetMsAccum >= vad.onsetMs) {
-              _speechActive = true;
-              _firstVoiceAt ??= _firstVoiceCandidateAt ?? now;
-            }
-          }
-        }
-      } else {
-        // Below RMS threshold: count silence and reset onset
-        _speechOnsetMsAccum = 0;
-        _firstVoiceCandidateAt = null;
-        _silenceAccumMs += vad.amplitudeWindowMs;
-        if (!_speechActive && _silenceAccumMs >= vad.minSilenceMs) {
+    // Voice activity by chosen threshold (RMS or dB)
+    final bool above = vad.useRms ? (curRms >= vad.silenceRms) : (curDb >= vad.silenceDb);
+    if (above) {
+      _lastVoiceAt = now;
+      _silenceAccumMs = 0;
+      if (!_speechActive) {
+        // Immediate speech onset when crossing threshold (no extra confirmation),
+        // consistent with transcribe_service.py
+        _speechActive = true;
+        _firstVoiceAt ??= now;
+        _appendLog('[VAD] 识别说话开始 (RMS=${curRms.toStringAsFixed(3)}, dB=${curDb.toStringAsFixed(1)})');
+      }
+    } else {
+      _speechOnsetMsAccum = 0;
+      _firstVoiceCandidateAt = null;
+      _silenceAccumMs += vad.amplitudeWindowMs;
+      if (_speechActive && _silenceAccumMs == vad.amplitudeWindowMs) {
+        // First tick of going below threshold while active
+        _appendLog('[VAD] 进入静音窗口 (RMS=${curRms.toStringAsFixed(3)}, dB=${curDb.toStringAsFixed(1)})');
+      }
+
+      // If never detected speech and long silent, rotate silently
+      if (!_speechActive) {
+        final int silentSinceStart = now.difference(segStart).inMilliseconds;
+        if (silentSinceStart >= vad.minSilenceMs) {
+          _appendLog('[cut] 长时间静音 (>= ${vad.minSilenceMs} ms)，分段');
           unawaited(_finalizeSegment());
           return;
         }
       }
-
-      final bool longEnough = segDuration >= vad.minChunkMs;
-      if (_speechActive && _silenceAccumMs >= vad.minSilenceMs && longEnough) {
-        // Sentence boundary reached
-        unawaited(_finalizeSegment());
-      }
-      return; // Skip dB pathway entirely in RMS mode
     }
 
-    // Normalize level to decibels (approximately)
-    final ln10 = log(10);
-    double db = amp.current;
-    // Treat strictly negative values as dBFS; 0 is ambiguous and treated as linear silence
-    final isDb = db < 0 && db >= -200; // heuristic
-    if (!isDb) {
-      // Convert linear amplitude to dB scale best-effort
-      if (db > 0 && db <= 1) {
-        db = 20 * (log(db) / ln10);
-      } else if (db > 1) {
-        db = 20 * (log(db / 32767.0) / ln10);
-      } else {
-        db = -120;
-      }
-    }
-    db = (db.clamp(-120.0, -0.0001)) as double;
-
-    // Smooth with exponential moving average
-    _emaDb = _emaDb == null ? db : (0.2 * db + 0.8 * _emaDb!);
-
-    // Calibrate noise floor for a short time at start of each segment (dB mode)
-    if (_calibrationUntil != null && now.isBefore(_calibrationUntil!)) {
-      _noiseFloorDb = _noiseFloorDb == null
-          ? _emaDb
-          : min(_noiseFloorDb!, _emaDb!); // take minimum (quietest) as floor
-      _lastVoiceAt = now;
-      return; // don't cut during calibration window
-    }
-    _noiseFloorDb ??= _emaDb;
-
-    // Dynamic thresholds with hysteresis
-    // Convert configured threshold to dB if using RMS mode
-    double configuredSilenceDb;
-    if (vad.useRms) {
-      final rms = vad.silenceRms.clamp(1e-6, 1.0);
-      configuredSilenceDb = 20 * (log(rms) / ln10);
-    } else {
-      configuredSilenceDb = vad.silenceDb;
-    }
-    // Silence threshold slightly above noise floor; speech threshold a bit higher
-    const double noiseMarginDb = 8.0; // adjustable margin above noise
-    const double hysteresisDb = 3.0; // separation between start/stop
-    final double base = _noiseFloorDb ?? configuredSilenceDb;
-    final double silenceThreshold = max(configuredSilenceDb, base + noiseMarginDb);
-    final double speechThreshold = silenceThreshold + hysteresisDb;
-
-    final bool speakingNow = _emaDb! > speechThreshold;
-    if (speakingNow) {
-      // Above speech threshold: treat as speaking
-      _lastVoiceAt = now;
-      _silenceAccumMs = 0;
-      // If not yet active, confirm immediately or by onset window
-      if (!_speechActive) {
-        if (vad.onsetMs <= 0) {
-          _speechActive = true;
-          _firstVoiceAt ??= now;
-        } else {
-          _firstVoiceCandidateAt ??= now;
-          _speechOnsetMsAccum += vad.amplitudeWindowMs;
-          if (_speechOnsetMsAccum >= vad.onsetMs) {
-            _speechActive = true;
-            _firstVoiceAt ??= _firstVoiceCandidateAt ?? now;
-          }
-        }
-      }
-    } else if (_emaDb! > silenceThreshold) {
-      // Crossed the silence threshold (but not speech): immediate speech start if requested
-      _silenceAccumMs = 0;
-      if (!_speechActive) {
-        // 立即标记为语音活动开始
-        _speechActive = true;
-        _firstVoiceAt ??= now;
-      }
-      // reset onset tracking
-      _speechOnsetMsAccum = 0;
-      _firstVoiceCandidateAt = null;
-    } else {
-      // Below silence threshold: count silence, reset onset candidate
-      _speechOnsetMsAccum = 0;
-      _firstVoiceCandidateAt = null;
-      _silenceAccumMs += vad.amplitudeWindowMs;
-      // If we never detected speech in this segment and it remains silent long enough, finalize silently
-      if (!_speechActive && _silenceAccumMs >= vad.minSilenceMs) {
-        unawaited(_finalizeSegment());
-        return;
-      }
-    }
-
-    final bool longEnough = segDuration >= vad.minChunkMs;
-    if (_speechActive && _silenceAccumMs >= vad.minSilenceMs && longEnough) {
-      // Consider this a sentence boundary
+    // Finalize when inside speech and silence sustained (no min-chunk gating),
+    // consistent with transcribe_service.py
+    if (_speechActive && _silenceAccumMs >= vad.minSilenceMs) {
+      _appendLog('[cut] 语音结束，静音 ${_silenceAccumMs} ms (阈值 ${vad.minSilenceMs} ms)，分段');
       unawaited(_finalizeSegment());
     }
   }
@@ -368,6 +321,7 @@ class _RealtimeTranscribePageState extends State<RealtimeTranscribePage> {
     var pathForUpload = filePath;
     try {
       final s = _settings ?? await _settingsRepo.load();
+      _appendLog('片段 #$messageId 开始转写');
       // Trim by pre-roll if we detected speech onset within this segment
       pathForUpload = filePath;
       if (segStartAt != null && firstVoiceAt != null) {
@@ -394,27 +348,61 @@ class _RealtimeTranscribePageState extends State<RealtimeTranscribePage> {
         }
       }
       final bytes = await File(pathForUpload).readAsBytes();
+      _appendLog('片段 #$messageId 上传中，大小 ${(bytes.lengthInBytes / 1024).toStringAsFixed(1)} KB');
       if (s.provider == ProviderType.openai) {
         final client = OpenAIClient(s.openAI);
         final text = await client.transcribeBytes(bytes, filename: pathForUpload.split(Platform.pathSeparator).last);
+        _appendLog('片段 #$messageId 转写完成');
         _updateMessage(messageId, transcript: text, status: _MsgStatus.done);
         if (s.translation.enabled) {
           try {
             final translated = await client.translateText(text, targetLanguage: s.translation.targetLanguage);
             _updateMessage(messageId, translation: translated);
+            _appendLog('片段 #$messageId 翻译完成');
           } catch (e) {
             _updateMessage(messageId, translation: '[翻译失败] $e');
+            _appendLog('片段 #$messageId 翻译失败: $e');
           }
+        } else {
+          _appendLog('片段 #$messageId 未启用翻译');
         }
       }
     } catch (e) {
       _updateMessage(messageId, status: _MsgStatus.error, error: '$e');
+      _appendLog('片段 #$messageId 处理失败: $e');
     } finally {
       // Cleanup temp file
       try { await File(filePath).delete(); } catch (_) {}
       if (pathForUpload != filePath) {
         try { await File(pathForUpload).delete(); } catch (_) {}
       }
+    }
+  }
+
+  // Enqueue a finalized segment to process in FIFO order
+  void _enqueueSegment(int messageId, String filePath, DateTime? segStartAt, DateTime finalizeAt, DateTime? firstVoiceAt) {
+    _pendingJobs.add(_SegmentJob(
+      messageId: messageId,
+      filePath: filePath,
+      segStartAt: segStartAt,
+      finalizeAt: finalizeAt,
+      firstVoiceAt: firstVoiceAt,
+    ));
+    // Kick worker without awaiting to keep UI reactive
+    unawaited(_pumpJobs());
+  }
+
+  // Process queued segments sequentially so results follow recording order
+  Future<void> _pumpJobs() async {
+    if (_processingJobs) return;
+    _processingJobs = true;
+    try {
+      while (_pendingJobs.isNotEmpty) {
+        final job = _pendingJobs.removeAt(0);
+        await _processFile(job.messageId, job.filePath, job.segStartAt, job.finalizeAt, job.firstVoiceAt);
+      }
+    } finally {
+      _processingJobs = false;
     }
   }
 
@@ -436,6 +424,23 @@ class _RealtimeTranscribePageState extends State<RealtimeTranscribePage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('实时转录'),
+        actions: [
+          IconButton(
+            onPressed: () {
+              setState(() {
+                _logMode = !_logMode;
+                if (_logMode) {
+                  _lastLogAt = null; // force immediate periodic update on next tick
+                  _appendLog('日志已开启');
+                } else {
+                  _appendLog('日志已关闭');
+                }
+              });
+            },
+            tooltip: _logMode ? '隐藏日志' : '显示日志',
+            icon: Icon(_logMode ? Icons.article : Icons.article_outlined),
+          ),
+        ],
       ),
       body: Column(
         children: [
@@ -477,6 +482,31 @@ class _RealtimeTranscribePageState extends State<RealtimeTranscribePage> {
               ),
             ),
           ),
+          if (_logMode)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Theme.of(context).dividerColor),
+                  color: Theme.of(context).colorScheme.surface,
+                ),
+                child: SizedBox(
+                  height: 160,
+                  child: Scrollbar(
+                    child: ListView.builder(
+                      controller: _logScrollController,
+                      padding: const EdgeInsets.all(8),
+                      itemCount: _logLines.length,
+                      itemBuilder: (context, i) => Text(
+                        _logLines[i],
+                        style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
           SafeArea(
             top: false,
             child: Padding(
@@ -511,6 +541,21 @@ class _TranscribeMessage {
   String? transcript;
   String? translation;
   String? error;
+}
+
+class _SegmentJob {
+  _SegmentJob({
+    required this.messageId,
+    required this.filePath,
+    required this.segStartAt,
+    required this.finalizeAt,
+    required this.firstVoiceAt,
+  });
+  final int messageId;
+  final String filePath;
+  final DateTime? segStartAt;
+  final DateTime finalizeAt;
+  final DateTime? firstVoiceAt;
 }
 
 class _MessageTile extends StatelessWidget {
