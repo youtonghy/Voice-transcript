@@ -30,8 +30,13 @@ class _RealtimeTranscribePageState extends State<RealtimeTranscribePage> {
   final AudioRecorder _recorder = AudioRecorder();
   StreamSubscription<Amplitude>? _ampSub;
   bool _isRecording = false;
+  // Whether we are in listening-only mode (no active file being written)
+  bool _isListeningOnly = false;
+  // Guard flag to avoid starting multiple segments concurrently
+  bool _startingSegment = false;
   bool _cutting = false;
   String? _currentPath;
+  String? _listeningPath; // temp file path used while listening-only
   DateTime? _segmentStartAt;
   int _silenceAccumMs = 0;
   // VAD state (RMS-based)
@@ -40,7 +45,10 @@ class _RealtimeTranscribePageState extends State<RealtimeTranscribePage> {
   DateTime? _firstVoiceAt; // first above-threshold time in current segment
   DateTime? _firstVoiceCandidateAt; // above-threshold time during onset confirmation
   int _speechOnsetMsAccum = 0; // accumulated ms above threshold for onset confirmation
-  double? _emaDb; // smoothed dB value for logging only
+  // double? _emaDb; // smoothed dB value for logging only
+  double? _emaDb;        // 日志用平滑电平
+  double? _noiseFloorDb; // 自适应噪声底（EMA）
+
   String? _preRollCachePath; // last segment's tail for pre-roll bridging
 
   // Messages
@@ -103,8 +111,26 @@ class _RealtimeTranscribePageState extends State<RealtimeTranscribePage> {
     setState(() {
       _isRecording = false;
     });
-    // Finalize last segment if any
-    await _finalizeSegment(force: true);
+    // Finalize last segment if any, otherwise stop listening-only recorder
+    if (_currentPath != null) {
+      await _finalizeSegment(force: true);
+    } else {
+      try {
+        _ampSub?.cancel();
+        _ampSub = null;
+      } catch (_) {}
+      try {
+        if (await _recorder.isRecording()) {
+          await _recorder.stop();
+        }
+      } catch (_) {}
+      if (_listeningPath != null) {
+        try { await File(_listeningPath!).delete(); } catch (_) {}
+        _listeningPath = null;
+      }
+      _isListeningOnly = false;
+      _speechActive = false;
+    }
   }
 
   void _scrollToBottom() {
@@ -152,33 +178,106 @@ class _RealtimeTranscribePageState extends State<RealtimeTranscribePage> {
 
   Future<void> _startNewSegment() async {
     final vad = _settings?.vad ?? VADSettings();
-    final dir = await getTemporaryDirectory();
-    final filename = 'segment_${DateTime.now().millisecondsSinceEpoch}_${Random().nextInt(1 << 16)}.wav';
-    final path = '${dir.path}/$filename';
-
-    await _recorder.start(
-      RecordConfig(
-        encoder: AudioEncoder.wav,
-        sampleRate: 16000,
-        numChannels: 1,
-      ),
-      path: path,
-    );
-    _currentPath = path;
-    _segmentStartAt = DateTime.now();
+    // Start listening-only: no active file, just amplitude monitoring
+    _isListeningOnly = true;
+    _currentPath = null;
+    _segmentStartAt = null;
     _silenceAccumMs = 0;
     _emaDb = null;
     _speechActive = false;
-    _lastVoiceAt = _segmentStartAt;
+    _lastVoiceAt = null;
     _firstVoiceAt = null;
     _firstVoiceCandidateAt = null;
     _speechOnsetMsAccum = 0;
     _lastLogAt = null;
 
     _ampSub?.cancel();
+    final dir = await getTemporaryDirectory();
+    final listenName = 'listen_${DateTime.now().millisecondsSinceEpoch}_${Random().nextInt(1 << 16)}.wav';
+    final listenPath = '${dir.path}/$listenName';
+    _listeningPath = listenPath;
+
+    // await _recorder.start(
+    //   RecordConfig(
+    //     encoder: AudioEncoder.wav,
+    //     sampleRate: 16000,
+    //     numChannels: 1,
+    //   ),
+    //   path: listenPath,
+    // );
+
+     await _recorder.start(
+         RecordConfig(
+               encoder: AudioEncoder.wav,
+                sampleRate: 16000,
+                 numChannels: 1,
+                 autoGain: false,
+                 echoCancel: false,
+                 noiseSuppress: false,
+                 androidConfig: const AndroidRecordConfig(
+                   audioSource: AndroidAudioSource.voiceRecognition,
+                   audioManagerMode: AudioManagerMode.modeInCommunication,
+                   useLegacy: false,
+                   manageBluetooth: true,
+                   speakerphone: false,
+                 ),
+           ),
+       path: listenPath,
+     );
+
+
     _ampSub = _recorder
         .onAmplitudeChanged(Duration(milliseconds: vad.amplitudeWindowMs))
         .listen((amp) => _onAmplitudeRmsSimplified(amp, vad));
+  }
+
+  Future<void> _beginSegmentRecording() async {
+    if (_startingSegment) return;
+    _startingSegment = true;
+    try {
+      // Stop listening-only recorder if running
+      try {
+        _ampSub?.cancel();
+        _ampSub = null;
+      } catch (_) {}
+      try {
+        if (await _recorder.isRecording()) {
+          await _recorder.stop();
+        }
+      } catch (_) {}
+      // Cleanup listening-only temp file if present
+      if (_listeningPath != null) {
+        try { await File(_listeningPath!).delete(); } catch (_) {}
+        _listeningPath = null;
+      }
+
+      final dir = await getTemporaryDirectory();
+      final filename = 'segment_${DateTime.now().millisecondsSinceEpoch}_${Random().nextInt(1 << 16)}.wav';
+      final path = '${dir.path}/$filename';
+
+      await _recorder.start(
+        RecordConfig(
+          encoder: AudioEncoder.wav,
+          sampleRate: 16000,
+          numChannels: 1,
+        ),
+        path: path,
+      );
+      _currentPath = path;
+      _segmentStartAt = DateTime.now();
+      _firstVoiceAt = _segmentStartAt; // start from onset
+      _speechActive = true;
+      _isListeningOnly = false;
+      _silenceAccumMs = 0;
+
+      final vad = _settings?.vad ?? VADSettings();
+      _ampSub = _recorder
+          .onAmplitudeChanged(Duration(milliseconds: vad.amplitudeWindowMs))
+          .listen((amp) => _onAmplitudeRmsSimplified(amp, vad));
+      _appendLog('[VAD] 检测到语音，开始录音');
+    } finally {
+      _startingSegment = false;
+    }
   }
 
   Future<void> _finalizeSegment({bool force = false}) async {
@@ -251,54 +350,68 @@ class _RealtimeTranscribePageState extends State<RealtimeTranscribePage> {
     final segStart = _segmentStartAt ?? now;
     final ln10 = log(10);
 
-    // Convert amplitude to RMS [0,1] and dB for logging only
+    // 统一把各种输入转成 RMS 和 dBFS
     double raw = amp.current;
-    double curRms;
+    if (raw.isNaN || raw.isInfinite) raw = 0.0;
+
+    double curRms, curDb;
     if (raw < 0) {
-      curRms = pow(10, raw / 20).toDouble(); // raw is dBFS
+      // dBFS -> RMS
+      curDb = raw;
+      curRms = pow(10, raw / 20).toDouble();
     } else if (raw <= 1.0) {
-      curRms = raw; // normalized amplitude
+      curRms = raw.clamp(0.0, 1.0);
+      curDb = curRms > 0 ? 20 * (log(curRms) / ln10) : -120.0;
     } else {
-      curRms = (raw / 32767.0); // PCM magnitude
+      // 16-bit PCM 振幅
+      curRms = (raw / 32767.0).clamp(0.0, 1.0);
+      curDb = curRms > 0 ? 20 * (log(curRms) / ln10) : -120.0;
     }
-    if (curRms.isNaN || curRms.isInfinite) curRms = 0.0;
-    curRms = curRms.clamp(0.0, 1.0);
-    final double curDb = curRms > 0 ? 20 * (log(curRms) / ln10) : -120.0;
+
     _emaDb = _emaDb == null ? curDb : (0.2 * curDb + 0.8 * _emaDb!);
 
-    // Periodic level log (once per second)
-    if (_logMode) {
-      if (_lastLogAt == null || now.difference(_lastLogAt!).inMilliseconds >= 1000) {
-        _lastLogAt = now;
-        final thrStr = vad.useRms
-            ? '阈RMS=${vad.silenceRms.toStringAsFixed(3)}'
-            : '阈dB=${vad.silenceDb.toStringAsFixed(1)}';
-        _appendLog('电平 dB=${(_emaDb ?? curDb).toStringAsFixed(1)}  RMS=${curRms.toStringAsFixed(3)}  $thrStr  活动=${_speechActive ? "是" : "否"}');
-      }
+    // 静态阈值统一转 dB
+    final double staticThrDb = vad.useRms
+        ? (vad.silenceRms > 0 ? 20 * (log(vad.silenceRms) / ln10) : -120.0)
+        : vad.silenceDb;
+
+    // 仅在“静音侧”更新噪声底（EMA）
+    if (curDb < staticThrDb) {
+      _noiseFloorDb = _noiseFloorDb == null ? curDb : (0.95 * _noiseFloorDb! + 0.05 * curDb);
     }
 
-    // Voice activity by chosen threshold (RMS or dB)
-    final bool above = vad.useRms ? (curRms >= vad.silenceRms) : (curDb >= vad.silenceDb);
+    // 自适应阈值：max(静态阈值, 噪声底+10 dB)
+    final double thrDb = max(staticThrDb, (_noiseFloorDb ?? staticThrDb) + 10);
+    final double thrRms = pow(10, thrDb / 20).toDouble();
+
+    final bool above = vad.useRms
+        ? (curRms >= max(vad.silenceRms, thrRms))
+        : (curDb >= thrDb);
+
+    // 监听阶段：只负责拉起录音
+    if (_currentPath == null) {
+      if (above) {
+        _appendLog('[VAD] 达到阈值，准备开始录音 (RMS=${curRms.toStringAsFixed(3)}, dB=${curDb.toStringAsFixed(1)}, thr=${thrDb.toStringAsFixed(1)} dB)');
+        unawaited(_beginSegmentRecording());
+      }
+      return;
+    }
+
+    // 已在录音：维护说话/静音状态并断句
     if (above) {
       _lastVoiceAt = now;
       _silenceAccumMs = 0;
       if (!_speechActive) {
-        // Immediate speech onset when crossing threshold (no extra confirmation),
-        // consistent with transcribe_service.py
         _speechActive = true;
         _firstVoiceAt ??= now;
-        _appendLog('[VAD] 识别说话开始 (RMS=${curRms.toStringAsFixed(3)}, dB=${curDb.toStringAsFixed(1)})');
+        _appendLog('[VAD] 识别说话开始 (dB=${curDb.toStringAsFixed(1)}, thr=${thrDb.toStringAsFixed(1)})');
       }
     } else {
-      _speechOnsetMsAccum = 0;
-      _firstVoiceCandidateAt = null;
       _silenceAccumMs += vad.amplitudeWindowMs;
       if (_speechActive && _silenceAccumMs == vad.amplitudeWindowMs) {
-        // First tick of going below threshold while active
-        _appendLog('[VAD] 进入静音窗口 (RMS=${curRms.toStringAsFixed(3)}, dB=${curDb.toStringAsFixed(1)})');
+        _appendLog('[VAD] 进入静音窗口 (dB=${curDb.toStringAsFixed(1)}, thr=${thrDb.toStringAsFixed(1)})');
       }
-
-      // If never detected speech and long silent, rotate silently
+      // 从未检测到语音且持续静音太久，直接滚动新片段，避免“死段”
       if (!_speechActive) {
         final int silentSinceStart = now.difference(segStart).inMilliseconds;
         if (silentSinceStart >= vad.minSilenceMs) {
@@ -309,13 +422,92 @@ class _RealtimeTranscribePageState extends State<RealtimeTranscribePage> {
       }
     }
 
-    // Finalize when inside speech and silence sustained (no min-chunk gating),
-    // consistent with transcribe_service.py
+    // 语音结束：静音累计达到阈值就切段
     if (_speechActive && _silenceAccumMs >= vad.minSilenceMs) {
-      _appendLog('[cut] 语音结束，静音 ${_silenceAccumMs} ms (阈值 ${vad.minSilenceMs} ms)，分段');
+      _appendLog('[cut] 语音结束，静音 ${_silenceAccumMs} ms，分段');
       unawaited(_finalizeSegment());
     }
   }
+
+
+  // void _onAmplitudeRmsSimplified(Amplitude amp, VADSettings vad) {
+  //   final now = DateTime.now();
+  //   final segStart = _segmentStartAt ?? now;
+  //   final ln10 = log(10);
+  //
+  //   // Convert amplitude to RMS [0,1] and dB for logging only
+  //   double raw = amp.current;
+  //   double curRms;
+  //   if (raw < 0) {
+  //     curRms = pow(10, raw / 20).toDouble(); // raw is dBFS
+  //   } else if (raw <= 1.0) {
+  //     curRms = raw; // normalized amplitude
+  //   } else {
+  //     curRms = (raw / 32767.0); // PCM magnitude
+  //   }
+  //   if (curRms.isNaN || curRms.isInfinite) curRms = 0.0;
+  //   curRms = curRms.clamp(0.0, 1.0);
+  //   final double curDb = curRms > 0 ? 20 * (log(curRms) / ln10) : -120.0;
+  //   _emaDb = _emaDb == null ? curDb : (0.2 * curDb + 0.8 * _emaDb!);
+  //
+  //   // Periodic level log (once per second)
+  //   if (_logMode) {
+  //     if (_lastLogAt == null || now.difference(_lastLogAt!).inMilliseconds >= 1000) {
+  //       _lastLogAt = now;
+  //       final thrStr = vad.useRms
+  //           ? '阈RMS=${vad.silenceRms.toStringAsFixed(3)}'
+  //           : '阈dB=${vad.silenceDb.toStringAsFixed(1)}';
+  //       _appendLog('电平 dB=${(_emaDb ?? curDb).toStringAsFixed(1)}  RMS=${curRms.toStringAsFixed(3)}  $thrStr  活动=${_speechActive ? "是" : "否"}');
+  //     }
+  //   }
+  //
+  //   // Voice activity by chosen threshold (RMS or dB)
+  //   final bool above = vad.useRms ? (curRms >= vad.silenceRms) : (curDb >= vad.silenceDb);
+  //   // Listening-only: only start a segment when threshold is met
+  //   if (_currentPath == null) {
+  //     if (above) {
+  //       _appendLog('[VAD] 达到阈值，准备开始录音 (RMS=${curRms.toStringAsFixed(3)}, dB=${curDb.toStringAsFixed(1)})');
+  //       unawaited(_beginSegmentRecording());
+  //     }
+  //     return;
+  //   }
+  //   if (above) {
+  //     _lastVoiceAt = now;
+  //     _silenceAccumMs = 0;
+  //     if (!_speechActive) {
+  //       // Immediate speech onset when crossing threshold (no extra confirmation),
+  //       // consistent with transcribe_service.py
+  //       _speechActive = true;
+  //       _firstVoiceAt ??= now;
+  //       _appendLog('[VAD] 识别说话开始 (RMS=${curRms.toStringAsFixed(3)}, dB=${curDb.toStringAsFixed(1)})');
+  //     }
+  //   } else {
+  //     _speechOnsetMsAccum = 0;
+  //     _firstVoiceCandidateAt = null;
+  //     _silenceAccumMs += vad.amplitudeWindowMs;
+  //     if (_speechActive && _silenceAccumMs == vad.amplitudeWindowMs) {
+  //       // First tick of going below threshold while active
+  //       _appendLog('[VAD] 进入静音窗口 (RMS=${curRms.toStringAsFixed(3)}, dB=${curDb.toStringAsFixed(1)})');
+  //     }
+  //
+  //     // If never detected speech and long silent, rotate silently
+  //     if (!_speechActive) {
+  //       final int silentSinceStart = now.difference(segStart).inMilliseconds;
+  //       if (silentSinceStart >= vad.minSilenceMs) {
+  //         _appendLog('[cut] 长时间静音 (>= ${vad.minSilenceMs} ms)，分段');
+  //         unawaited(_finalizeSegment());
+  //         return;
+  //       }
+  //     }
+  //   }
+  //
+  //   // Finalize when inside speech and silence sustained (no min-chunk gating),
+  //   // consistent with transcribe_service.py
+  //   if (_speechActive && _silenceAccumMs >= vad.minSilenceMs) {
+  //     _appendLog('[cut] 语音结束，静音 ${_silenceAccumMs} ms (阈值 ${vad.minSilenceMs} ms)，分段');
+  //     unawaited(_finalizeSegment());
+  //   }
+  // }
 
   Future<void> _processFile(int messageId, String filePath, DateTime? segStartAt, DateTime finalizeAt, DateTime? firstVoiceAt) async {
     var pathForUpload = filePath;

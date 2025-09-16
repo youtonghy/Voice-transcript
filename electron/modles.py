@@ -131,10 +131,16 @@ def transcribe_qwen3_asr(
     except Exception as e:
         raise RuntimeError('DashScope SDK (dashscope) not installed') from e
 
-    file_uri = _to_file_uri(filepath)
+    # DashScope Qwen3-ASR 这里改为直接使用系统绝对路径，不再添加 file:// 前缀
+    # 例如 Windows: C:\Users\...\录音录音.mp4
+    #      Linux/macOS: /home/user/file.mp3
+    # Use absolute system path for DashScope Qwen3-ASR (no file:// prefix)
+    # Example Windows: C:\\Users\\...\\record.mp4
+    # Example Linux/macOS: /home/user/file.mp3
+    file_path = os.path.abspath(filepath)
     messages = [
         {"role": "system", "content": [{"text": ""}]},
-        {"role": "user", "content": [{"audio": file_uri}]},
+        {"role": "user", "content": [{"audio": file_path}]},
     ]
     asr_opts = {
         "enable_lid": bool(enable_lid),
