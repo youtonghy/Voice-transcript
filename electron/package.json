@@ -40,6 +40,8 @@
       "settings.js",
       "media-transcribe.html",
       "media-transcribe-renderer.js",
+      "voice-input.html",
+      "voice-input.js",
       "package.json",
       "assets/**/*"
     ],

@@ -482,7 +482,7 @@ class MediaProcessor:
                 pass
             return None
 
-    def translate_text(self, text: str, target_language: str = "涓枃") -> Optional[str]:
+    def translate_text(self, text: str, target_language: str = "Chinese") -> Optional[str]:
         """Translate text via the configured translation engine (currently OpenAI)."""
         if not text.strip():
             return None
@@ -533,7 +533,7 @@ Translation requirements:
             print(f"Translation failed: {e}")
             return None
 
-    def process_file(self, file_path: str, theater_mode: bool = False, enable_translation: bool = True, target_language: str = "涓枃", progress_callback=None) -> bool:
+    def process_file(self, file_path: str, theater_mode: bool = False, enable_translation: bool = True, target_language: str = "Chinese", progress_callback=None) -> bool:
         """Process media file"""
         try:
             _log("info", f"Starting to process file: {file_path}")
@@ -834,15 +834,15 @@ Translation requirements:
         """Export results to TXT file"""
         try:
             with open(output_path, 'w', encoding='utf-8') as f:
-                f.write(f"杞啓缈昏瘧缁撴灉\n")
-                f.write(f"鐢熸垚鏃堕棿: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                f.write(f"媒体转写翻译结果\n")
+                f.write(f"生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
                 f.write("=" * 50 + "\n\n")
                 
                 for entry in self.export_data:
-                    f.write(f"娈佃惤 {entry['order']}:\n")
-                    f.write(f"鍘熸枃: {entry['transcription']}\n")
+                    f.write(f"段落 {entry['order']}:\n")
+                    f.write(f"原文: {entry['transcription']}\n")
                     if entry['translation']:
-                        f.write(f"缈昏瘧: {entry['translation']}\n")
+                        f.write(f"翻译: {entry['translation']}\n")
                     f.write("\n")
             
             _log_if("info", f"Results exported to: {output_path}")
@@ -860,6 +860,18 @@ Translation requirements:
 
 class MediaTranscribeGUI:
     """Graphical interface"""
+    LANGUAGE_ALIASES = {
+        '中文': 'Chinese',
+        '简体中文': 'Chinese',
+        '繁体中文': 'Traditional Chinese',
+        '英文': 'English',
+        '英语': 'English',
+        '日文': 'Japanese',
+        '日语': 'Japanese',
+        '韩文': 'Korean',
+        '韩语': 'Korean'
+    }
+
     
     def __init__(self):
         self.processor = MediaProcessor()
@@ -868,25 +880,25 @@ class MediaTranscribeGUI:
     def setup_gui(self):
         """Set up graphical interface"""
         self.root = tk.Tk()
-        self.root.title("濯掍綋鏂囦欢杞啓缈昏瘧宸ュ叿")
+        self.root.title("媒体文件转写翻译工具")
         self.root.geometry("800x600")
         
         # File selection area
         file_frame = ttk.Frame(self.root)
         file_frame.pack(fill=tk.X, padx=10, pady=5)
         
-        ttk.Label(file_frame, text="閫夋嫨鏂囦欢:").pack(side=tk.LEFT)
+        ttk.Label(file_frame, text="选择文件:").pack(side=tk.LEFT)
         self.file_path_var = tk.StringVar()
         ttk.Entry(file_frame, textvariable=self.file_path_var, width=50).pack(side=tk.LEFT, padx=5)
-        ttk.Button(file_frame, text="娴忚", command=self.browse_file).pack(side=tk.LEFT)
+        ttk.Button(file_frame, text="浏览...", command=self.browse_file).pack(side=tk.LEFT)
         
         # Settings area
-        settings_frame = ttk.LabelFrame(self.root, text="璁剧疆")
+        settings_frame = ttk.LabelFrame(self.root, text="设置")
         settings_frame.pack(fill=tk.X, padx=10, pady=5)
         
         # Theater mode
         self.theater_mode_var = tk.BooleanVar()
-        ttk.Checkbutton(settings_frame, text="鍚敤鍓у満妯″紡锛堥煶棰戝寮猴級", 
+        ttk.Checkbutton(settings_frame, text="启用剧场模式（增强音量并过滤静音片段）", 
                        variable=self.theater_mode_var).pack(anchor=tk.W)
         
         # Translation settings
@@ -894,39 +906,46 @@ class MediaTranscribeGUI:
         translate_frame.pack(fill=tk.X, pady=2)
         
         self.enable_translation_var = tk.BooleanVar(value=True)
-        ttk.Checkbutton(translate_frame, text="鍚敤缈昏瘧", 
+        ttk.Checkbutton(translate_frame, text="启用翻译", 
                        variable=self.enable_translation_var).pack(side=tk.LEFT)
         
-        ttk.Label(translate_frame, text="鐩爣璇█:").pack(side=tk.LEFT, padx=(20, 5))
-        self.target_language_var = tk.StringVar(value="涓枃")
+        ttk.Label(translate_frame, text="目标语言:").pack(side=tk.LEFT, padx=(20, 5))
+        self.target_language_var = tk.StringVar(value='中文')
         ttk.Entry(translate_frame, textvariable=self.target_language_var, width=15).pack(side=tk.LEFT)
         
         # Control buttons
         control_frame = ttk.Frame(self.root)
         control_frame.pack(fill=tk.X, padx=10, pady=5)
         
-        ttk.Button(control_frame, text="寮€濮嬪鐞?, command=self.start_processing).pack(side=tk.LEFT, padx=5)
-        ttk.Button(control_frame, text="瀵煎嚭TXT", command=self.export_txt).pack(side=tk.LEFT, padx=5)
-        ttk.Button(control_frame, text="娓呴櫎缁撴灉", command=self.clear_results).pack(side=tk.LEFT, padx=5)
+        ttk.Button(control_frame, text="开始处理", command=self.start_processing).pack(side=tk.LEFT, padx=5)
+        ttk.Button(control_frame, text="导出TXT", command=self.export_txt).pack(side=tk.LEFT, padx=5)
+        ttk.Button(control_frame, text="清除结果", command=self.clear_results).pack(side=tk.LEFT, padx=5)
         
         # Progress bar
-        self.progress_var = tk.StringVar(value="灏辩华")
+        self.progress_var = tk.StringVar(value="就绪")
         ttk.Label(self.root, textvariable=self.progress_var).pack(pady=2)
         
         # Results display area
-        result_frame = ttk.LabelFrame(self.root, text="澶勭悊缁撴灉")
+        result_frame = ttk.LabelFrame(self.root, text="处理结果")
         result_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
         
         self.result_text = scrolledtext.ScrolledText(result_frame, wrap=tk.WORD)
         self.result_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
+
+    def _normalize_language_choice(self, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            return cleaned
+        return self.LANGUAGE_ALIASES.get(cleaned, cleaned)
+
     def browse_file(self):
         """Browse files"""
         filetypes = [
-            ("鎵€鏈夋敮鎸佺殑鏂囦欢", " ".join([f"*{ext}" for ext in AUDIO_FORMATS + VIDEO_FORMATS])),
-            ("闊抽鏂囦欢", " ".join([f"*{ext}" for ext in AUDIO_FORMATS])),
-            ("瑙嗛鏂囦欢", " ".join([f"*{ext}" for ext in VIDEO_FORMATS])),
-            ("鎵€鏈夋枃浠?, "*.*")
+            ("所有支持的文件", " ".join([f"*{ext}" for ext in AUDIO_FORMATS + VIDEO_FORMATS])),
+            ("音频文件", " ".join([f"*{ext}" for ext in AUDIO_FORMATS])),
+            ("视频文件", " ".join([f"*{ext}" for ext in VIDEO_FORMATS])),
+            ("所有文件", "*.*")
         ]
         
         filename = filedialog.askopenfilename(filetypes=filetypes)
@@ -937,11 +956,11 @@ class MediaTranscribeGUI:
         """Start processing"""
         file_path = self.file_path_var.get().strip()
         if not file_path:
-            messagebox.showerror("閿欒", "璇烽€夋嫨鏂囦欢")
+            messagebox.showerror("错误", "请选择文件")
             return
         
         if not os.path.exists(file_path):
-            messagebox.showerror("閿欒", "鏂囦欢涓嶅瓨鍦?)
+            messagebox.showerror("错误", "文件不存在")
             return
         
         # Check provider configuration based on selected source
@@ -956,7 +975,7 @@ class MediaTranscribeGUI:
             elif source in ('qwen3-asr', 'qwen', 'dashscope'):
                 ok = bool((cfg.get('dashscope_api_key') or os.environ.get('DASHSCOPE_API_KEY')))
             if not ok:
-                messagebox.showerror("閿欒", f"鎵€閫夎瘑鍒彁渚涙柟鏈厤缃繀瑕佸嚟鎹? {source}")
+                messagebox.showerror("错误", f"缺少必要配置，请先完成 {source} 设置")
                 return
         except Exception:
             pass
@@ -973,7 +992,8 @@ class MediaTranscribeGUI:
             file_path = self.file_path_var.get().strip()
             theater_mode = self.theater_mode_var.get()
             enable_translation = self.enable_translation_var.get()
-            target_language = self.target_language_var.get().strip() or "涓枃"
+            display_language = self.target_language_var.get().strip() or '中文'
+            target_language = self._normalize_language_choice(display_language)
             
             def progress_callback(message):
                 self.root.after(0, lambda: self.progress_var.set(message))
@@ -990,10 +1010,9 @@ class MediaTranscribeGUI:
                 # Update display results
                 self.root.after(0, self.update_results_display)
             else:
-                self.root.after(0, lambda: messagebox.showerror("閿欒", "鏂囦欢澶勭悊澶辫触"))
-                
+                self.root.after(0, lambda: messagebox.showerror("错误", "文件处理失败"))
         except Exception as e:
-            self.root.after(0, lambda: messagebox.showerror("閿欒", f"澶勭悊寮傚父: {e}"))
+            self.root.after(0, lambda: messagebox.showerror("错误", f"处理失败: {e}"))
     
     def update_results_display(self):
         """Update results display"""
@@ -1002,38 +1021,37 @@ class MediaTranscribeGUI:
         self.result_text.delete(1.0, tk.END)
         
         for entry in results:
-            self.result_text.insert(tk.END, f"娈佃惤 {entry['order']}:\n")
-            self.result_text.insert(tk.END, f"鍘熸枃: {entry['transcription']}\n")
+            self.result_text.insert(tk.END, f"段落 {entry['order']}:\n")
+            self.result_text.insert(tk.END, f"原文: {entry['transcription']}\n")
             if entry['translation']:
-                self.result_text.insert(tk.END, f"缈昏瘧: {entry['translation']}\n")
+                self.result_text.insert(tk.END, f"翻译: {entry['translation']}\n")
             self.result_text.insert(tk.END, "\n")
-        
         self.result_text.see(tk.END)
     
     def export_txt(self):
         """Export TXT"""
         results = self.processor.get_results()
         if not results:
-            messagebox.showwarning("璀﹀憡", "娌℃湁鍙鍑虹殑缁撴灉")
+            messagebox.showwarning("警告", "没有可导出的结果")
             return
-        
+
         filename = filedialog.asksaveasfilename(
             defaultextension=".txt",
-            filetypes=[("鏂囨湰鏂囦欢", "*.txt"), ("鎵€鏈夋枃浠?, "*.*")]
+            filetypes=[("文本文件", "*.txt"), ("所有文件", "*.*")]
         )
-        
+
         if filename:
             if self.processor.export_to_txt(filename):
-                messagebox.showinfo("鎴愬姛", f"缁撴灉宸插鍑哄埌: {filename}")
+                messagebox.showinfo("提示", f"结果已导出: {filename}")
             else:
-                messagebox.showerror("閿欒", "瀵煎嚭澶辫触")
-    
+                messagebox.showerror("错误", "导出失败")
+
     def clear_results(self):
         """Clear results"""
         self.result_text.delete(1.0, tk.END)
         self.processor.results.clear()
         self.processor.export_data.clear()
-        self.progress_var.set("灏辩华")
+        self.progress_var.set("就绪")
     
     def run(self):
         """Run interface"""
@@ -1050,7 +1068,7 @@ def main():
     parser.add_argument('--file', help='Input media file path')
     parser.add_argument('--output', help='Output file path')
     parser.add_argument('--translate', action='store_true', help='Enable translation')
-    parser.add_argument('--language', default='涓枃', help='Target translation language')
+    parser.add_argument('--language', default='Chinese', help='Target translation language')
     parser.add_argument('--theater-mode', action='store_true', help='Enable theater mode')
     parser.add_argument('--gui', action='store_true', help='Launch GUI mode')
     parser.add_argument('--source', choices=['openai', 'soniox'], help='Transcription provider')
@@ -1059,7 +1077,7 @@ def main():
     
     # Parse arguments, default to GUI if no arguments provided
     if len(sys.argv) == 1:
-        args = argparse.Namespace(gui=True, file=None, output=None, translate=False, language='涓枃', theater_mode=False, verbose=False, log_level=None, source=None)
+        args = argparse.Namespace(gui=True, file=None, output=None, translate=False, language='Chinese', theater_mode=False, verbose=False, log_level=None, source=None)
     else:
         args = parser.parse_args()
 
