@@ -13,6 +13,7 @@ import os
 import re
 import queue
 import uuid
+import math
 from datetime import datetime
 import sounddevice as sd
 import soundfile as sf
@@ -98,6 +99,7 @@ translation_counter = 0  # Used to ensure translation order
 translation_next_expected = 1  # Worker starts expecting this order
 transcription_counter = 0  # Used to ensure transcription order/placeholders
 pending_translations = {}  # Store pending translation tasks {result_id: task_info}
+last_volume_emit = 0.0
 
 def log_message(level, message):
     """Send log message to Electron"""
@@ -544,11 +546,11 @@ def queue_translation(result_id, transcription, target_language, context=None):
         log_message("warning", f"Translation queue full, skipping task #{order}: {result_id}")
         return False, order
 
-def audio_callback(indata, frames, time, status):
+def audio_callback(indata, frames, time_info, status):
     """Audio recording callback function"""
     global audio_data, segment_frames, silence_frames_contig, split_requested
     global segment_active, new_segment_requested, pre_roll_chunks, pre_roll_frames
-    global is_recording
+    global is_recording, last_volume_emit
     
     if status:
         log_message("warning", f"Recording status: {status}")
@@ -558,24 +560,41 @@ def audio_callback(indata, frames, time, status):
 
     try:
         with audio_lock:
-            # Simple mode: accumulate raw audio only
-            if simple_recording_mode:
-                try:
-                    if indata is not None and len(indata) > 0:
-                        audio_data.append(indata.copy())
-                except Exception as e:
-                    log_message("warning", f"Simple mode append failed: {e}")
+            if indata is None or len(indata) == 0:
                 return
+
             try:
-                # Ensure input data is a valid numpy array
-                if indata is None or len(indata) == 0:
-                    return
-                    
-                # Calculate RMS volume
                 rms = float(np.sqrt(np.mean(np.square(indata))))
             except Exception as e:
                 log_message("warning", f"RMS calculation failed: {e}")
                 rms = 0.0
+
+            try:
+                now = time.time()
+                if now - last_volume_emit >= 0.1:
+                    last_volume_emit = now
+                    if rms > 0:
+                        db = 20.0 * math.log10(rms)
+                    else:
+                        db = -80.0
+                    silence_db = 20.0 * math.log10(SILENCE_RMS_THRESHOLD) if SILENCE_RMS_THRESHOLD > 0 else -80.0
+                    send_message({
+                        "type": "volume_level",
+                        "rms": rms,
+                        "db": db,
+                        "silence_rms": SILENCE_RMS_THRESHOLD,
+                        "silence_db": silence_db,
+                        "timestamp": datetime.now().isoformat()
+                    })
+            except Exception as e:
+                log_message("warning", f"Volume message failed: {e}")
+
+            if simple_recording_mode:
+                try:
+                    audio_data.append(indata.copy())
+                except Exception as e:
+                    log_message("warning", f"Simple mode append failed: {e}")
+                return
 
             # Non-silent: maintain pre-roll buffer
             if not segment_active:

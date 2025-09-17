@@ -115,6 +115,7 @@
         .main-content {
           padding-top: 60px; /* 为固定控制条留出空间 */
           padding-right: 72px; /* 为右侧边栏留出空间 */
+          padding-bottom: 140px; /* 为底部音量条留出空间 */
           height: 100vh;
           overflow: hidden;
         }
@@ -134,6 +135,114 @@
           gap: 12px;
           padding: 12px 12px;
           box-shadow: 0 0 0 rgba(0,0,0,0); /* 占位，便于将来扩展 */
+        }
+
+        /* 底部音量监视面板 */
+        .volume-panel {
+          position: fixed;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: #ffffff;
+          border-top: 1px solid #e5e5e5;
+          box-shadow: 0 -1px 3px rgba(0, 0, 0, 0.05);
+          padding: 14px 24px;
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+          z-index: 900;
+        }
+
+        .volume-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          font-size: 0.9rem;
+          color: #555;
+        }
+
+        .volume-header span:first-child {
+          font-weight: 600;
+          color: #333;
+        }
+
+        .volume-bar-wrapper {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+        }
+
+        .volume-scale {
+          display: flex;
+          justify-content: space-between;
+          font-size: 0.72rem;
+          color: #999;
+        }
+
+        .volume-bar {
+          position: relative;
+          height: 18px;
+          border-radius: 9px;
+          border: 1px solid #d8d8d8;
+          background: linear-gradient(90deg, #e8f5e9 0%, #fffde7 50%, #ffebee 100%);
+          overflow: hidden;
+        }
+
+        .volume-silence {
+          position: absolute;
+          top: 0;
+          bottom: 0;
+          left: 0;
+          background: rgba(158, 158, 158, 0.18);
+          display: flex;
+          align-items: center;
+          justify-content: flex-start;
+          padding-left: 8px;
+          font-size: 0.7rem;
+          color: #666;
+          pointer-events: none;
+          transition: width 0.1s ease-out;
+        }
+
+        .volume-level {
+          position: absolute;
+          top: 0;
+          bottom: 0;
+          left: 0;
+          width: 0%;
+          border-radius: 9px;
+          transition: width 0.08s ease-out, background-color 0.08s ease-out;
+        }
+
+        .volume-level.low {
+          background-color: #4caf50;
+        }
+
+        .volume-level.medium {
+          background-color: #ffb300;
+        }
+
+        .volume-level.high {
+          background-color: #f44336;
+        }
+
+        .volume-level.idle {
+          background-color: #bdbdbd;
+        }
+
+        .volume-values {
+          display: flex;
+          gap: 16px;
+          font-size: 0.85rem;
+          color: #555;
+        }
+
+        .volume-panel.inactive .volume-level {
+          background-color: #bdbdbd;
+        }
+
+        .volume-panel.inactive .volume-header span:last-child {
+          color: #999;
         }
 
         /* 边栏按钮（复用基础按钮样式） */
@@ -322,6 +431,31 @@
                 <button onclick="copyLastResult()">复制最新结果</button>
                 <button class="clear-btn" onclick="clearLogs()">清空日志</button>
             </div>
+        </div>
+    </div>
+
+    <!-- 底部音量条 -->
+    <div class="volume-panel inactive" id="volumePanel">
+        <div class="volume-header">
+            <span>当前音量</span>
+            <span id="volumeStatusText">等待录音</span>
+        </div>
+        <div class="volume-bar-wrapper">
+            <div class="volume-scale">
+                <span>-60 dB</span>
+                <span>-40 dB</span>
+                <span>-20 dB</span>
+                <span>-10 dB</span>
+                <span>0 dB</span>
+            </div>
+            <div class="volume-bar">
+                <div class="volume-silence" id="volumeSilence">静音范围</div>
+                <div class="volume-level idle" id="volumeLevel"></div>
+            </div>
+        </div>
+        <div class="volume-values">
+            <span id="volumeDbValue">-inf dB</span>
+            <span id="volumeRmsValue">RMS 0.000</span>
         </div>
     </div>
 

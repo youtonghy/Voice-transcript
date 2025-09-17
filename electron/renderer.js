@@ -17,6 +17,15 @@ const recordButton = document.getElementById('recordButton');
 const statusDot = document.getElementById('statusDot');
 const statusText = document.getElementById('statusText');
 const logContainer = document.getElementById('logContainer');
+const volumePanel = document.getElementById('volumePanel');
+const volumeLevelEl = document.getElementById('volumeLevel');
+const volumeSilenceEl = document.getElementById('volumeSilence');
+const volumeDbValue = document.getElementById('volumeDbValue');
+const volumeRmsValue = document.getElementById('volumeRmsValue');
+const volumeStatusText = document.getElementById('volumeStatusText');
+
+const VOLUME_MIN_DB = -60;
+const VOLUME_MAX_DB = 0;
 
 // Initialization
 document.addEventListener('DOMContentLoaded', () => {
@@ -151,6 +160,7 @@ function updateServiceStatus(status) {
         recordButton.textContent = '🔧';
         recordButton.title = 'Service starting...';
         recordButton.className = 'control-bar-btn record-btn start disabled';
+        setVolumeRecordingState(false);
     } else {
         recordButton.disabled = false;
         updateUI();
@@ -226,6 +236,105 @@ function updateUI() {
         if (typeof statusText !== 'undefined' && statusText) {
             statusText.textContent = pythonServiceStatus === 'running' ? '就绪' : '服务未就绪';
         }
+    }
+
+    setVolumeRecordingState(isRecording);
+}
+
+function setVolumeRecordingState(active) {
+    if (!volumePanel) {
+        return;
+    }
+
+    if (active) {
+        volumePanel.classList.remove('inactive');
+        volumePanel.classList.add('active');
+        if (volumeStatusText) {
+            volumeStatusText.textContent = '录音中';
+        }
+        if (volumeLevelEl) {
+            volumeLevelEl.style.width = '0%';
+            volumeLevelEl.className = 'volume-level low';
+        }
+        if (volumeSilenceEl) {
+            volumeSilenceEl.textContent = '静音范围';
+            volumeSilenceEl.style.width = '33%';
+        }
+    } else {
+        volumePanel.classList.remove('active');
+        volumePanel.classList.add('inactive');
+        if (volumeStatusText) {
+            volumeStatusText.textContent = pythonServiceStatus === 'running' ? '等待录音' : '服务未就绪';
+        }
+        if (volumeDbValue) {
+            volumeDbValue.textContent = '-inf dB';
+        }
+        if (volumeRmsValue) {
+            volumeRmsValue.textContent = 'RMS 0.000';
+        }
+        if (volumeLevelEl) {
+            volumeLevelEl.style.width = '0%';
+            volumeLevelEl.className = 'volume-level idle';
+        }
+        if (volumeSilenceEl) {
+            volumeSilenceEl.style.width = '33%';
+            volumeSilenceEl.textContent = '静音范围';
+        }
+    }
+}
+
+function getVolumeLevelClass(db) {
+    if (db <= -30) {
+        return 'low';
+    }
+    if (db <= -15) {
+        return 'medium';
+    }
+    return 'high';
+}
+
+function updateVolumeMeter(payload) {
+    if (!volumePanel || !isRecording) {
+        return;
+    }
+
+    setVolumeRecordingState(true);
+
+    const hasDb = typeof payload.db === 'number' && isFinite(payload.db);
+    const rawDb = hasDb ? payload.db : VOLUME_MIN_DB;
+    const clampedDb = Math.min(VOLUME_MAX_DB, Math.max(VOLUME_MIN_DB, rawDb));
+    const percent = ((clampedDb - VOLUME_MIN_DB) / (VOLUME_MAX_DB - VOLUME_MIN_DB)) * 100;
+    const width = Math.max(0, Math.min(100, percent));
+
+    if (volumeLevelEl) {
+        const levelClass = getVolumeLevelClass(clampedDb);
+        volumeLevelEl.style.width = `${width}%`;
+        volumeLevelEl.className = `volume-level ${levelClass}`;
+    }
+
+    if (volumeDbValue) {
+        if (!hasDb || rawDb <= VOLUME_MIN_DB) {
+            volumeDbValue.textContent = `<= ${VOLUME_MIN_DB.toFixed(1)} dB`;
+        } else {
+            volumeDbValue.textContent = `${clampedDb.toFixed(1)} dB`;
+        }
+    }
+
+    const hasRms = typeof payload.rms === 'number' && isFinite(payload.rms);
+    const rmsValue = hasRms ? payload.rms : 0;
+    if (volumeRmsValue) {
+        volumeRmsValue.textContent = `RMS ${rmsValue.toFixed(3)}`;
+    }
+
+    if (volumeSilenceEl) {
+        const silenceDbRaw = typeof payload.silence_db === 'number' && isFinite(payload.silence_db)
+            ? payload.silence_db
+            : VOLUME_MIN_DB;
+        const silenceDb = Math.min(VOLUME_MAX_DB, Math.max(VOLUME_MIN_DB, silenceDbRaw));
+        const silencePercent = ((silenceDb - VOLUME_MIN_DB) / (VOLUME_MAX_DB - VOLUME_MIN_DB)) * 100;
+        const silenceWidth = Math.max(0, Math.min(100, silencePercent));
+        volumeSilenceEl.style.width = `${silenceWidth}%`;
+        volumeSilenceEl.textContent = `静音范围 (${silenceDb.toFixed(1)} dB)`;
     }
 }
 
@@ -320,6 +429,9 @@ function handlePythonMessage(message) {
             } else {
                 console.warn('Translation update received but result node not found:', message.result_id);
             }
+            break;
+        case 'volume_level':
+            updateVolumeMeter(message);
             break;
         case 'voice_activity':
             // Handle voice activity status updates
