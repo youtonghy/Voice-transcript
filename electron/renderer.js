@@ -26,6 +26,7 @@ const volumeStatusText = document.getElementById('volumeStatusText');
 
 const VOLUME_MIN_DB = -60;
 const VOLUME_MAX_DB = 0;
+let silenceMarkerDb = null;
 
 // Initialization
 document.addEventListener('DOMContentLoaded', () => {
@@ -256,7 +257,7 @@ function setVolumeRecordingState(active) {
             volumeLevelEl.style.width = '0%';
             volumeLevelEl.className = 'volume-level low';
         }
-        if (volumeSilenceEl) {
+        if (volumeSilenceEl && silenceMarkerDb === null) {
             volumeSilenceEl.textContent = '静音范围';
             volumeSilenceEl.style.width = '33%';
         }
@@ -280,6 +281,7 @@ function setVolumeRecordingState(active) {
             volumeSilenceEl.style.width = '33%';
             volumeSilenceEl.textContent = '静音范围';
         }
+        silenceMarkerDb = null;
     }
 }
 
@@ -291,6 +293,27 @@ function getVolumeLevelClass(db) {
         return 'medium';
     }
     return 'high';
+}
+
+function updateSilenceMarker(db) {
+    if (!volumeSilenceEl) {
+        return;
+    }
+
+    if (typeof db !== 'number' || !isFinite(db)) {
+        return;
+    }
+
+    if (silenceMarkerDb !== null && Math.abs(silenceMarkerDb - db) < 0.01) {
+        return;
+    }
+
+    silenceMarkerDb = db;
+    const clamped = Math.min(VOLUME_MAX_DB, Math.max(VOLUME_MIN_DB, db));
+    const percent = ((clamped - VOLUME_MIN_DB) / (VOLUME_MAX_DB - VOLUME_MIN_DB)) * 100;
+    const width = Math.max(0, Math.min(100, percent));
+    volumeSilenceEl.style.width = `${width}%`;
+    volumeSilenceEl.textContent = `静音范围 (${clamped.toFixed(1)} dB)`;
 }
 
 function updateVolumeMeter(payload) {
@@ -330,11 +353,7 @@ function updateVolumeMeter(payload) {
         const silenceDbRaw = typeof payload.silence_db === 'number' && isFinite(payload.silence_db)
             ? payload.silence_db
             : VOLUME_MIN_DB;
-        const silenceDb = Math.min(VOLUME_MAX_DB, Math.max(VOLUME_MIN_DB, silenceDbRaw));
-        const silencePercent = ((silenceDb - VOLUME_MIN_DB) / (VOLUME_MAX_DB - VOLUME_MIN_DB)) * 100;
-        const silenceWidth = Math.max(0, Math.min(100, silencePercent));
-        volumeSilenceEl.style.width = `${silenceWidth}%`;
-        volumeSilenceEl.textContent = `静音范围 (${silenceDb.toFixed(1)} dB)`;
+        updateSilenceMarker(silenceDbRaw);
     }
 }
 
