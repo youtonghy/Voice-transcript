@@ -898,6 +898,8 @@ def process_segment_chunks(chunks, seg_idx=None, from_split=False):
         if not chunks:
             return
         combined_audio = np.concatenate(chunks, axis=0) if len(chunks) > 1 else chunks[0]
+        duration_seconds = float(len(combined_audio)) / float(SAMPLE_RATE) if len(combined_audio) > 0 else 0.0
+        recorded_at = datetime.now()
 
         # Assign result_id and order, send placeholder first to maintain ordering in UI
         transcription_counter += 1
@@ -911,7 +913,9 @@ def process_segment_chunks(chunks, seg_idx=None, from_split=False):
                     "transcription": "",
                     "transcription_pending": True,
                     "transcription_order": trans_order,
-                    "timestamp": datetime.now().isoformat()
+                    "timestamp": recorded_at.isoformat(),
+                    "recorded_at": recorded_at.isoformat(),
+                    "duration_seconds": duration_seconds
                 }
                 if current_recording_context == 'voice_input':
                     payload["context"] = "voice_input"
@@ -919,11 +923,27 @@ def process_segment_chunks(chunks, seg_idx=None, from_split=False):
             except Exception:
                 pass
 
-        process_combined_audio(combined_audio, seg_idx, from_split, result_id=result_id, trans_order=trans_order)
+        process_combined_audio(
+            combined_audio,
+            seg_idx,
+            from_split,
+            result_id=result_id,
+            trans_order=trans_order,
+            recorded_at=recorded_at,
+            duration_seconds=duration_seconds
+        )
     except Exception as e:
         log_message("error", f"Error processing audio segment: {e}")
 
-def process_combined_audio(combined_audio, seg_idx=None, from_split=False, result_id=None, trans_order=None):
+def process_combined_audio(
+    combined_audio,
+    seg_idx=None,
+    from_split=False,
+    result_id=None,
+    trans_order=None,
+    recorded_at=None,
+    duration_seconds=None
+):
     """Save combined audio and transcribe/translate"""
     try:
         # Check if theater mode is enabled
@@ -941,6 +961,11 @@ def process_combined_audio(combined_audio, seg_idx=None, from_split=False, resul
         filepath = os.path.join(OUTPUT_DIR, filename)
 
         sf.write(filepath, combined_audio, SAMPLE_RATE)
+
+        if recorded_at is None:
+            recorded_at = datetime.now()
+        if duration_seconds is None:
+            duration_seconds = float(len(combined_audio)) / float(SAMPLE_RATE) if len(combined_audio) > 0 else 0.0
 
         # Transcribe audio, with possible overrides in voice-input simple mode
         original_source = None
@@ -980,7 +1005,9 @@ def process_combined_audio(combined_audio, seg_idx=None, from_split=False, resul
                     "result_id": result_id,
                     "transcription": transcription.strip(),
                     "order": trans_order or 0,
-                    "timestamp": datetime.now().isoformat()
+                    "timestamp": recorded_at.isoformat(),
+                    "recorded_at": recorded_at.isoformat(),
+                    "duration_seconds": float(duration_seconds)
                 }
                 if current_recording_context == 'voice_input':
                     payload["context"] = "voice_input"

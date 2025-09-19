@@ -79,6 +79,114 @@ function changeLanguage(lang) {
     document.title = t('index.title');
 }
 
+function formatRecordedAtText(isoString) {
+    if (typeof isoString !== 'string' || !isoString) {
+        return '';
+    }
+    const date = new Date(isoString);
+    if (Number.isNaN(date.getTime())) {
+        return '';
+    }
+    const year = date.getFullYear();
+    const month = date.getMonth() + 1;
+    const day = date.getDate();
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${year}/${month}/${day} ${hours}:${minutes}`;
+}
+
+function formatDurationText(durationSeconds) {
+    if (typeof durationSeconds !== 'number' || !Number.isFinite(durationSeconds)) {
+        return '';
+    }
+    const totalSeconds = Math.max(0, Math.round(durationSeconds));
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+
+    if (hours > 0) {
+        return `${hours}h${String(minutes).padStart(2, '0')}m${String(seconds).padStart(2, '0')}s`;
+    }
+    if (minutes > 0) {
+        return `${minutes}m${String(seconds).padStart(2, '0')}s`;
+    }
+    return `${seconds}s`;
+}
+
+function ensureRecordingMetaElement(entry) {
+    if (!entry) {
+        return null;
+    }
+    let metaDiv = entry.querySelector('.recording-meta');
+    if (!metaDiv) {
+        metaDiv = document.createElement('div');
+        metaDiv.className = 'recording-meta';
+        entry.appendChild(metaDiv);
+    }
+    return metaDiv;
+}
+
+function applyRecordingMeta(entry, meta = {}) {
+    if (!entry || typeof entry !== 'object') {
+        return;
+    }
+
+    const { recordedAt, durationSeconds } = meta;
+    if (typeof recordedAt === 'string' && recordedAt) {
+        entry.dataset.recordedAt = recordedAt;
+    }
+    if (typeof durationSeconds === 'number' && Number.isFinite(durationSeconds)) {
+        entry.dataset.durationSec = String(durationSeconds);
+    }
+
+    const storedRecordedAt = entry.dataset.recordedAt || '';
+    const storedDuration = entry.dataset.durationSec;
+    const durationValue = typeof storedDuration === 'string' && storedDuration !== '' ? Number(storedDuration) : null;
+
+    if (!storedRecordedAt && (durationValue === null || Number.isNaN(durationValue))) {
+        const existing = entry.querySelector('.recording-meta');
+        if (existing) {
+            existing.textContent = '';
+        }
+        return;
+    }
+
+    const metaDiv = ensureRecordingMetaElement(entry);
+    if (!metaDiv) {
+        return;
+    }
+
+    const recordedText = formatRecordedAtText(storedRecordedAt);
+    const durationText = (durationValue !== null && Number.isFinite(durationValue)) ? formatDurationText(durationValue) : '';
+    const parts = [];
+    if (recordedText) {
+        parts.push(recordedText);
+    }
+    if (durationText) {
+        parts.push(durationText);
+    }
+
+    metaDiv.textContent = parts.join(' ').trim();
+}
+
+function extractRecordingMeta(message) {
+    if (!message || typeof message !== 'object') {
+        return {};
+    }
+    const meta = {};
+    if (typeof message.recorded_at === 'string' && message.recorded_at) {
+        meta.recordedAt = message.recorded_at;
+    } else if (typeof message.timestamp === 'string' && message.timestamp) {
+        meta.recordedAt = message.timestamp;
+    }
+    if (typeof message.duration_seconds === 'number' && Number.isFinite(message.duration_seconds)) {
+        meta.durationSeconds = message.duration_seconds;
+    } else if (typeof message.duration_ms === 'number' && Number.isFinite(message.duration_ms)) {
+        meta.durationSeconds = message.duration_ms / 1000;
+    }
+    return meta;
+}
+
 function getLocalizedList(key) {
     if (!window.appI18n || !window.appI18n.translations) {
         return [];
@@ -618,18 +726,19 @@ function handlePythonMessage(message) {
             // Handle new result message type
             if (message.transcription) {
                 lastTranscription = message.transcription;
+                const meta = extractRecordingMeta(message);
                 
                 if (message.translation) {
                     // Synchronous translation completed: display complete combined message
                     lastTranslation = message.translation;
-                    const resultNode = renderResultEntry(message.transcription, message.translation);
+                    const resultNode = renderResultEntry(message.transcription, message.translation, false, false, meta);
                     if (message.result_id) {
                         resultNodes.set(message.result_id, resultNode);
                         console.log('Store synchronous translation result node:', message.result_id);
                     }
                 } else if (message.translation_pending) {
                     // Asynchronous translation pending: first display transcription, reserve translation position
-                    const resultNode = renderResultEntry(message.transcription, null, true);
+                    const resultNode = renderResultEntry(message.transcription, null, true, false, meta);
                     if (message.result_id) {
                         resultNodes.set(message.result_id, resultNode);
                         console.log('Store asynchronous translation pending node:', message.result_id);
@@ -649,14 +758,15 @@ function handlePythonMessage(message) {
                     }
                 } else {
                     // No translation: only display transcription
-                    const resultNode = renderResultEntry(message.transcription);
+                    const resultNode = renderResultEntry(message.transcription, null, false, false, meta);
                     if (message.result_id) {
                         resultNodes.set(message.result_id, resultNode);
                     }
                 }
             } else if (message.transcription_pending && message.result_id) {
                 // Placeholder for transcription; ensure order by creating an empty bubble
-                const resultNode = renderResultEntry(null /* transcription */, null /* translation */, false /* translationPending */, true /* transcriptionPending */);
+                const meta = extractRecordingMeta(message);
+                const resultNode = renderResultEntry(null /* transcription */, null /* translation */, false /* translationPending */, true /* transcriptionPending */, meta);
                 resultNodes.set(message.result_id, resultNode);
                 if (message.transcription_order) {
                     resultNode.dataset.transcriptionOrder = message.transcription_order;
@@ -667,6 +777,7 @@ function handlePythonMessage(message) {
             if (message.result_id && resultNodes.has(message.result_id)) {
                 const resultNode = resultNodes.get(message.result_id);
                 updateTranscriptionInBubble(resultNode, message.transcription);
+                applyRecordingMeta(resultNode, extractRecordingMeta(message));
                 console.log('Updated transcription:', message.result_id);
             } else {
                 console.warn('Transcription update received but result node not found:', message.result_id);
@@ -728,13 +839,16 @@ function updateTranslationInBubble(bubble, translation) {
         translationDiv.textContent = translation;
     } else {
         // Ensure a separator and translation block exist
+        const metaDiv = bubble.querySelector('.recording-meta');
+        const insertBeforeNode = metaDiv || null;
+
         const sep = document.createElement('div');
         sep.className = 'result-separator';
-        bubble.appendChild(sep);
+        bubble.insertBefore(sep, insertBeforeNode);
         translationDiv = document.createElement('div');
         translationDiv.className = 'result-part translation';
         translationDiv.textContent = translation;
-        bubble.appendChild(translationDiv);
+        bubble.insertBefore(translationDiv, insertBeforeNode);
     }
     logContainer.scrollTop = logContainer.scrollHeight;
 }
@@ -753,7 +867,7 @@ function updateTranscriptionInBubble(bubble, transcription) {
     logContainer.scrollTop = logContainer.scrollHeight;
 }
 
-function renderResultEntry(transcription, translation = null, translationPending = false, transcriptionPending = false) {
+function renderResultEntry(transcription, translation = null, translationPending = false, transcriptionPending = false, meta = {}) {
     const entry = document.createElement('div');
     entry.className = 'log-entry result-entry';
 
@@ -787,6 +901,8 @@ function renderResultEntry(transcription, translation = null, translationPending
         translationDiv.textContent = t('index.translation.loading');
         entry.appendChild(translationDiv);
     }
+
+    applyRecordingMeta(entry, meta);
 
     logContainer.appendChild(entry);
     logContainer.scrollTop = logContainer.scrollHeight;
