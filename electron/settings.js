@@ -177,133 +177,7 @@ function registerSettingsTranslations() {
     if (backLink) {
         backLink.dataset.i18n = 'common.backLink';
     }
-}
-
-
-
-if (window.appI18n && typeof window.appI18n.extend === 'function') {
-    window.appI18n.extend({
-        en: {
-            'common.backNav': '← Back',
-            'common.backLink': 'Back',
-            'settings.nav.title': 'Settings',
-            'settings.nav.backTooltip': 'Back to main window',
-            'settings.header.title': 'Settings',
-            'settings.header.subtitle': 'Configure API keys and transcription/translation options.',
-            'settings.section.recognitionEngine': 'Recognition Engine',
-            'settings.section.translationEngine': 'Translation Engine',
-            'settings.section.openaiCommon': 'OpenAI Common Settings',
-            'settings.section.translation': 'Translation Settings',
-            'settings.section.transcription': 'Transcription Settings',
-            'settings.section.recording': 'Recording Settings',
-            'settings.section.interfaceLanguage': 'Interface Language',
-            'settings.labels.recognitionEngine': 'Recognition Engine',
-            'settings.labels.openaiTranscribeModel': 'Transcribe Model',
-            'settings.labels.sonioxApiKey': 'Soniox API Key',
-            'settings.labels.dashscopeApiKey': 'DashScope API Key',
-            'settings.labels.qwen3AsrModel': 'Qwen3-ASR Model',
-            'settings.labels.translationEngine': 'Translation Engine',
-            'settings.labels.geminiApiKey': 'Gemini API Key',
-            'settings.labels.geminiTranslateModel': 'Gemini Model',
-            'settings.labels.openaiTranslateModel': 'Translate Model',
-            'settings.labels.apiKey': 'OpenAI API Key',
-            'settings.labels.apiUrl': 'API Base URL (optional)',
-            'settings.labels.enableTranslation': 'Enable Auto Translation',
-            'settings.labels.translationMode': 'Translation Mode',
-            'settings.labels.targetLanguage': 'Target Language',
-            'settings.labels.language1': 'Language 1',
-            'settings.labels.language2': 'Language 2',
-            'settings.labels.transcribeLanguage': 'Transcription Language',
-            'settings.labels.silenceThreshold': 'Silence Threshold',
-            'settings.labels.silenceDuration': 'Silence Split Duration (seconds)',
-            'settings.labels.theaterMode': 'Theater Mode',
-            'settings.labels.appLanguage': 'Choose Language',
-            'settings.placeholders.customLanguage': 'Enter a custom language',
-            'settings.notes.recognitionEngine': 'Choose the provider for speech recognition (transcription).',
-            'settings.notes.openaiTranscribeModel': 'Audio transcription model (default gpt-4o-transcribe).',
-            'settings.notes.sonioxApiKey': 'Required when the recognition engine is Soniox.',
-            'settings.notes.dashscopeApiKey': 'Qwen3-ASR is provided via DashScope. Enter your DashScope API Key (or set environment variable DASHSCOPE_API_KEY).',
-            'settings.notes.qwen3AsrModel': 'Default is qwen3-asr-flash; change if you need another model.',
-            'settings.notes.translationEngine': 'Choose the provider for text translation (OpenAI or Gemini).',
-            'settings.notes.geminiApiKey': 'Gemini Developer API key stored locally for translation.',
-            'settings.notes.geminiTranslateModel': 'Default system prompt is generated automatically; override the model if needed.',
-            'settings.notes.openaiTranslateModel': 'Model used for text translation.',
-            'settings.notes.apiKey': 'Saved to local config.json; shared by transcription and translation.',
-            'settings.notes.apiUrl': 'Leave empty to use OpenAI default; if custom, end with /v1.',
-            'settings.notes.translationMode': 'Fixed: always translate to the target; Smart: better for bilingual conversations.',
-            'settings.notes.targetLanguage': 'Select a common language or choose "Custom..." and type a language name.',
-            'settings.notes.transcribeLanguage': 'Choosing "Auto Detect" will not use a prompt; choosing a specific language will use the prompt "Please transcribe in XX language".<br><strong>Note: In Smart translation mode, transcription language will be auto-detected.</strong>',
-            'settings.notes.silenceThreshold': 'Smaller is more sensitive. Recommended range: 0.005–0.02.',
-            'settings.notes.silenceDuration': 'Split when continuous silence exceeds this duration.',
-            'settings.notes.theaterMode': 'Amplify quiet audio to normal speech volume to improve recognition.',
-            'settings.notes.appLanguage': 'Changes take effect immediately and will be saved to your configuration.',
-            'settings.notify.saved': 'Settings saved',
-            'settings.notify.saveFailed': 'Save failed',
-            'settings.notify.loadFailed': 'Failed to load configuration',
-            'settings.notify.reloaded': 'Configuration reloaded',
-            'settings.error.translationLanguageRequired': 'Please set the target translation language'
-        },
-        zh: {
-            'common.backNav': '← 返回',
-            'common.backLink': '返回',
-            'settings.nav.title': '设置',
-            'settings.nav.backTooltip': '返回主窗口',
-            'settings.header.title': '设置',
-            'settings.header.subtitle': '配置 API 密钥以及转写、翻译相关选项。',
-            'settings.section.recognitionEngine': '识别引擎',
-            'settings.section.translationEngine': '翻译引擎',
-            'settings.section.openaiCommon': 'OpenAI 通用设置',
-            'settings.section.translation': '翻译设置',
-            'settings.section.transcription': '转写设置',
-            'settings.section.recording': '录音设置',
-            'settings.section.interfaceLanguage': '界面语言',
-            'settings.labels.recognitionEngine': '识别引擎',
-            'settings.labels.openaiTranscribeModel': '转写模型',
-            'settings.labels.sonioxApiKey': 'Soniox API 密钥',
-            'settings.labels.dashscopeApiKey': 'DashScope API 密钥',
-            'settings.labels.qwen3AsrModel': 'Qwen3-ASR 模型',
-            'settings.labels.translationEngine': '翻译引擎',
-            'settings.labels.geminiApiKey': 'Gemini API 密钥',
-            'settings.labels.geminiTranslateModel': 'Gemini 模型',
-            'settings.labels.openaiTranslateModel': '翻译模型',
-            'settings.labels.apiKey': 'OpenAI API 密钥',
-            'settings.labels.apiUrl': 'API 基础地址（可选）',
-            'settings.labels.enableTranslation': '启用自动翻译',
-            'settings.labels.translationMode': '翻译模式',
-            'settings.labels.targetLanguage': '目标语言',
-            'settings.labels.language1': '语言 1',
-            'settings.labels.language2': '语言 2',
-            'settings.labels.transcribeLanguage': '转写语言',
-            'settings.labels.silenceThreshold': '静音阈值',
-            'settings.labels.silenceDuration': '静音切分时长（秒）',
-            'settings.labels.theaterMode': '剧场模式',
-            'settings.labels.appLanguage': '界面语言',
-            'settings.placeholders.customLanguage': '输入自定义语言',
-            'settings.notes.recognitionEngine': '选择语音识别（转写）所使用的服务商。',
-            'settings.notes.openaiTranscribeModel': '音频转写模型（默认 gpt-4o-transcribe）。',
-            'settings.notes.sonioxApiKey': '当识别引擎选择 Soniox 时必须填写。',
-            'settings.notes.dashscopeApiKey': 'Qwen3-ASR 由 DashScope 提供，请填写 DashScope API Key（或设置环境变量 DASHSCOPE_API_KEY）。',
-            'settings.notes.qwen3AsrModel': '默认使用 qwen3-asr-flash，可根据需要更换模型。',
-            'settings.notes.translationEngine': '选择文本翻译服务商（OpenAI 或 Gemini）。',
-            'settings.notes.geminiApiKey': '用于翻译的 Gemini 开发者 API 密钥，保存在本地。',
-            'settings.notes.geminiTranslateModel': '系统提示会自动生成，如需可自定义模型。',
-            'settings.notes.openaiTranslateModel': '用于文本翻译的模型。',
-            'settings.notes.apiKey': '保存在本地 config.json，供转写与翻译共用。',
-            'settings.notes.apiUrl': '留空将使用 OpenAI 默认地址；自定义地址请以 /v1 结尾。',
-            'settings.notes.translationMode': '固定模式：始终翻译为目标语言；智能模式：适合双语对话场景。',
-            'settings.notes.targetLanguage': '在常用语言中选择，或选 “Custom...” 并输入自定义语言名称。',
-            'settings.notes.transcribeLanguage': '选择 “Auto Detect” 时不会附带提示；指定语言则会使用 “Please transcribe in XX language”。<br><strong>注意：智能翻译模式下会自动检测转写语言。</strong>',
-            'settings.notes.silenceThreshold': '数值越小越灵敏。推荐范围：0.005–0.02。',
-            'settings.notes.silenceDuration': '当持续静音超过该时长时进行切分。',
-            'settings.notes.theaterMode': '放大较小的音量，使其达到正常语音水平以提升识别效果。',
-            'settings.notes.appLanguage': '更改后立即生效并写入配置文件。',
-            'settings.notify.saved': '设置已保存',
-            'settings.notify.saveFailed': '保存失败',
-            'settings.notify.loadFailed': '读取配置失败',
-            'settings.notify.reloaded': '配置已重新载入',
-            'settings.error.translationLanguageRequired': '请设置目标翻译语言'
-        }
-    });
+}});
 }
 
 
@@ -377,7 +251,7 @@ function setupEventListeners() {
         geminiApiKey.addEventListener('input', autoSave);
     }
     
-    // 寮曟搸鍒囨崲锛堣瘑鍒?缈昏瘧锛?
+    // Engine switching (recognition & translation)
     const recognitionEngine = document.getElementById('recognitionEngine');
     const translationEngine = document.getElementById('translationEngine');
     if (recognitionEngine) {
@@ -443,8 +317,8 @@ function scrollToHashSection() {
   }
 }
 
-// 瀵硅缃〃鍗曞唴鎵€鏈夋帶浠舵坊鍔犲け鐒﹀嵆淇濆瓨
-function attachGlobalAutoSave() {
+
+// Auto-save when any control in the settings form loses focus
   const form = document.getElementById('settingsForm');
   if (!form) return;
   const controls = form.querySelectorAll('input, select, textarea');
@@ -468,8 +342,8 @@ async function loadCurrentConfig() {
 }
 
 function populateForm(config) {
-    // 寮曟搸閰嶇疆锛堝吋瀹规棫瀛楁 transcribe_source锛?
-    (function(){
+
+    // Engine configuration (compatibility with legacy transcribe_source field)
         const recEl = document.getElementById('recognitionEngine');
         const tlEl = document.getElementById('translationEngine');
         const rec = (config.recognition_engine || config.transcribe_source || 'openai');
@@ -509,7 +383,7 @@ function populateForm(config) {
     const targetLanguage = document.getElementById('targetLanguage');
     const customLanguage = document.getElementById('customLanguage');
     let savedLang = config.translate_language || 'Chinese';
-    if (savedLang === '中文') savedLang = 'Chinese';
+    if (savedLang === 'zh') savedLang = 'Chinese';
     const options = Array.from(targetLanguage.options).map(o => o.value);
     if (options.includes(savedLang)) {
         targetLanguage.value = savedLang;
@@ -664,27 +538,27 @@ function updateTranscribeLanguageAvailability() {
 function updateProviderVisibility() {
     const rec = (document.getElementById('recognitionEngine') || {}).value || 'openai';
     const tl = (document.getElementById('translationEngine') || {}).value || 'openai';
-    // OpenAI 通用设置：任一引擎为 OpenAI 时显示
-    document.querySelectorAll('.provider-openai-common').forEach(el => {
+
+    // Show OpenAI common settings when either engine uses OpenAI
         el.style.display = (rec === 'openai' || tl === 'openai') ? '' : 'none';
     });
-    // OpenAI 语音识别模型：仅当识别引擎为 OpenAI 时显示
-    document.querySelectorAll('.provider-openai-rec').forEach(el => {
+
+    // Show OpenAI transcription model fields when the recognition engine is OpenAI
         el.style.display = (rec === 'openai') ? '' : 'none';
     });
-    // OpenAI 翻译模型：仅当翻译引擎为 OpenAI 时显示
-    document.querySelectorAll('.provider-openai-trans').forEach(el => {
+
+    // Show OpenAI translation model fields when the translation engine is OpenAI
         el.style.display = (tl === 'openai') ? '' : 'none';
     });
     document.querySelectorAll('.provider-gemini-trans').forEach(el => {
         el.style.display = (tl === 'gemini') ? '' : 'none';
     });
-    // Soniox：仅当识别引擎为 Soniox 时显示
-    document.querySelectorAll('.provider-soniox').forEach(el => {
+
+    // Show Soniox fields when the recognition engine is Soniox
         el.style.display = (rec === 'soniox') ? '' : 'none';
     });
-    // Qwen3-ASR：仅当识别引擎为 Qwen3-ASR 时显示
-    document.querySelectorAll('.provider-qwen3-asr').forEach(el => {
+
+    // Show Qwen3-ASR fields when the recognition engine is Qwen3-ASR
         el.style.display = (rec === 'qwen3-asr') ? '' : 'none';
     });
 }
@@ -767,11 +641,11 @@ async function saveSettingsInternal(silent = false) {
 function collectFormData() {
     const config = {};
     
-    // 寮曟搸閰嶇疆
-    config.recognition_engine = (document.getElementById('recognitionEngine') || { value: 'openai' }).value;
+
+    // Engine configuration
     config.translation_engine = (document.getElementById('translationEngine') || { value: 'openai' }).value;
-    // 鍚戝悗鍏煎瀛楁
-    config.transcribe_source = config.recognition_engine;
+
+    // Backward compatible fields
     config.openai_api_key = document.getElementById('apiKey').value.trim();
     config.openai_base_url = document.getElementById('apiUrl').value.trim();
     const sonioxEl = document.getElementById('sonioxApiKey');
@@ -915,6 +789,13 @@ function showTopNotification(message, type = 'info') {
         }
     }, 3000);
 }
+
+
+
+
+
+
+
 
 
 

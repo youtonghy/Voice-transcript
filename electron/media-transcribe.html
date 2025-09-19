@@ -1,9 +1,9 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>媒体文件转写翻译</title>
+    <title>濯掍綋鏂囦欢杞啓缈昏瘧</title>
     <style>
         * {
             box-sizing: border-box;
@@ -19,7 +19,7 @@
             overflow: hidden;
         }
 
-        /* 顶部导航栏 */
+        /* 椤堕儴瀵艰埅鏍?*/
         .nav-bar {
             position: fixed;
             top: 0;
@@ -82,7 +82,7 @@
             color: #333;
         }
 
-        /* 主内容区域 */
+        /* 涓诲唴瀹瑰尯鍩?*/
         .main-content {
             padding-top: 60px;
             height: 100vh;
@@ -99,7 +99,7 @@
             min-height: 0;
         }
 
-        /* 左侧设置面板 */
+        /* 宸︿晶璁剧疆闈㈡澘 */
         .settings-panel {
             width: 350px;
             background: #ffffff;
@@ -159,7 +159,7 @@
             outline: none;
         }
 
-        /* 文件上传区域 */
+        /* 鏂囦欢涓婁紶鍖哄煙 */
         .upload-area {
             border: 2px dashed #e5e5e5;
             border-radius: 12px;
@@ -301,7 +301,7 @@
             background: #e5e5e5;
         }
 
-        /* 右侧结果面板 */
+        /* 鍙充晶缁撴灉闈㈡澘 */
         .results-panel {
             flex: 1;
             background: #ffffff;
@@ -450,7 +450,7 @@
     </style>
 </head>
 <body>
-    <!-- 顶部导航栏 -->
+    <!-- 椤堕儴瀵艰埅鏍?-->
     <div class="nav-bar">
         <div class="nav-content">
             <div class="nav-left">
@@ -458,25 +458,25 @@
                     <span class="back-btn-icon" aria-hidden="true">&#8592;</span>
                     <span data-i18n="common.backLink">Back</span>
                 </a>
-                <div class="nav-title">媒体文件转写翻译</div>
+                <div class="nav-title">濯掍綋鏂囦欢杞啓缈昏瘧</div>
             </div>
         </div>
     </div>
 
-    <!-- 主内容区域 -->
+    <!-- 涓诲唴瀹瑰尯鍩?-->
     <div class="main-content">
         <div class="content-wrapper">
-            <!-- 左侧设置面板 -->
+            <!-- 宸︿晶璁剧疆闈㈡澘 -->
             <div class="settings-panel">
-                <!-- 文件上传 -->
+                <!-- 鏂囦欢涓婁紶 -->
                 <div class="panel-section">
-                    <div class="panel-title">选择文件</div>
+                    <div class="panel-title">閫夋嫨鏂囦欢</div>
                     <div class="upload-area" id="uploadArea">
-                        <div class="upload-icon">📁</div>
+                        <div class="upload-icon">馃搧</div>
                         <div class="upload-text">
-                            <div class="primary">点击选择媒体文件</div>
-                            <div>支持视频：MP4、AVI、MOV、MKV 等</div>
-                            <div>支持音频：WAV、MP3、FLAC、AAC 等</div>
+                            <div class="primary">鐐瑰嚮閫夋嫨濯掍綋鏂囦欢</div>
+                            <div>鏀寔瑙嗛锛歁P4銆丄VI銆丮OV銆丮KV 绛?/div>
+                            <div>鏀寔闊抽锛歐AV銆丮P3銆丗LAC銆丄AC 绛?/div>
                         </div>
                     </div>
 
@@ -486,101 +486,101 @@
                     </div>
                 </div>
 
-                <!-- 处理设置 -->
+                <!-- 澶勭悊璁剧疆 -->
                 <div class="panel-section">
-                    <div class="panel-title">处理设置</div>
+                    <div class="panel-title">澶勭悊璁剧疆</div>
                     <div class="input-group">
-                        <div class="input-label">转写引擎</div>
+                        <div class="input-label">杞啓寮曟搸</div>
                         <select class="text-input" id="recognitionEngine">
-                            <option value="openai">OpenAI（默认）</option>
+                            <option value="openai">OpenAI锛堥粯璁わ級</option>
                             <option value="soniox">Soniox</option>
                             <option value="qwen3-asr">Qwen3-ASR</option>
                         </select>
-                        <div class="input-hint">与设置页保持一致，修改后仅影响本页面的处理流程。</div>
+                        <div class="input-hint">涓庤缃〉淇濇寔涓€鑷达紝淇敼鍚庝粎褰卞搷鏈〉闈㈢殑澶勭悊娴佺▼銆?/div>
                     </div>
 
                     <div class="input-group">
-                        <div class="input-label">翻译引擎</div>
+                        <div class="input-label">缈昏瘧寮曟搸</div>
                         <select class="text-input" id="translationEngine">
-                            <option value="openai">OpenAI（默认）</option>
-                            <option value="gemini">Gemini（gemini-2.0-flash）</option>
+                            <option value="openai">OpenAI锛堥粯璁わ級</option>
+                            <option value="gemini">Gemini锛坓emini-2.0-flash锛?/option>
                         </select>
-                        <div class="input-hint">引擎列表与设置页同步，扩展后即可直接使用。</div>
+                        <div class="input-hint">寮曟搸鍒楄〃涓庤缃〉鍚屾锛屾墿灞曞悗鍗冲彲鐩存帴浣跨敤銆?/div>
                     </div>
 
                     <div class="setting-group">
                         <div class="setting-item">
                             <div class="checkbox checked" id="enableTranslation">
-                                <span>✓</span>
+                                <span>鉁?/span>
                             </div>
-                            <div class="setting-label">启用翻译</div>
+                            <div class="setting-label">鍚敤缈昏瘧</div>
                         </div>
 
                         <div class="input-group" id="languageGroup">
-                            <div class="input-label">目标语言</div>
+                            <div class="input-label">鐩爣璇█</div>
                             <select class="text-input" id="targetLanguage">
-                                <option value="中文" selected>中文 (Chinese)</option>
+                                <option value="涓枃" selected>涓枃 (Chinese)</option>
                                 <option value="English">English</option>
-                                <option value="日本語">日本語 (Japanese)</option>
-                                <option value="한국어">한국어 (Korean)</option>
-                                <option value="Español">Español (Spanish)</option>
-                                <option value="Français">Français (French)</option>
+                                <option value="鏃ユ湰瑾?>鏃ユ湰瑾?(Japanese)</option>
+                                <option value="頃滉淡鞏?>頃滉淡鞏?(Korean)</option>
+                                <option value="Espa帽ol">Espa帽ol (Spanish)</option>
+                                <option value="Fran莽ais">Fran莽ais (French)</option>
                                 <option value="Deutsch">Deutsch (German)</option>
                                 <option value="Italiano">Italiano (Italian)</option>
-                                <option value="Português">Português (Portuguese)</option>
-                                <option value="Русский">Русский (Russian)</option>
-                                <option value="العربية">العربية (Arabic)</option>
-                                <option value="हिन्दी">हिन्दी (Hindi)</option>
-                                <option value="ไทย">ไทย (Thai)</option>
-                                <option value="Tiếng Việt">Tiếng Việt (Vietnamese)</option>
+                                <option value="Portugu锚s">Portugu锚s (Portuguese)</option>
+                                <option value="袪褍褋褋泻懈泄">袪褍褋褋泻懈泄 (Russian)</option>
+                                <option value="丕賱毓乇亘賷丞">丕賱毓乇亘賷丞 (Arabic)</option>
+                                <option value="啶灌た啶ㄠ啶︵">啶灌た啶ㄠ啶︵ (Hindi)</option>
+                                <option value="喙勦笚喔?>喙勦笚喔?(Thai)</option>
+                                <option value="Ti岷縩g Vi峄噒">Ti岷縩g Vi峄噒 (Vietnamese)</option>
                                 <option value="Bahasa Indonesia">Bahasa Indonesia</option>
-                                <option value="Türkçe">Türkçe (Turkish)</option>
+                                <option value="T眉rk莽e">T眉rk莽e (Turkish)</option>
                                 <option value="Nederlands">Nederlands (Dutch)</option>
                                 <option value="Polski">Polski (Polish)</option>
-                                <option value="Українська">Українська (Ukrainian)</option>
-                                <option value="Čeština">Čeština (Czech)</option>
-                                <option value="__custom__">自定义...</option>
+                                <option value="校泻褉邪褩薪褋褜泻邪">校泻褉邪褩薪褋褜泻邪 (Ukrainian)</option>
+                                <option value="膶e拧tina">膶e拧tina (Czech)</option>
+                                <option value="__custom__">鑷畾涔?..</option>
                             </select>
-                            <input type="text" class="text-input" id="customLanguage" placeholder="输入自定义语言" style="display: none;">
+                            <input type="text" class="text-input" id="customLanguage" placeholder="杈撳叆鑷畾涔夎瑷€" style="display: none;">
                         </div>
 
                         <div class="setting-item">
                             <div class="checkbox" id="theaterMode"></div>
-                            <div class="setting-label">启用剧场模式（音频增强）</div>
+                            <div class="setting-label">鍚敤鍓у満妯″紡锛堥煶棰戝寮猴級</div>
                         </div>
                     </div>
                 </div>
 
-                <!-- 输出设置 -->
+                <!-- 杈撳嚭璁剧疆 -->
                 <div class="panel-section">
-                    <div class="panel-title">输出设置</div>
+                    <div class="panel-title">杈撳嚭璁剧疆</div>
                     <div class="input-group">
-                        <div class="input-label">保存位置</div>
+                        <div class="input-label">淇濆瓨浣嶇疆</div>
                         <div style="display: flex; gap: 8px;">
-                            <input type="text" class="text-input" id="outputPath" placeholder="选择保存位置" readonly style="flex: 1;">
-                            <button class="btn btn-secondary" id="browseOutputBtn" style="white-space: nowrap;">浏览</button>
+                            <input type="text" class="text-input" id="outputPath" placeholder="閫夋嫨淇濆瓨浣嶇疆" readonly style="flex: 1;">
+                            <button class="btn btn-secondary" id="browseOutputBtn" style="white-space: nowrap;">娴忚</button>
                         </div>
                     </div>
                 </div>
 
-                <!-- 操作按钮 -->
+                <!-- 鎿嶄綔鎸夐挳 -->
                 <div class="action-buttons">
-                    <button class="btn btn-primary" id="startProcessBtn" disabled>开始处理</button>
-                    <button class="btn btn-secondary" id="clearBtn">清除选择</button>
+                    <button class="btn btn-primary" id="startProcessBtn" disabled>寮€濮嬪鐞?/button>
+                    <button class="btn btn-secondary" id="clearBtn">娓呴櫎閫夋嫨</button>
                 </div>
             </div>
 
-            <!-- 右侧结果面板 -->
+            <!-- 鍙充晶缁撴灉闈㈡澘 -->
             <div class="results-panel">
                 <div class="results-header">
-                    <div class="results-title">处理结果</div>
-                    <button class="export-btn" id="exportBtn" disabled>导出TXT</button>
+                    <div class="results-title">澶勭悊缁撴灉</div>
+                    <button class="export-btn" id="exportBtn" disabled>瀵煎嚭TXT</button>
                 </div>
 
                 <div class="results-content" id="resultsContent">
                     <div class="empty-state">
-                        <div class="empty-icon">📄</div>
-                        <div>选择媒体文件并开始处理后，转写结果将显示在这里</div>
+                        <div class="empty-icon">馃搫</div>
+                        <div>閫夋嫨濯掍綋鏂囦欢骞跺紑濮嬪鐞嗗悗锛岃浆鍐欑粨鏋滃皢鏄剧ず鍦ㄨ繖閲?/div>
                     </div>
                 </div>
             </div>
@@ -588,6 +588,8 @@
     </div>
 
     <script src="i18n.js"></script>
+  <script src="locales/base.i18n.js"></script>
     <script src="media-transcribe-renderer.js"></script>
 </body>
 </html>
+

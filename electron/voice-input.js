@@ -1,4 +1,56 @@
 ﻿const DEFAULT_LANGUAGE = 'en';
+const LANGUAGE_ALIASES = {
+  chinese: 'Chinese',
+  zh: 'Chinese',
+  'zh-cn': 'Chinese',
+  english: 'English',
+  en: 'English',
+  japanese: 'Japanese',
+  ja: 'Japanese',
+  korean: 'Korean',
+  ko: 'Korean',
+  spanish: 'Spanish',
+  es: 'Spanish',
+  french: 'French',
+  fr: 'French',
+  german: 'German',
+  de: 'German',
+  italian: 'Italian',
+  it: 'Italian',
+  portuguese: 'Portuguese',
+  pt: 'Portuguese',
+  russian: 'Russian',
+  ru: 'Russian',
+  arabic: 'Arabic',
+  ar: 'Arabic',
+  hindi: 'Hindi',
+  hi: 'Hindi',
+  thai: 'Thai',
+  th: 'Thai',
+  vietnamese: 'Vietnamese',
+  vi: 'Vietnamese',
+  indonesian: 'Indonesian',
+  id: 'Indonesian',
+  turkish: 'Turkish',
+  tr: 'Turkish',
+  dutch: 'Dutch',
+  nl: 'Dutch',
+  polish: 'Polish',
+  pl: 'Polish',
+  ukrainian: 'Ukrainian',
+  uk: 'Ukrainian',
+  czech: 'Czech',
+  cs: 'Czech'
+};
+
+function normalizeLanguageAlias(value, fallback = 'Chinese') {
+  if (!value) {
+    return fallback;
+  }
+  const key = value.toString().trim().toLowerCase();
+  return LANGUAGE_ALIASES[key] || fallback;
+}
+
 
 function t(key) {
   if (window.appI18n && typeof window.appI18n.t === 'function') {
@@ -89,49 +141,7 @@ function registerVoiceInputTranslations() {
   if (backLink) {
     backLink.dataset.i18n = 'common.backLink';
   }
-}
-
-
-if (window.appI18n && typeof window.appI18n.extend === 'function') {
-  window.appI18n.extend({
-    en: {
-      'common.backNav': '\u2190 Back',
-      'common.backLink': 'Back',
-      'voice.pageTitle': 'Voice Input Settings',
-      'voice.nav.title': 'Voice Input Settings',
-      'voice.nav.backTooltip': 'Back to main window',
-      'voice.section.title': 'Voice Input',
-      'voice.fields.enable': 'Enable voice input (press once to start, press again to stop)',
-      'voice.fields.hotkey': 'Hotkey',
-      'voice.fields.engine': 'Transcription Engine',
-      'voice.fields.language': 'Transcription Language',
-      'voice.fields.insertTranslation': 'Insert translation after completion',
-      'voice.fields.insertNote': 'If enabled, the translation will be inserted after stopping.',
-      'voice.fields.translateLanguage': 'Translation Target Language',
-      'voice.placeholders.hotkey': 'e.g. F3 or A',
-      'voice.notes.hotkey': 'Supports F1-F24, A-Z, 0-9',
-      'voice.notify.loadFailed': 'Failed to load configuration',
-      'voice.notify.saveFailed': 'Save failed'
-    },
-    zh: {
-      'common.backNav': '\u2190 返回',
-      'common.backLink': '返回',
-      'voice.nav.title': '语音输入设置',
-      'voice.nav.backTooltip': '返回主界面',
-      'voice.section.title': '语音输入',
-      'voice.fields.enable': '启用语音输入（按一次开始，再按一次停止）',
-      'voice.fields.hotkey': '快捷键',
-      'voice.fields.engine': '转写引擎',
-      'voice.fields.language': '转写语言',
-      'voice.fields.insertTranslation': '完成后插入翻译结果',
-      'voice.fields.insertNote': '启用后将在停止时插入翻译文本。',
-      'voice.fields.translateLanguage': '翻译目标语言',
-      'voice.placeholders.hotkey': '例如：F3 或 A',
-      'voice.notes.hotkey': '支持 F1-F24、A-Z、0-9',
-      'voice.notify.loadFailed': '配置加载失败',
-      'voice.notify.saveFailed': '保存失败'
-    }
-  });
+}});
 }
 
 let currentConfig = {};
@@ -173,29 +183,7 @@ function fillForm(cfg) {
   if (viTlChk) viTlChk.checked = !!cfg.voice_input_translate;
   if (viTlLang) {
     const raw = cfg.voice_input_translate_language || cfg.translate_language || 'Chinese';
-    const map = {
-      '中文': 'Chinese', 'Chinese': 'Chinese',
-      'English': 'English',
-      '日本語': 'Japanese', 'Japanese': 'Japanese',
-      '한국어': 'Korean', 'Korean': 'Korean',
-      'Español': 'Spanish', 'Spanish': 'Spanish',
-      'Français': 'French', 'French': 'French',
-      'Deutsch': 'German', 'German': 'German',
-      'Italiano': 'Italian', 'Italian': 'Italian',
-      'Português': 'Portuguese', 'Portuguese': 'Portuguese',
-      'Русский': 'Russian', 'Russian': 'Russian',
-      'العربية': 'Arabic', 'Arabic': 'Arabic',
-      'हिन्दी': 'Hindi', 'Hindi': 'Hindi',
-      'ไทย': 'Thai', 'Thai': 'Thai',
-      'Tiếng Việt': 'Vietnamese', 'Vietnamese': 'Vietnamese',
-      'Bahasa Indonesia': 'Indonesian', 'Indonesian': 'Indonesian',
-      'Türkçe': 'Turkish', 'Turkish': 'Turkish',
-      'Nederlands': 'Dutch', 'Dutch': 'Dutch',
-      'Polski': 'Polish', 'Polish': 'Polish',
-      'Українська': 'Ukrainian', 'Ukrainian': 'Ukrainian',
-      'Čeština': 'Czech', 'Czech': 'Czech'
-    };
-    const normalized = map[raw] || 'Chinese';
+    const normalized = normalizeLanguageAlias(raw);
     viTlLang.value = normalized;
   }
   if (viTlGroup) viTlGroup.style.display = (viTlChk && viTlChk.checked) ? 'block' : 'none';
@@ -264,4 +252,7 @@ function notify(text, type) {
   document.body.appendChild(div);
   setTimeout(() => div.remove(), 2200);
 }
+
+
+
 

@@ -1,4 +1,4 @@
-let isRecording = false;
+﻿let isRecording = false;
 let lastTranscription = '';
 let lastTranslation = '';
 let pythonServiceStatus = 'unknown'; // 'starting', 'running', 'error', 'stopped'
@@ -32,6 +32,48 @@ const VOLUME_MAX_DB = 0;
 let silenceMarkerDb = null;
 
 const DEFAULT_LANGUAGE = 'en';
+function getCurrentLanguage() {
+    if (window.appI18n && typeof window.appI18n.getLanguage === 'function') {
+        return window.appI18n.getLanguage();
+    }
+    return DEFAULT_LANGUAGE;
+}
+
+function getLocalizedList(key) {
+    if (!window.appI18n || !window.appI18n.translations) {
+        return [];
+    }
+    const lang = getCurrentLanguage();
+    const values = [];
+    const collect = (table) => {
+        if (!table || !Object.prototype.hasOwnProperty.call(table, key)) {
+            return;
+        }
+        const entry = table[key];
+        if (Array.isArray(entry)) {
+            entry.forEach((item) => {
+                if (typeof item === 'string' && item.trim()) {
+                    values.push(item.trim());
+                }
+            });
+        } else if (typeof entry === 'string' && entry.trim()) {
+            values.push(entry.trim());
+        }
+    };
+    collect(window.appI18n.translations[lang]);
+    if (lang !== DEFAULT_LANGUAGE) {
+        collect(window.appI18n.translations[DEFAULT_LANGUAGE]);
+    }
+    return Array.from(new Set(values));
+}
+
+function messageMatchesKey(text, key) {
+    if (typeof text !== 'string' || !text) {
+        return false;
+    }
+    const candidates = getLocalizedList(key);
+    return candidates.some((fragment) => fragment && text.includes(fragment));
+}
 
 function t(key) {
     if (window.appI18n && typeof window.appI18n.t === 'function') {
@@ -60,6 +102,9 @@ function initializeLanguage() {
             document.title = t('index.title');
             updateServiceStatus(pythonServiceStatus);
             updateUI();
+            if (silenceMarkerDb !== null) {
+                updateSilenceMarker(silenceMarkerDb);
+            }
             if (volumePanel && volumeToggleBtn) {
                 const expanded = !volumePanel.classList.contains('collapsed');
                 updateVolumeToggleState(expanded);
@@ -68,85 +113,7 @@ function initializeLanguage() {
     }
 }
 
-if (window.appI18n && typeof window.appI18n.extend === 'function') {
-    window.appI18n.extend({
-        en: {
-            'index.title': 'Voice Transcription & Translation',
-            'index.tooltips.recordStart': 'Start Recording',
-            'index.tooltips.recordStop': 'Stop Recording',
-            'index.tooltips.voiceInput': 'Voice Input Settings',
-            'index.tooltips.settings': 'Settings',
-            'index.tooltips.media': 'Media Transcription',
-            'index.logTitle': 'Real-time Log',
-            'index.buttons.exportLogs': 'Export Logs',
-            'index.buttons.copyLatest': 'Copy Latest Result',
-            'index.buttons.clearLogs': 'Clear Logs',
-            'index.volume.current': 'Current Volume',
-            'index.volume.waiting': 'Waiting for recording',
-            'index.volume.recording': 'Recording...',
-            'index.volume.expand': 'Expand',
-            'index.volume.collapse': 'Collapse',
-            'index.volume.expandTooltip': 'Expand volume monitor',
-            'index.volume.collapseTooltip': 'Collapse volume monitor',
-            'index.volume.silenceRange': 'Silence Range',
-            'index.status.starting': 'Starting Python service...',
-            'index.status.running': 'Service running',
-            'index.status.error': 'Service error',
-            'index.status.stopped': 'Service stopped',
-            'index.recordButton.starting': 'Service starting...',
-            'index.log.backendFailed': 'Backend connection failed',
-            'index.log.openaiMissing': 'OpenAI not configured (required for selected source)',
-            'index.log.sonioxMissing': 'Soniox not configured (current source: Soniox)',
-            'index.log.geminiMissing': 'Gemini not configured (current translation engine: Gemini)',
-            'index.log.configLoadFailed': 'Failed to load configuration',
-            'index.log.notReadyStart': 'Python service not ready, cannot start recording',
-            'index.log.notReadyRecord': 'Python service not ready, cannot record',
-            'index.log.recordingError': 'Recording error',
-            'index.statusText.recording': 'Recording...',
-            'index.statusText.ready': 'Ready',
-            'index.statusText.notReady': 'Service not ready',
-            'index.result.transcribing': 'Transcribing...',
-            'index.result.translating': 'Translating...'
-        },
-        zh: {
-            'index.title': '语音转写翻译工具',
-            'index.tooltips.recordStart': '开始录音',
-            'index.tooltips.recordStop': '停止录音',
-            'index.tooltips.voiceInput': '语音输入设置',
-            'index.tooltips.settings': '设置',
-            'index.tooltips.media': '媒体文件转写',
-            'index.logTitle': '实时日志',
-            'index.buttons.exportLogs': '导出日志',
-            'index.buttons.copyLatest': '复制最新结果',
-            'index.buttons.clearLogs': '清空日志',
-            'index.volume.current': '当前音量',
-            'index.volume.waiting': '等待录音',
-            'index.volume.recording': '录音中',
-            'index.volume.expand': '展开',
-            'index.volume.collapse': '收起',
-            'index.volume.expandTooltip': '展开音量监视',
-            'index.volume.collapseTooltip': '收起音量监视',
-            'index.volume.silenceRange': '静音范围',
-            'index.status.starting': '正在启动 Python 服务...',
-            'index.status.running': '服务运行中',
-            'index.status.error': '服务错误',
-            'index.status.stopped': '服务已停止',
-            'index.recordButton.starting': '服务启动中...',
-            'index.log.backendFailed': '后端连接失败',
-            'index.log.openaiMissing': '未配置 OpenAI（当前识别源需要）',
-            'index.log.sonioxMissing': '未配置 Soniox（当前识别源为 Soniox）',
-            'index.log.geminiMissing': '未配置 Gemini（当前翻译引擎为 Gemini）',
-            'index.log.configLoadFailed': '读取配置失败',
-            'index.log.notReadyStart': 'Python 服务未就绪，无法开始录音',
-            'index.log.notReadyRecord': 'Python 服务未就绪，无法录音',
-            'index.log.recordingError': '录音错误',
-            'index.statusText.recording': '录音中...',
-            'index.statusText.ready': '就绪',
-            'index.statusText.notReady': '服务未就绪',
-            'index.result.transcribing': '转写中...',
-            'index.result.translating': '翻译中...'
-        }
-    });
+});
 }
 
 // Initialization
@@ -305,7 +272,7 @@ function updateServiceStatus(status) {
 
     if (status !== 'running') {
         recordButton.disabled = true;
-        recordButton.textContent = '🔧';
+        recordButton.textContent = '馃敡';
         recordButton.title = t('index.recordButton.starting');
         recordButton.className = 'control-bar-btn record-btn start disabled';
         setVolumeRecordingState(false);
@@ -335,6 +302,9 @@ async function startRecording() {
             isRecording = true;
             isVoiceActive = false; // Reset voice activity status when starting recording
             updateUI();
+            if (silenceMarkerDb !== null) {
+                updateSilenceMarker(silenceMarkerDb);
+            }
         } else {
             // Don't output real-time log
         }
@@ -350,6 +320,9 @@ async function stopRecording() {
             isRecording = false;
             isVoiceActive = false; // Reset voice activity status
             updateUI();
+            if (silenceMarkerDb !== null) {
+                updateSilenceMarker(silenceMarkerDb);
+            }
         } else {
             // Don't output real-time log
         }
@@ -360,7 +333,7 @@ async function stopRecording() {
 
 function updateUI() {
     if (isRecording) {
-        recordButton.textContent = '⏹️';
+        recordButton.textContent = '鈴癸笍';
         recordButton.title = t('index.tooltips.recordStop');
         if (isVoiceActive) {
             recordButton.className = 'control-bar-btn record-btn stop recording-active';
@@ -374,7 +347,7 @@ function updateUI() {
             statusText.textContent = t('index.statusText.recording');
         }
     } else {
-        recordButton.textContent = '🎤';
+        recordButton.textContent = '馃帳';
         recordButton.title = t('index.tooltips.recordStart');
         recordButton.className = 'control-bar-btn record-btn start';
         if (typeof statusDot !== 'undefined' && statusDot) {
@@ -406,7 +379,8 @@ function setVolumeRecordingState(active) {
             volumeLevelEl.className = 'volume-level low';
         }
         if (volumeSilenceEl && silenceMarkerDb === null) {
-            volumeSilenceEl.textContent = t('index.volume.silenceRange');
+            const labelTemplate = t('index.volume.silenceRangeLabel');
+    volumeSilenceEl.textContent = labelTemplate.replace('{value}', clamped.toFixed(1));
             volumeSilenceEl.style.width = '33%';
         }
     } else {
@@ -429,7 +403,8 @@ function setVolumeRecordingState(active) {
         }
         if (volumeSilenceEl) {
             volumeSilenceEl.style.width = '33%';
-            volumeSilenceEl.textContent = t('index.volume.silenceRange');
+            const labelTemplate = t('index.volume.silenceRangeLabel');
+    volumeSilenceEl.textContent = labelTemplate.replace('{value}', clamped.toFixed(1));
         }
         silenceMarkerDb = null;
     }
@@ -516,7 +491,8 @@ function updateSilenceMarker(db) {
     const percent = ((clamped - VOLUME_MIN_DB) / (VOLUME_MAX_DB - VOLUME_MIN_DB)) * 100;
     const width = Math.max(0, Math.min(100, percent));
     volumeSilenceEl.style.width = `${width}%`;
-    volumeSilenceEl.textContent = `静音范围 (${clamped.toFixed(1)} dB)`;
+    const labelTemplate = t('index.volume.silenceRangeLabel');
+    volumeSilenceEl.textContent = labelTemplate.replace('{value}', clamped.toFixed(1));
 }
 
 function updateVolumeMeter(payload) {
@@ -565,13 +541,11 @@ function handlePythonMessage(message) {
     
     // Detect service status
     if (message.type === 'log') {
-        if (message.message.includes('转写服务已启动') || message.message.includes('Python转写服务已启动') ||
-            message.message.includes('Transcription service started') || message.message.includes('Service started')) {
+        const logText = typeof message.message === 'string' ? message.message : '';
+        if (messageMatchesKey(logText, 'index.serviceMessages.started')) {
             updateServiceStatus('running');
-        } else if (message.message.includes('转写服务已停止') || message.message.includes('Transcription service stopped') || message.level === 'error') {
-            if (message.message.includes('Python进程启动失败') || message.message.includes('Python process start failed') ||
-                message.message.includes('Python错误') || message.message.includes('Python error') ||
-                message.message.includes('模块导入失败') || message.message.includes('Module import failed')) {
+        } else if (messageMatchesKey(logText, 'index.serviceMessages.stopped') || message.level === 'error') {
+            if (messageMatchesKey(logText, 'index.serviceMessages.pythonError') || messageMatchesKey(logText, 'index.serviceMessages.moduleError')) {
                 updateServiceStatus('error');
             }
         }
@@ -659,7 +633,10 @@ function handlePythonMessage(message) {
             // Handle voice activity status updates
             isVoiceActive = message.active;
             if (isRecording) {
-                updateUI(); // Update UI to reflect voice activity animation
+                updateUI();
+            if (silenceMarkerDb !== null) {
+                updateSilenceMarker(silenceMarkerDb);
+            } // Update UI to reflect voice activity animation
             }
             break;
         case 'recording_error':
@@ -667,12 +644,18 @@ function handlePythonMessage(message) {
             // Stop recording when error occurs
             isRecording = false;
             updateUI();
+            if (silenceMarkerDb !== null) {
+                updateSilenceMarker(silenceMarkerDb);
+            }
             break;
         case 'recording_stopped':
             // Backend confirmed recording stopped; ensure UI reflects it
             isRecording = false;
             isVoiceActive = false;
             updateUI();
+            if (silenceMarkerDb !== null) {
+                updateSilenceMarker(silenceMarkerDb);
+            }
             break;
         case 'error':
             addLogEntry('error', message.message);
@@ -700,11 +683,13 @@ function addResultBubble(transcription, translation = null, translationPending =
     } else if (translationPending) {
         const translationDiv = document.createElement('div');
         translationDiv.className = 'translation pending';
-        translationDiv.innerHTML = '<span class="translation-loading">翻译中...</span>';
+        const loadingSpan = document.createElement('span');
+        loadingSpan.className = 'translation-loading';
+        loadingSpan.textContent = t('index.translation.loading');
+        translationDiv.appendChild(loadingSpan);
         bubble.appendChild(translationDiv);
     }
-    
-    container.appendChild(bubble);
+container.appendChild(bubble);
     container.scrollTop = container.scrollHeight;
     
     return bubble;
@@ -766,17 +751,15 @@ function renderResultEntry(transcription, translation = null, translationPending
         tranDiv.textContent = translation;
         entry.appendChild(tranDiv);
     } else if (translationPending) {
-        const sep = document.createElement('div');
-        sep.className = 'result-separator';
-        entry.appendChild(sep);
-
-        const tranDiv = document.createElement('div');
-        tranDiv.className = 'result-part translation pending';
-        tranDiv.textContent = t('index.result.translating');
-        entry.appendChild(tranDiv);
+        const translationDiv = document.createElement('div');
+        translationDiv.className = 'translation pending';
+        const loadingSpan = document.createElement('span');
+        loadingSpan.className = 'translation-loading';
+        loadingSpan.textContent = t('index.translation.loading');
+        translationDiv.appendChild(loadingSpan);
+        bubble.appendChild(translationDiv);
     }
-
-    logContainer.appendChild(entry);
+logContainer.appendChild(entry);
     logContainer.scrollTop = logContainer.scrollHeight;
     return entry;
 }
@@ -853,3 +836,22 @@ function openKeyboardSettings() {
     console.error('Failed to open keyboard/voice settings:', error);
   }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

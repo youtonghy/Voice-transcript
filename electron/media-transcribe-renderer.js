@@ -144,93 +144,34 @@ function registerMediaTranslations() {
   }
 }
 
-if (window.appI18n && typeof window.appI18n.extend === 'function') {
-  window.appI18n.extend({
-    en: {
-      'common.backNav': '\u2190 Back',
-      'common.backLink': 'Back',
-      'media.pageTitle': 'Media Transcription & Translation',
-      'media.nav.title': 'Media Transcription',
-      'media.nav.backTooltip': 'Back to main window',
-      'media.panel.file': 'Select File',
-      'media.panel.processing': 'Processing Settings',
-      'media.panel.output': 'Output Settings',
-      'media.labels.recognitionEngine': 'Transcription Engine',
-      'media.labels.translationEngine': 'Translation Engine',
-      'media.labels.outputPath': 'Save Location',
-      'settings.placeholders.customLanguage': 'Enter a custom language',
-      'media.hints.recognitionEngine': 'Matches the settings page. Changes here affect only this window.',
-      'media.hints.translationEngine': 'Shares the engine list with the settings page; new engines appear automatically.',
-      'media.setting.enableTranslation': 'Enable Translation',
-      'media.setting.targetLanguage': 'Target Language',
-      'media.setting.theaterMode': 'Enable Theater Mode (audio enhancement)',
-      'media.actions.choosePathPlaceholder': 'Choose a save location',
-      'media.actions.browse': 'Browse',
-      'media.actions.start': 'Start Processing',
-      'media.actions.clear': 'Clear Selection',
-      'media.actions.export': 'Export TXT',
-      'media.upload.select': 'Click to choose a media file',
-      'media.upload.supportVideo': 'Supported video: MP4, AVI, MOV, MKV, ...',
-      'media.upload.supportAudio': 'Supported audio: WAV, MP3, FLAC, AAC, ...',
-      'media.results.title': 'Results',
-      'media.results.empty': 'Select a media file and start processing to view the transcription here.',
-      'media.results.segmentLabel': 'Segment {index}',
-      'media.file.selected': 'Selected',
-      'media.progress.preparing': 'Preparing...',
-      'media.progress.complete': 'Processing complete',
-      'media.error.dragNotSupported': 'Please click to choose a file; drag-and-drop is not supported yet.',
-      'media.error.selectFileFailed': 'Failed to select file',
-      'media.error.selectOutputFailed': 'Failed to select output path',
-      'media.error.missingFileOrOutput': 'Please select a file and output path.',
-      'media.error.customLanguageRequired': 'Please enter a custom target language.',
-      'media.error.processingFailed': 'Processing failed',
-      'media.error.processingException': 'An error occurred while processing',
-      'media.error.noResultsToExport': 'No results available to export.',
-      'media.error.exportFailedStatus': 'Export failed',
-      'media.error.exportFailed': 'Export failed'
-    },
-    zh: {
-      'common.backNav': '\u2190 返回',
-      'common.backLink': '返回',
-      'media.pageTitle': '媒体文件转写翻译',
-      'media.nav.title': '媒体文件转写',
-      'media.nav.backTooltip': '返回主窗口',
-      'media.panel.file': '选择文件',
-      'media.panel.processing': '处理设置',
-      'media.panel.output': '输出设置',
-      'media.labels.recognitionEngine': '转写引擎',
-      'media.labels.translationEngine': '翻译引擎',
-      'media.labels.outputPath': '保存位置',
-      'settings.placeholders.customLanguage': '输入自定义语言',
-      'media.hints.recognitionEngine': '与设置页保持一致，修改后仅影响本窗口的处理流程。',
-      'media.hints.translationEngine': '引擎列表与设置页同步，扩展后即可使用。',
-      'media.setting.enableTranslation': '启用翻译',
-      'media.setting.targetLanguage': '目标语言',
-      'media.setting.theaterMode': '启用剧场模式（音频增强）',
-      'media.actions.choosePathPlaceholder': '选择保存位置',
-      'media.actions.browse': '浏览',
-      'media.actions.start': '开始处理',
-      'media.actions.clear': '清除选择',
-      'media.actions.export': '导出 TXT',
-      'media.upload.select': '点击选择媒体文件',
-      'media.upload.supportVideo': '支持视频：MP4、AVI、MOV、MKV 等',
-      'media.upload.supportAudio': '支持音频：WAV、MP3、FLAC、AAC 等',
-      'media.results.title': '处理结果',
-      'media.results.empty': '选择媒体文件并开始处理后，转写结果将显示在这里。',
-      'media.results.segmentLabel': '段落 {index}',
-      'media.file.selected': '已选择',
-      'media.progress.preparing': '准备处理...',
-      'media.progress.complete': '处理完成',
-      'media.error.dragNotSupported': '请点击选择文件，暂不支持拖拽。',
-      'media.error.selectFileFailed': '选择文件失败',
-      'media.error.selectOutputFailed': '选择输出路径失败',
-      'media.error.missingFileOrOutput': '请选择文件和输出路径。',
-      'media.error.customLanguageRequired': '请输入自定义目标语言。',
-      'media.error.processingFailed': '处理失败',
-      'media.error.processingException': '处理过程中出现错误',
-      'media.error.noResultsToExport': '没有可导出的结果。',
-      'media.error.exportFailedStatus': '导出失败',
-      'media.error.exportFailed': '导出失败'
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     }
   });
 }
@@ -710,9 +651,9 @@ class MediaTranscribeApp {
 
   resolveTargetLanguage() {
     if (this.targetLanguage.value === '__custom__') {
-      return (this.customLanguage.value || '').trim() || '中文';
+      return (this.customLanguage.value || '').trim() || 'Chinese';
     }
-    return this.targetLanguage.value || '中文';
+    return this.targetLanguage.value || 'Chinese';
   }
 
   async ensureEngineConfigSynced(recognitionEngine, translationEngine) {
@@ -821,3 +762,6 @@ document.addEventListener('DOMContentLoaded', () => {
     `;
   }
 });
+
+
+
