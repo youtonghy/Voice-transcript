@@ -12,6 +12,13 @@ let resultNodes = new Map(); // Result node mapping table, key is result_id, val
 let currentConfig = {}; // Store current configuration
 let configCheckInterval = null; // Timer for periodic configuration checks
 
+const CONVERSATION_STORAGE_KEY = 'voice_transcript_conversations_v1';
+let conversations = [];
+let activeConversationId = null;
+const resultConversationMap = new Map();
+const HISTORY_COLLAPSED_STORAGE_KEY = 'voice_transcript_history_collapsed';
+let historyCollapsed = false;
+
 // DOM elements
 const recordButton = document.getElementById('recordButton');
 const statusDot = document.getElementById('statusDot');
@@ -25,6 +32,12 @@ const volumeRmsValue = document.getElementById('volumeRmsValue');
 const volumeStatusText = document.getElementById('volumeStatusText');
 const volumeToggleBtn = document.getElementById('volumeToggleBtn');
 const mainContent = document.querySelector('.main-content');
+
+const historyList = document.getElementById('historyList');
+const newConversationButton = document.getElementById('newConversationButton');
+const activeConversationNameEl = document.getElementById('activeConversationName');
+
+const toggleHistoryButton = document.getElementById('toggleHistoryButton');
 
 const VOLUME_MIN_DB = -60;
 const VOLUME_MAX_DB = 0;
@@ -77,6 +90,7 @@ function changeLanguage(lang) {
     }
 
     document.title = t('index.title');
+    updateHistoryToggleUI();
 }
 
 function formatRecordedAtText(isoString) {
@@ -230,6 +244,582 @@ function t(key) {
     return key;
 }
 
+
+// History panel visibility management
+function getStoredHistoryCollapsed() {
+    if (typeof localStorage === 'undefined') {
+        return null;
+    }
+    try {
+        return localStorage.getItem(HISTORY_COLLAPSED_STORAGE_KEY);
+    } catch (error) {
+        console.warn('Failed to read history collapsed state:', error);
+        return null;
+    }
+}
+
+function storeHistoryCollapsed(collapsed) {
+    if (typeof localStorage === 'undefined') {
+        return;
+    }
+    try {
+        localStorage.setItem(HISTORY_COLLAPSED_STORAGE_KEY, collapsed ? '1' : '0');
+    } catch (error) {
+        console.warn('Failed to store history collapsed state:', error);
+    }
+}
+
+function updateHistoryToggleUI() {
+    if (!toggleHistoryButton) {
+        return;
+    }
+    const key = historyCollapsed ? 'index.history.show' : 'index.history.hide';
+    const label = t(key);
+    toggleHistoryButton.textContent = label;
+    toggleHistoryButton.title = label;
+    toggleHistoryButton.setAttribute('aria-expanded', historyCollapsed ? 'false' : 'true');
+    toggleHistoryButton.setAttribute('data-collapsed', historyCollapsed ? 'true' : 'false');
+}
+
+function setHistoryCollapsed(collapsed, { persist = true } = {}) {
+    historyCollapsed = Boolean(collapsed);
+    if (mainContent) {
+        mainContent.classList.toggle('history-collapsed', historyCollapsed);
+    }
+    updateHistoryToggleUI();
+    if (persist) {
+        storeHistoryCollapsed(historyCollapsed);
+    }
+}
+
+function toggleHistoryPanel() {
+    setHistoryCollapsed(!historyCollapsed);
+}
+
+function initializeHistoryCollapsedState() {
+    const stored = getStoredHistoryCollapsed();
+    const collapsed = stored === '1';
+    setHistoryCollapsed(collapsed, { persist: false });
+}
+
+// Conversation history management
+function generateConversationName(date = new Date()) {
+    if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+        date = new Date();
+    }
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    const seconds = String(date.getSeconds()).padStart(2, '0');
+    return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
+}
+
+function normalizeEntry(entry) {
+    if (!entry || typeof entry !== 'object') {
+        return null;
+    }
+    if (entry.type === 'result') {
+        const normalized = {
+            id: typeof entry.id === 'string' ? entry.id : `result-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+            type: 'result',
+            resultId: typeof entry.resultId === 'string' ? entry.resultId : null,
+            transcription: typeof entry.transcription === 'string' ? entry.transcription : '',
+            translation: typeof entry.translation === 'string' ? entry.translation : '',
+            translationPending: entry.translationPending === true,
+            transcriptionPending: entry.transcriptionPending === true,
+            meta: entry.meta && typeof entry.meta === 'object' ? { ...entry.meta } : {},
+            createdAt: typeof entry.createdAt === 'string' ? entry.createdAt : new Date().toISOString(),
+            updatedAt: typeof entry.updatedAt === 'string' ? entry.updatedAt : null
+        };
+        return normalized;
+    }
+    if (entry.type === 'log') {
+        return {
+            id: typeof entry.id === 'string' ? entry.id : `log-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+            type: 'log',
+            level: typeof entry.level === 'string' ? entry.level : 'info',
+            message: typeof entry.message === 'string' ? entry.message : '',
+            timestamp: typeof entry.timestamp === 'string' ? entry.timestamp : '',
+            createdAt: typeof entry.createdAt === 'string' ? entry.createdAt : new Date().toISOString()
+        };
+    }
+    return null;
+}
+
+function normalizeConversation(conversation) {
+    if (!conversation || typeof conversation !== 'object') {
+        return null;
+    }
+    const createdAt = typeof conversation.createdAt === 'string' ? conversation.createdAt : new Date().toISOString();
+    const normalized = {
+        id: typeof conversation.id === 'string' ? conversation.id : `conv-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+        name: typeof conversation.name === 'string' && conversation.name ? conversation.name : generateConversationName(new Date(createdAt)),
+        createdAt,
+        entries: Array.isArray(conversation.entries) ? conversation.entries.map(normalizeEntry).filter(Boolean) : []
+    };
+    return normalized;
+}
+
+function loadConversationsFromStorage() {
+    if (typeof localStorage === 'undefined') {
+        return [];
+    }
+    try {
+        const raw = localStorage.getItem(CONVERSATION_STORAGE_KEY);
+        if (!raw) {
+            return [];
+        }
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) {
+            return [];
+        }
+        return parsed.map(normalizeConversation).filter(Boolean);
+    } catch (error) {
+        console.warn('Failed to load conversations from storage:', error);
+        return [];
+    }
+}
+
+function saveConversationsToStorage() {
+    if (typeof localStorage === 'undefined') {
+        return;
+    }
+    try {
+        localStorage.setItem(CONVERSATION_STORAGE_KEY, JSON.stringify(conversations));
+    } catch (error) {
+        console.warn('Failed to save conversations to storage:', error);
+    }
+}
+
+function registerConversationEntries(conversation) {
+    if (!conversation || !Array.isArray(conversation.entries)) {
+        return;
+    }
+    conversation.entries.forEach((entry) => {
+        if (entry && entry.type === 'result' && entry.resultId) {
+            resultConversationMap.set(entry.resultId, { conversationId: conversation.id, entryId: entry.id });
+        }
+    });
+}
+
+function rebuildResultConversationMap() {
+    resultConversationMap.clear();
+    conversations.forEach((conversation) => registerConversationEntries(conversation));
+}
+
+function getConversationById(conversationId) {
+    if (!conversationId) {
+        return null;
+    }
+    return conversations.find((item) => item && item.id === conversationId) || null;
+}
+
+function getActiveConversation() {
+    return getConversationById(activeConversationId);
+}
+
+function setActiveConversation(conversationId) {
+    const conversation = getConversationById(conversationId);
+    if (!conversation) {
+        return;
+    }
+    activeConversationId = conversationId;
+    renderHistoryList();
+    renderConversationLogs();
+}
+
+function updateActiveConversationLabel(conversation) {
+    if (!activeConversationNameEl) {
+        return;
+    }
+    if (conversation) {
+        const prefix = t('index.history.currentPrefix');
+        activeConversationNameEl.textContent = prefix ? `${prefix} ${conversation.name}` : conversation.name;
+        activeConversationNameEl.title = conversation.name;
+    } else {
+        activeConversationNameEl.textContent = '';
+        activeConversationNameEl.title = '';
+    }
+}
+
+function renderHistoryList() {
+    if (!historyList) {
+        return;
+    }
+    historyList.innerHTML = '';
+    if (!conversations.length) {
+        const emptyDiv = document.createElement('div');
+        emptyDiv.className = 'history-empty';
+        emptyDiv.textContent = t('index.history.empty');
+        historyList.appendChild(emptyDiv);
+        return;
+    }
+    const sorted = [...conversations].sort((a, b) => {
+        const timeA = new Date(a.createdAt || 0).getTime();
+        const timeB = new Date(b.createdAt || 0).getTime();
+        if (timeA === timeB) {
+            return (b.name || '').localeCompare(a.name || '');
+        }
+        return timeB - timeA;
+    });
+    sorted.forEach((conversation) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'history-item';
+        if (conversation.id === activeConversationId) {
+            button.classList.add('active');
+        }
+        button.dataset.conversationId = conversation.id;
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'history-name';
+        nameSpan.textContent = conversation.name;
+        button.appendChild(nameSpan);
+        const detailSpan = document.createElement('span');
+        detailSpan.className = 'history-detail';
+        detailSpan.textContent = formatRecordedAtText(conversation.createdAt) || '';
+        button.appendChild(detailSpan);
+        historyList.appendChild(button);
+    });
+}
+
+function createResultEntryElement(entry) {
+    const container = document.createElement('div');
+    container.className = 'log-entry result-entry';
+    container.dataset.entryId = entry.id;
+    if (entry.resultId) {
+        container.dataset.resultId = entry.resultId;
+    }
+    const transcriptionDiv = document.createElement('div');
+    if (entry.transcription && !entry.transcriptionPending) {
+        transcriptionDiv.className = 'result-part transcription';
+        transcriptionDiv.textContent = entry.transcription;
+    } else {
+        transcriptionDiv.className = 'result-part transcription pending';
+        transcriptionDiv.textContent = t('index.result.transcribing');
+    }
+    container.appendChild(transcriptionDiv);
+    if (entry.translation && !entry.translationPending) {
+        const separator = document.createElement('div');
+        separator.className = 'result-separator';
+        container.appendChild(separator);
+        const translationDiv = document.createElement('div');
+        translationDiv.className = 'result-part translation';
+        translationDiv.textContent = entry.translation;
+        container.appendChild(translationDiv);
+    } else if (entry.translationPending) {
+        if (entry.transcription && !entry.transcriptionPending) {
+            const separator = document.createElement('div');
+            separator.className = 'result-separator';
+            container.appendChild(separator);
+        }
+        const pendingDiv = document.createElement('div');
+        pendingDiv.className = 'result-part translation pending';
+        pendingDiv.textContent = t('index.translation.loading');
+        container.appendChild(pendingDiv);
+    }
+    applyRecordingMeta(container, entry.meta || {});
+    return container;
+}
+
+function createLogEntryElement(entry) {
+    const logEntry = document.createElement('div');
+    logEntry.className = `log-entry log-${entry.level || 'info'}`;
+    const timestampSpan = document.createElement('span');
+    timestampSpan.className = 'timestamp';
+    timestampSpan.textContent = entry.timestamp || '';
+    logEntry.appendChild(timestampSpan);
+    const levelSpan = document.createElement('span');
+    levelSpan.className = 'level';
+    levelSpan.textContent = `[${(entry.level || 'info').toUpperCase()}]`;
+    logEntry.appendChild(levelSpan);
+    const messageSpan = document.createElement('span');
+    messageSpan.className = 'message';
+    messageSpan.textContent = entry.message || '';
+    logEntry.appendChild(messageSpan);
+    return logEntry;
+}
+
+function renderConversationLogs() {
+    if (!logContainer) {
+        return;
+    }
+    logContainer.innerHTML = '';
+    resultNodes = new Map();
+    const conversation = getActiveConversation();
+    if (!conversation) {
+        updateActiveConversationLabel(null);
+        return;
+    }
+    const fragment = document.createDocumentFragment();
+    conversation.entries.forEach((entry) => {
+        let node = null;
+        if (entry.type === 'result') {
+            node = createResultEntryElement(entry);
+            const key = entry.resultId || entry.id;
+            resultNodes.set(key, node);
+        } else if (entry.type === 'log') {
+            node = createLogEntryElement(entry);
+        }
+        if (node) {
+            fragment.appendChild(node);
+        }
+    });
+    logContainer.appendChild(fragment);
+    logContainer.scrollTop = logContainer.scrollHeight;
+    updateActiveConversationLabel(conversation);
+}
+
+function appendEntryDom(entry) {
+    if (!logContainer) {
+        return;
+    }
+    let node = null;
+    if (entry.type === 'result') {
+        node = createResultEntryElement(entry);
+        const key = entry.resultId || entry.id;
+        resultNodes.set(key, node);
+    } else if (entry.type === 'log') {
+        node = createLogEntryElement(entry);
+    }
+    if (!node) {
+        return;
+    }
+    logContainer.appendChild(node);
+    logContainer.scrollTop = logContainer.scrollHeight;
+}
+
+function removeResultMappingsForConversation(conversationId) {
+    resultConversationMap.forEach((value, key) => {
+        if (value && value.conversationId === conversationId) {
+            resultConversationMap.delete(key);
+        }
+    });
+}
+
+function getResultEntryContext(resultId) {
+    if (!resultId) {
+        return null;
+    }
+    const mapping = resultConversationMap.get(resultId);
+    if (!mapping) {
+        return null;
+    }
+    const conversation = getConversationById(mapping.conversationId);
+    if (!conversation) {
+        resultConversationMap.delete(resultId);
+        return null;
+    }
+    const entry = conversation.entries.find((item) => item && item.id === mapping.entryId);
+    if (!entry) {
+        resultConversationMap.delete(resultId);
+        return null;
+    }
+    return { conversation, entry, mapping };
+}
+
+function updateResultEntryDom(entry) {
+    if (!entry || !logContainer) {
+        return;
+    }
+    const key = entry.resultId || entry.id;
+    const node = resultNodes.get(key);
+    if (!node) {
+        return;
+    }
+    if (entry.transcription && !entry.transcriptionPending) {
+        updateTranscriptionInBubble(node, entry.transcription);
+    } else {
+        let transcriptionNode = node.querySelector('.result-part.transcription');
+        if (!transcriptionNode) {
+            transcriptionNode = document.createElement('div');
+            node.insertBefore(transcriptionNode, node.firstChild);
+        }
+        transcriptionNode.className = 'result-part transcription pending';
+        transcriptionNode.textContent = t('index.result.transcribing');
+    }
+    if (entry.translation && !entry.translationPending) {
+        updateTranslationInBubble(node, entry.translation);
+    } else if (entry.translationPending) {
+        let translationNode = node.querySelector('.result-part.translation');
+        if (!translationNode) {
+            if (!node.querySelector('.result-separator')) {
+                const separator = document.createElement('div');
+                separator.className = 'result-separator';
+                node.appendChild(separator);
+            }
+            translationNode = document.createElement('div');
+            translationNode.className = 'result-part translation pending';
+            translationNode.textContent = t('index.translation.loading');
+            node.appendChild(translationNode);
+        } else {
+            translationNode.className = 'result-part translation pending';
+            translationNode.textContent = t('index.translation.loading');
+        }
+    } else {
+        const translationNode = node.querySelector('.result-part.translation');
+        if (translationNode) {
+            const separator = translationNode.previousElementSibling;
+            translationNode.remove();
+            if (separator && separator.classList.contains('result-separator')) {
+                separator.remove();
+            }
+        }
+    }
+    applyRecordingMeta(node, entry.meta || {});
+    logContainer.scrollTop = logContainer.scrollHeight;
+}
+
+function createConversation(config = {}, options = {}) {
+    const createdAt = config.createdAt || new Date().toISOString();
+    const conversation = {
+        id: config.id || `conv-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
+        name: config.name || generateConversationName(new Date(createdAt)),
+        createdAt,
+        entries: Array.isArray(config.entries) ? config.entries.map(normalizeEntry).filter(Boolean) : []
+    };
+    conversations.push(conversation);
+    registerConversationEntries(conversation);
+    if (!options.skipSave) {
+        saveConversationsToStorage();
+    }
+    if (options.activate === false) {
+        renderHistoryList();
+    } else {
+        setActiveConversation(conversation.id);
+    }
+    return conversation;
+}
+
+function handleNewConversationClick() {
+    createConversation({ name: generateConversationName() });
+}
+
+function handleHistoryListClick(event) {
+    const target = event.target.closest('.history-item');
+    if (!target || !target.dataset || !target.dataset.conversationId) {
+        return;
+    }
+    if (target.dataset.conversationId === activeConversationId) {
+        return;
+    }
+    setActiveConversation(target.dataset.conversationId);
+}
+
+function initializeConversationHistory() {
+    conversations = loadConversationsFromStorage();
+    rebuildResultConversationMap();
+    createConversation({ name: generateConversationName() });
+}
+
+function handleResultMessage(message) {
+    const meta = extractRecordingMeta(message);
+    const resultId = message && message.result_id ? message.result_id : null;
+    const context = resultId ? getResultEntryContext(resultId) : null;
+    let conversation = context ? context.conversation : getActiveConversation();
+    if (!conversation) {
+        conversation = createConversation({ name: generateConversationName() });
+    }
+    let entry = context ? context.entry : null;
+    let isNewEntry = false;
+    if (!entry) {
+        const entryId = resultId || `result-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+        entry = {
+            id: entryId,
+            type: 'result',
+            resultId,
+            transcription: '',
+            translation: '',
+            translationPending: false,
+            transcriptionPending: false,
+            meta: {},
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+        };
+        conversation.entries.push(entry);
+        isNewEntry = true;
+        if (resultId) {
+            resultConversationMap.set(resultId, { conversationId: conversation.id, entryId });
+        }
+    }
+    if (message && typeof message.transcription === 'string' && message.transcription) {
+        entry.transcription = message.transcription;
+        entry.transcriptionPending = false;
+        lastTranscription = message.transcription;
+    } else if (message && message.transcription_pending) {
+        entry.transcriptionPending = true;
+    }
+    if (message && typeof message.translation === 'string' && message.translation) {
+        entry.translation = message.translation;
+        entry.translationPending = false;
+        lastTranslation = message.translation;
+    } else if (message && message.translation_pending) {
+        entry.translationPending = true;
+    }
+    entry.meta = Object.assign({}, entry.meta, meta);
+    entry.updatedAt = new Date().toISOString();
+    saveConversationsToStorage();
+    if (activeConversationId === conversation.id) {
+        if (isNewEntry) {
+            appendEntryDom(entry);
+        }
+        updateResultEntryDom(entry);
+    }
+}
+
+function handleTranscriptionUpdateMessage(message) {
+    if (!message || !message.result_id) {
+        console.warn('Transcription update received without result ID');
+        return;
+    }
+    const context = getResultEntryContext(message.result_id);
+    if (!context) {
+        console.warn('Transcription update received but result entry not found:', message.result_id);
+        return;
+    }
+    const { conversation, entry } = context;
+    if (typeof message.transcription === 'string' && message.transcription) {
+        entry.transcription = message.transcription;
+        entry.transcriptionPending = false;
+        lastTranscription = message.transcription;
+    } else if (message.transcription_pending) {
+        entry.transcriptionPending = true;
+    }
+    entry.meta = Object.assign({}, entry.meta, extractRecordingMeta(message));
+    entry.updatedAt = new Date().toISOString();
+    saveConversationsToStorage();
+    if (activeConversationId === conversation.id) {
+        updateResultEntryDom(entry);
+    }
+}
+
+function handleTranslationUpdateMessage(message) {
+    if (!message || !message.result_id) {
+        console.warn('Translation update received without result ID');
+        return;
+    }
+    const context = getResultEntryContext(message.result_id);
+    if (!context) {
+        console.warn('Translation update received but result entry not found:', message.result_id);
+        return;
+    }
+    const { conversation, entry } = context;
+    if (typeof message.translation === 'string' && message.translation) {
+        entry.translation = message.translation;
+        entry.translationPending = false;
+        lastTranslation = message.translation;
+    } else if (message.translation_pending) {
+        entry.translationPending = true;
+    }
+    entry.updatedAt = new Date().toISOString();
+    saveConversationsToStorage();
+    if (activeConversationId === conversation.id) {
+        updateResultEntryDom(entry);
+    }
+}
+
+
 function applyLanguageFromConfig(cfg) {
     const lang = (cfg && cfg.app_language) || DEFAULT_LANGUAGE;
     changeLanguage(lang);
@@ -237,6 +827,7 @@ function applyLanguageFromConfig(cfg) {
         window.appI18n.apply();
     }
     document.title = t('index.title');
+    updateHistoryToggleUI();
 }
 
 function initializeLanguage() {
@@ -249,11 +840,13 @@ function initializeLanguage() {
         window.appI18n.apply();
     }
     document.title = t('index.title');
+    updateHistoryToggleUI();
     if (typeof window.appI18n.onChange === 'function') {
         window.appI18n.onChange(() => {
             document.title = t('index.title');
             updateServiceStatus(pythonServiceStatus);
             updateUI();
+            updateHistoryToggleUI();
             if (silenceMarkerDb !== null) {
                 updateSilenceMarker(silenceMarkerDb);
             }
@@ -268,6 +861,8 @@ function initializeLanguage() {
 // Initialization
 document.addEventListener('DOMContentLoaded', () => {
     initializeLanguage();
+    initializeConversationHistory();
+    initializeHistoryCollapsedState();
     setupEventListeners();
     initializeVolumePanel();
     syncVolumePanelOffset();
@@ -379,6 +974,18 @@ function setupEventListeners() {
         volumeToggleBtn.addEventListener('click', () => toggleVolumePanel());
     }
     
+    if (newConversationButton) {
+        newConversationButton.addEventListener('click', handleNewConversationClick);
+    }
+    
+    if (historyList) {
+        historyList.addEventListener('click', handleHistoryListClick);
+    }
+
+    if (toggleHistoryButton) {
+        toggleHistoryButton.addEventListener('click', toggleHistoryPanel);
+    }
+
     // Listen to Python messages
     if (window.electronAPI) {
         window.electronAPI.onPythonMessage(handlePythonMessage);
@@ -723,75 +1330,13 @@ function handlePythonMessage(message) {
             break;
         case 'result':
         case 'result_final':
-            // Handle new result message type
-            if (message.transcription) {
-                lastTranscription = message.transcription;
-                const meta = extractRecordingMeta(message);
-                
-                if (message.translation) {
-                    // Synchronous translation completed: display complete combined message
-                    lastTranslation = message.translation;
-                    const resultNode = renderResultEntry(message.transcription, message.translation, false, false, meta);
-                    if (message.result_id) {
-                        resultNodes.set(message.result_id, resultNode);
-                        console.log('Store synchronous translation result node:', message.result_id);
-                    }
-                } else if (message.translation_pending) {
-                    // Asynchronous translation pending: first display transcription, reserve translation position
-                    const resultNode = renderResultEntry(message.transcription, null, true, false, meta);
-                    if (message.result_id) {
-                        resultNodes.set(message.result_id, resultNode);
-                        console.log('Store asynchronous translation pending node:', message.result_id);
-                        
-                        // Add a data attribute to mark translation order
-                        if (message.translation_order) {
-                            resultNode.dataset.translationOrder = message.translation_order;
-                            console.log(`Translation order marked: ${message.translation_order}`);
-                        }
-                        
-                        // Smart translation mode: add additional information
-                        if (message.smart_translation) {
-                            const detectedLang = message.detected_language || 'Unknown';
-                            const targetLang = message.target_language || 'Unknown';
-                            console.log(`Smart translation: detected ${detectedLang}, target ${targetLang}`);
-                        }
-                    }
-                } else {
-                    // No translation: only display transcription
-                    const resultNode = renderResultEntry(message.transcription, null, false, false, meta);
-                    if (message.result_id) {
-                        resultNodes.set(message.result_id, resultNode);
-                    }
-                }
-            } else if (message.transcription_pending && message.result_id) {
-                // Placeholder for transcription; ensure order by creating an empty bubble
-                const meta = extractRecordingMeta(message);
-                const resultNode = renderResultEntry(null /* transcription */, null /* translation */, false /* translationPending */, true /* transcriptionPending */, meta);
-                resultNodes.set(message.result_id, resultNode);
-                if (message.transcription_order) {
-                    resultNode.dataset.transcriptionOrder = message.transcription_order;
-                }
-            }
+            handleResultMessage(message);
             break;
         case 'transcription_update':
-            if (message.result_id && resultNodes.has(message.result_id)) {
-                const resultNode = resultNodes.get(message.result_id);
-                updateTranscriptionInBubble(resultNode, message.transcription);
-                applyRecordingMeta(resultNode, extractRecordingMeta(message));
-                console.log('Updated transcription:', message.result_id);
-            } else {
-                console.warn('Transcription update received but result node not found:', message.result_id);
-            }
+            handleTranscriptionUpdateMessage(message);
             break;
         case 'translation_update':
-            // Handle asynchronous translation update
-            if (message.result_id && resultNodes.has(message.result_id)) {
-                const resultNode = resultNodes.get(message.result_id);
-                updateTranslationInBubble(resultNode, message.translation);
-                console.log('Updated asynchronous translation:', message.result_id);
-            } else {
-                console.warn('Translation update received but result node not found:', message.result_id);
-            }
+            handleTranslationUpdateMessage(message);
             break;
         case 'volume_level':
             updateVolumeMeter(message);
@@ -909,68 +1454,71 @@ function renderResultEntry(transcription, translation = null, translationPending
     return entry;
 }
 
+
 function addLogEntry(level, message) {
     const timestamp = new Date().toLocaleTimeString();
-    const logEntry = document.createElement('div');
-    logEntry.className = `log-entry log-${level}`;
-    logEntry.innerHTML = `
-        <span class="timestamp">${timestamp}</span>
-        <span class="level">[${level.toUpperCase()}]</span>
-        <span class="message">${message}</span>
-    `;
-    
-    logContainer.appendChild(logEntry);
-    logContainer.scrollTop = logContainer.scrollHeight;
-    
-    // Keep only last 50 log entries
-    while (logContainer.children.length > 50) {
-        logContainer.removeChild(logContainer.firstChild);
+    const entry = {
+        id: `log-$${Date.now()}-$${Math.random().toString(16).slice(2, 8)}`,
+        type: 'log',
+        level: typeof level === 'string' ? level : 'info',
+        message: typeof message === 'string' ? message : String(message),
+        timestamp,
+        createdAt: new Date().toISOString()
+    };
+    const conversation = getActiveConversation();
+    if (!conversation) {
+        return;
+    }
+    conversation.entries.push(entry);
+    saveConversationsToStorage();
+    if (activeConversationId === conversation.id && logContainer) {
+        const node = createLogEntryElement(entry);
+        if (node) {
+            logContainer.appendChild(node);
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
     }
 }
 
+
+
 function collectExportEntries() {
-    if (!logContainer) {
+    const conversation = getActiveConversation();
+    if (!conversation) {
         return [];
     }
-    const nodes = Array.from(logContainer.querySelectorAll('.result-entry'));
     const entries = [];
 
-    nodes.forEach((node) => {
-        const transcriptionDiv = node.querySelector('.result-part.transcription');
-        if (!transcriptionDiv || transcriptionDiv.classList.contains('pending')) {
+    conversation.entries.forEach((entry) => {
+        if (!entry || entry.type !== 'result') {
             return;
         }
-        const transcription = transcriptionDiv.textContent ? transcriptionDiv.textContent.trim() : '';
-        if (!transcription) {
+        if (!entry.transcription || entry.transcriptionPending) {
             return;
         }
-
-        const translationDiv = node.querySelector('.result-part.translation');
-        const translationPending = translationDiv && translationDiv.classList.contains('pending');
-        const translation = translationDiv && !translationPending && translationDiv.textContent
-            ? translationDiv.textContent.trim()
+        const includeTranslation = Boolean(translationEnabled && entry.translation && !entry.translationPending);
+        const meta = entry.meta || {};
+        const recordedText = typeof meta.recordedAt === 'string' ? formatRecordedAtText(meta.recordedAt) : '';
+        const durationText = (typeof meta.durationSeconds === 'number' && Number.isFinite(meta.durationSeconds))
+            ? formatDurationText(meta.durationSeconds)
             : '';
-        const includeTranslation = Boolean(translationEnabled && translation);
-
-        const metaDiv = node.querySelector('.recording-meta');
-        let timeText = metaDiv && metaDiv.textContent ? metaDiv.textContent.trim() : '';
-        if (!timeText) {
-            const recordedAt = node.dataset.recordedAt;
-            if (recordedAt) {
-                timeText = formatRecordedAtText(recordedAt);
-            }
+        let timeText = recordedText;
+        if (timeText && durationText) {
+            timeText = `$${timeText} $${durationText}`;
+        } else if (!timeText && durationText) {
+            timeText = durationText;
         }
-
         entries.push({
-            transcription,
-            translation,
+            transcription: entry.transcription,
+            translation: includeTranslation ? entry.translation : '',
             includeTranslation,
-            timeText
+            timeText: timeText || ''
         });
     });
 
     return entries;
 }
+
 
 async function exportLogs() {
     try {
@@ -1013,9 +1561,22 @@ function clearResults() {
     lastTranslation = '';
 }
 
+
 function clearLogs() {
-    logContainer.innerHTML = '';
+    const conversation = getActiveConversation();
+    if (!conversation) {
+        if (logContainer) {
+            logContainer.innerHTML = '';
+        }
+        resultNodes.clear();
+        return;
+    }
+    removeResultMappingsForConversation(conversation.id);
+    conversation.entries = [];
+    saveConversationsToStorage();
+    renderConversationLogs();
 }
+
 
 // Window cleanup when closing
 window.addEventListener('beforeunload', () => {

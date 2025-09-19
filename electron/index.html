@@ -85,17 +85,135 @@
             100% { transform: scale(1); }
         }
 
-        
-
-        
         .main-content {
           --volume-offset: 72px;
-          padding-top: 60px; 
-          padding-right: 72px; 
+          display: flex;
+          gap: 20px;
+          align-items: stretch;
+          padding-top: 60px;
+          padding-right: 72px;
           padding-bottom: var(--volume-offset);
+          padding-left: 20px;
           transition: padding-bottom 0.25s ease;
           height: 100vh;
           overflow: hidden;
+        }
+
+        .history-panel {
+          flex: 0 0 240px;
+          min-width: 200px;
+          display: flex;
+          flex-direction: column;
+          background: #f8f9fb;
+          border: 1px solid #e5e5e5;
+          border-radius: 12px;
+          padding: 20px;
+          height: calc(100vh - 60px - var(--volume-offset));
+          overflow: hidden;
+        }
+
+        .history-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 8px;
+        }
+
+        .history-header h2 {
+          font-size: 1.1rem;
+          font-weight: 600;
+          color: #333;
+        }
+
+        .history-create-btn {
+          padding: 6px 12px;
+          border-radius: 6px;
+          border: 1px solid #e5e5e5;
+          background: #ffffff;
+          color: #333;
+          cursor: pointer;
+          font-size: 0.85rem;
+          transition: all 0.2s ease;
+        }
+
+        .history-create-btn:hover {
+          background: #f1f3f5;
+          border-color: #333;
+        }
+
+        .history-list {
+          margin-top: 16px;
+          flex: 1;
+          overflow-y: auto;
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
+        .history-toggle-btn {
+          padding: 6px 12px;
+          border-radius: 6px;
+          border: 1px solid #e5e5e5;
+          background: #ffffff;
+          color: #333;
+          cursor: pointer;
+          font-size: 0.85rem;
+          transition: all 0.2s ease;
+          flex-shrink: 0;
+        }
+
+        .history-toggle-btn:hover {
+          background: #f1f3f5;
+          border-color: #333;
+        }
+
+        .main-content.history-collapsed .history-panel {
+          display: none;
+        }
+
+
+        .history-item {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-start;
+          gap: 4px;
+          padding: 10px 12px;
+          border-radius: 10px;
+          border: 1px solid #e5e5e5;
+          background: #ffffff;
+          cursor: pointer;
+          font-size: 0.88rem;
+          transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+          text-align: left;
+        }
+
+        .history-item:hover {
+          border-color: #333;
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+        }
+
+        .history-item:focus {
+          outline: none;
+          border-color: #333;
+        }
+
+        .history-item.active {
+          border-color: #333;
+          background: #f0f1f5;
+        }
+
+        .history-name {
+          font-weight: 600;
+          color: #333;
+        }
+
+        .history-detail {
+          font-size: 0.75rem;
+          color: #888;
+        }
+
+        .history-empty {
+          font-size: 0.85rem;
+          color: #888;
         }
 
         
@@ -299,19 +417,43 @@
           height: 45px;
         }
 
-        
         .log-panel {
-            height: 100%;
+            flex: 1;
+            min-width: 0;
+            height: calc(100vh - 60px - var(--volume-offset));
             background: white;
             padding: 25px;
             display: flex;
             flex-direction: column;
             box-sizing: border-box;
+            overflow: hidden;
+        }
+        .log-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+
+        .log-header-info {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            min-width: 0;
+        }
+
+        .active-conversation-name {
+            font-size: 0.85rem;
+            color: #666;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+            overflow: hidden;
         }
 
         .log-panel h2 {
             color: #333;
-            margin: 0 0 15px 0;
+            margin: 0;
             font-weight: 600;
             font-size: 1.2rem;
         }
@@ -469,8 +611,23 @@
   </div>
 
   <div class="main-content">
+    <div class="history-panel" id="historyPanel">
+      <div class="history-header">
+        <h2 data-i18n="index.history.title">History</h2>
+        <button type="button" class="history-create-btn" id="newConversationButton" data-i18n="index.history.newConversation">New Conversation</button>
+      </div>
+      <div class="history-list" id="historyList">
+        <div class="history-empty" data-i18n="index.history.empty">No conversations yet</div>
+      </div>
+    </div>
     <div class="log-panel">
-      <h2 data-i18n="index.logTitle">Real-Time Logs</h2>
+      <div class="log-header">
+        <div class="log-header-info">
+          <h2 data-i18n="index.logTitle">Real-Time Logs</h2>
+          <span class="active-conversation-name" id="activeConversationName"></span>
+        </div>
+        <button type="button" class="history-toggle-btn" id="toggleHistoryButton">Hide History</button>
+      </div>
       <div class="log-container" id="logContainer"></div>
       <div class="log-controls">
         <button onclick="exportLogs()" data-i18n="index.buttons.exportLogs">Export Logs</button>
