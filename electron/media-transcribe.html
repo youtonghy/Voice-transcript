@@ -1,9 +1,9 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>濯掍綋鏂囦欢杞啓缈昏瘧</title>
+    <title data-i18n="media.pageTitle">Media Transcription &amp; Translation</title>
     <style>
         * {
             box-sizing: border-box;
@@ -19,7 +19,6 @@
             overflow: hidden;
         }
 
-        /* 椤堕儴瀵艰埅鏍?*/
         .nav-bar {
             position: fixed;
             top: 0;
@@ -82,7 +81,6 @@
             color: #333;
         }
 
-        /* 涓诲唴瀹瑰尯鍩?*/
         .main-content {
             padding-top: 60px;
             height: 100vh;
@@ -99,7 +97,6 @@
             min-height: 0;
         }
 
-        /* 宸︿晶璁剧疆闈㈡澘 */
         .settings-panel {
             width: 350px;
             background: #ffffff;
@@ -159,7 +156,6 @@
             outline: none;
         }
 
-        /* 鏂囦欢涓婁紶鍖哄煙 */
         .upload-area {
             border: 2px dashed #e5e5e5;
             border-radius: 12px;
@@ -301,7 +297,6 @@
             background: #e5e5e5;
         }
 
-        /* 鍙充晶缁撴灉闈㈡澘 */
         .results-panel {
             flex: 1;
             background: #ffffff;
@@ -447,10 +442,10 @@
                 padding: 0 15px;
             }
         }
+    
     </style>
 </head>
 <body>
-    <!-- 椤堕儴瀵艰埅鏍?-->
     <div class="nav-bar">
         <div class="nav-content">
             <div class="nav-left">
@@ -458,25 +453,22 @@
                     <span class="back-btn-icon" aria-hidden="true">&#8592;</span>
                     <span data-i18n="common.backLink">Back</span>
                 </a>
-                <div class="nav-title">濯掍綋鏂囦欢杞啓缈昏瘧</div>
+                <div class="nav-title" data-i18n="media.nav.title">Media Transcription</div>
             </div>
         </div>
     </div>
 
-    <!-- 涓诲唴瀹瑰尯鍩?-->
     <div class="main-content">
         <div class="content-wrapper">
-            <!-- 宸︿晶璁剧疆闈㈡澘 -->
             <div class="settings-panel">
-                <!-- 鏂囦欢涓婁紶 -->
                 <div class="panel-section">
-                    <div class="panel-title">閫夋嫨鏂囦欢</div>
+                    <div class="panel-title" data-i18n="media.panel.file">Select File</div>
                     <div class="upload-area" id="uploadArea">
-                        <div class="upload-icon">馃搧</div>
+                        <div class="upload-icon">📁</div>
                         <div class="upload-text">
-                            <div class="primary">鐐瑰嚮閫夋嫨濯掍綋鏂囦欢</div>
-                            <div>鏀寔瑙嗛锛歁P4銆丄VI銆丮OV銆丮KV 绛?/div>
-                            <div>鏀寔闊抽锛歐AV銆丮P3銆丗LAC銆丄AC 绛?/div>
+                            <div class="primary" data-i18n="media.upload.select">Click to choose a media file</div>
+                            <div data-i18n="media.upload.supportVideo">Supported video: MP4, AVI, MOV, MKV, ...</div>
+                            <div data-i18n="media.upload.supportAudio">Supported audio: WAV, MP3, FLAC, AAC, ...</div>
                         </div>
                     </div>
 
@@ -486,101 +478,97 @@
                     </div>
                 </div>
 
-                <!-- 澶勭悊璁剧疆 -->
                 <div class="panel-section">
-                    <div class="panel-title">澶勭悊璁剧疆</div>
+                    <div class="panel-title" data-i18n="media.panel.processing">Processing Settings</div>
                     <div class="input-group">
-                        <div class="input-label">杞啓寮曟搸</div>
+                        <div class="input-label" data-i18n="media.labels.recognitionEngine">Transcription Engine</div>
                         <select class="text-input" id="recognitionEngine">
-                            <option value="openai">OpenAI锛堥粯璁わ級</option>
+                            <option value="openai" selected>OpenAI (default)</option>
                             <option value="soniox">Soniox</option>
                             <option value="qwen3-asr">Qwen3-ASR</option>
                         </select>
-                        <div class="input-hint">涓庤缃〉淇濇寔涓€鑷达紝淇敼鍚庝粎褰卞搷鏈〉闈㈢殑澶勭悊娴佺▼銆?/div>
+                        <div class="input-hint" data-i18n="media.hints.recognitionEngine">Keep this aligned with the Settings page; changes here only affect this workflow.</div>
                     </div>
 
                     <div class="input-group">
-                        <div class="input-label">缈昏瘧寮曟搸</div>
+                        <div class="input-label" data-i18n="media.labels.translationEngine">Translation Engine</div>
                         <select class="text-input" id="translationEngine">
-                            <option value="openai">OpenAI锛堥粯璁わ級</option>
-                            <option value="gemini">Gemini锛坓emini-2.0-flash锛?/option>
+                            <option value="openai" selected>OpenAI (default)</option>
+                            <option value="gemini">Gemini (gemini-2.0-flash)</option>
                         </select>
-                        <div class="input-hint">寮曟搸鍒楄〃涓庤缃〉鍚屾锛屾墿灞曞悗鍗冲彲鐩存帴浣跨敤銆?/div>
+                        <div class="input-hint" data-i18n="media.hints.translationEngine">Engine options stay synced with Settings. Added engines appear automatically.</div>
                     </div>
 
                     <div class="setting-group">
                         <div class="setting-item">
                             <div class="checkbox checked" id="enableTranslation">
-                                <span>鉁?/span>
+                                <span>&#10003;</span>
                             </div>
-                            <div class="setting-label">鍚敤缈昏瘧</div>
+                            <div class="setting-label" data-i18n="media.setting.enableTranslation">Enable Translation</div>
                         </div>
 
                         <div class="input-group" id="languageGroup">
-                            <div class="input-label">鐩爣璇█</div>
+                            <div class="input-label" data-i18n="media.setting.targetLanguage">Target Language</div>
                             <select class="text-input" id="targetLanguage">
-                                <option value="涓枃" selected>涓枃 (Chinese)</option>
+                                <option value="Chinese" selected>Chinese</option>
                                 <option value="English">English</option>
-                                <option value="鏃ユ湰瑾?>鏃ユ湰瑾?(Japanese)</option>
-                                <option value="頃滉淡鞏?>頃滉淡鞏?(Korean)</option>
-                                <option value="Espa帽ol">Espa帽ol (Spanish)</option>
-                                <option value="Fran莽ais">Fran莽ais (French)</option>
-                                <option value="Deutsch">Deutsch (German)</option>
-                                <option value="Italiano">Italiano (Italian)</option>
-                                <option value="Portugu锚s">Portugu锚s (Portuguese)</option>
-                                <option value="袪褍褋褋泻懈泄">袪褍褋褋泻懈泄 (Russian)</option>
-                                <option value="丕賱毓乇亘賷丞">丕賱毓乇亘賷丞 (Arabic)</option>
-                                <option value="啶灌た啶ㄠ啶︵">啶灌た啶ㄠ啶︵ (Hindi)</option>
-                                <option value="喙勦笚喔?>喙勦笚喔?(Thai)</option>
-                                <option value="Ti岷縩g Vi峄噒">Ti岷縩g Vi峄噒 (Vietnamese)</option>
-                                <option value="Bahasa Indonesia">Bahasa Indonesia</option>
-                                <option value="T眉rk莽e">T眉rk莽e (Turkish)</option>
-                                <option value="Nederlands">Nederlands (Dutch)</option>
-                                <option value="Polski">Polski (Polish)</option>
-                                <option value="校泻褉邪褩薪褋褜泻邪">校泻褉邪褩薪褋褜泻邪 (Ukrainian)</option>
-                                <option value="膶e拧tina">膶e拧tina (Czech)</option>
-                                <option value="__custom__">鑷畾涔?..</option>
+                                <option value="Japanese">Japanese</option>
+                                <option value="Korean">Korean</option>
+                                <option value="Spanish">Spanish</option>
+                                <option value="French">French</option>
+                                <option value="German">German</option>
+                                <option value="Italian">Italian</option>
+                                <option value="Portuguese">Portuguese</option>
+                                <option value="Russian">Russian</option>
+                                <option value="Arabic">Arabic</option>
+                                <option value="Hindi">Hindi</option>
+                                <option value="Thai">Thai</option>
+                                <option value="Vietnamese">Vietnamese</option>
+                                <option value="Indonesian">Indonesian</option>
+                                <option value="Turkish">Turkish</option>
+                                <option value="Dutch">Dutch</option>
+                                <option value="Polish">Polish</option>
+                                <option value="Ukrainian">Ukrainian</option>
+                                <option value="Czech">Czech</option>
+                                <option value="__custom__" data-i18n="media.languages.custom">Custom...</option>
                             </select>
-                            <input type="text" class="text-input" id="customLanguage" placeholder="杈撳叆鑷畾涔夎瑷€" style="display: none;">
+                            <input type="text" class="text-input" id="customLanguage" placeholder="Enter a custom language" data-i18n-placeholder="settings.placeholders.customLanguage" style="display: none;">
                         </div>
 
                         <div class="setting-item">
                             <div class="checkbox" id="theaterMode"></div>
-                            <div class="setting-label">鍚敤鍓у満妯″紡锛堥煶棰戝寮猴級</div>
+                            <div class="setting-label" data-i18n="media.setting.theaterMode">Enable Theater Mode (audio enhancement)</div>
                         </div>
                     </div>
                 </div>
 
-                <!-- 杈撳嚭璁剧疆 -->
                 <div class="panel-section">
-                    <div class="panel-title">杈撳嚭璁剧疆</div>
+                    <div class="panel-title" data-i18n="media.panel.output">Output Settings</div>
                     <div class="input-group">
-                        <div class="input-label">淇濆瓨浣嶇疆</div>
+                        <div class="input-label" data-i18n="media.labels.outputPath">Save Location</div>
                         <div style="display: flex; gap: 8px;">
-                            <input type="text" class="text-input" id="outputPath" placeholder="閫夋嫨淇濆瓨浣嶇疆" readonly style="flex: 1;">
-                            <button class="btn btn-secondary" id="browseOutputBtn" style="white-space: nowrap;">娴忚</button>
+                            <input type="text" class="text-input" id="outputPath" placeholder="Choose a save location" data-i18n-placeholder="media.actions.choosePathPlaceholder" readonly style="flex: 1;">
+                            <button class="btn btn-secondary" id="browseOutputBtn" data-i18n="media.actions.browse" style="white-space: nowrap;">Browse</button>
                         </div>
                     </div>
                 </div>
 
-                <!-- 鎿嶄綔鎸夐挳 -->
                 <div class="action-buttons">
-                    <button class="btn btn-primary" id="startProcessBtn" disabled>寮€濮嬪鐞?/button>
-                    <button class="btn btn-secondary" id="clearBtn">娓呴櫎閫夋嫨</button>
+                    <button class="btn btn-primary" id="startProcessBtn" data-i18n="media.actions.start" disabled>Start Processing</button>
+                    <button class="btn btn-secondary" id="clearBtn" data-i18n="media.actions.clear">Clear Selection</button>
                 </div>
             </div>
 
-            <!-- 鍙充晶缁撴灉闈㈡澘 -->
             <div class="results-panel">
                 <div class="results-header">
-                    <div class="results-title">澶勭悊缁撴灉</div>
-                    <button class="export-btn" id="exportBtn" disabled>瀵煎嚭TXT</button>
+                    <div class="results-title" data-i18n="media.results.title">Processing Results</div>
+                    <button class="export-btn" id="exportBtn" data-i18n="media.actions.export" disabled>Export TXT</button>
                 </div>
 
                 <div class="results-content" id="resultsContent">
                     <div class="empty-state">
-                        <div class="empty-icon">馃搫</div>
-                        <div>閫夋嫨濯掍綋鏂囦欢骞跺紑濮嬪鐞嗗悗锛岃浆鍐欑粨鏋滃皢鏄剧ず鍦ㄨ繖閲?/div>
+                        <div class="empty-icon">📄</div>
+                        <div data-i18n="media.results.empty">Select a media file and start processing to view the transcription here.</div>
                     </div>
                 </div>
             </div>
@@ -588,8 +576,7 @@
     </div>
 
     <script src="i18n.js"></script>
-  <script src="locales/base.i18n.js"></script>
+    <script src="locales/base.i18n.js"></script>
     <script src="media-transcribe-renderer.js"></script>
 </body>
 </html>
-

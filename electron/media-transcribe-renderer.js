@@ -2,6 +2,39 @@
 
 const DEFAULT_LANGUAGE = 'en';
 
+const LEGACY_LANGUAGE_MAP = {
+  '中文': 'Chinese',
+  '日本语': 'Japanese',
+  '日本語': 'Japanese',
+  '한국어': 'Korean',
+  '한국語': 'Korean',
+  'Español': 'Spanish',
+  'Français': 'French',
+  'Deutsch': 'German',
+  'Italiano': 'Italian',
+  'Português': 'Portuguese',
+  'Русский': 'Russian',
+  'العربية': 'Arabic',
+  'हिन्दी': 'Hindi',
+  'हिंदी': 'Hindi',
+  'ไทย': 'Thai',
+  'Tiếng Việt': 'Vietnamese',
+  'Bahasa Indonesia': 'Indonesian',
+  'Türkçe': 'Turkish',
+  'Nederlands': 'Dutch',
+  'Polski': 'Polish',
+  'Українська': 'Ukrainian',
+  'Čeština': 'Czech'
+};
+
+function normalizeLegacyLanguage(value) {
+  if (!value && value !== 0) {
+    return value;
+  }
+  const trimmed = String(value).trim();
+  return LEGACY_LANGUAGE_MAP[trimmed] || trimmed;
+}
+
 function t(key) {
   if (window.appI18n && typeof window.appI18n.t === 'function') {
     return window.appI18n.t(key);
@@ -590,20 +623,21 @@ class MediaTranscribeApp {
     }
 
     if (savedSettings.targetLanguage) {
-      if (savedSettings.targetLanguage === '__custom__') {
+      const savedTarget = normalizeLegacyLanguage(savedSettings.targetLanguage);
+      if (savedTarget === '__custom__') {
         this.targetLanguage.value = '__custom__';
         this.customLanguage.value = savedSettings.customLanguage || '';
       } else {
-        this.targetLanguage.value = savedSettings.targetLanguage;
-        this.customLanguage.value = savedSettings.customLanguage || '';
+        this.applySelectValue(this.targetLanguage, savedTarget, 'Chinese');
       }
     } else if (config.translate_language) {
+      const normalizedTarget = normalizeLegacyLanguage(config.translate_language);
       const options = Array.from(this.targetLanguage.options).map((option) => option.value);
-      if (options.includes(config.translate_language)) {
-        this.targetLanguage.value = config.translate_language;
+      if (options.includes(normalizedTarget)) {
+        this.targetLanguage.value = normalizedTarget;
       } else {
         this.targetLanguage.value = '__custom__';
-        this.customLanguage.value = config.translate_language;
+        this.customLanguage.value = normalizedTarget;
       }
     }
 
@@ -650,10 +684,11 @@ class MediaTranscribeApp {
   }
 
   resolveTargetLanguage() {
-    if (this.targetLanguage.value === '__custom__') {
+    const currentValue = normalizeLegacyLanguage(this.targetLanguage.value);
+    if (currentValue === '__custom__') {
       return (this.customLanguage.value || '').trim() || 'Chinese';
     }
-    return this.targetLanguage.value || 'Chinese';
+    return currentValue || 'Chinese';
   }
 
   async ensureEngineConfigSynced(recognitionEngine, translationEngine) {

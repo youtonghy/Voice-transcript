@@ -1,9 +1,9 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>璇煶杈撳叆璁剧疆</title>
+  <title data-i18n="voice.pageTitle">Voice Input Settings</title>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -40,39 +40,40 @@
     .btn-secondary:hover { background: #f5f5f5; border-color: #333; }
 
     .top-notification { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: #5352ed; color: #fff; padding: 10px 16px; border-radius: 6px; z-index: 10000; box-shadow: 0 4px 12px rgba(0,0,0,0.15); font-size: 14px; }
+  
   </style>
   </head>
   <body>
     <div class="nav-bar">
       <div class="nav-content">
         <div class="nav-left">
-                <a href="#" class="back-btn" title="Back to Home" data-i18n-title="voice.nav.backTooltip" onclick="window.close(); return false;">
-                    <span class="back-btn-icon" aria-hidden="true">&#8592;</span>
-                    <span data-i18n="common.backLink">Back</span>
-                </a>
-          <div class="nav-title">璇煶杈撳叆璁剧疆</div>
+          <a href="#" class="back-btn" title="Back to Home" data-i18n-title="voice.nav.backTooltip" onclick="window.close(); return false;">
+            <span class="back-btn-icon" aria-hidden="true">&#8592;</span>
+            <span data-i18n="common.backLink">Back</span>
+          </a>
+          <div class="nav-title" data-i18n="voice.nav.title">Voice Input Settings</div>
         </div>
       </div>
     </div>
 
     <div class="settings-container">
-      <div class="section-title">馃帣锔?璇煶杈撳叆</div>
+      <div class="section-title" data-i18n="voice.section.title">Voice Input</div>
       <form id="voiceForm">
         <div class="form-group">
           <div class="checkbox-group">
             <input type="checkbox" id="voiceInputEnabled">
-            <label for="voiceInputEnabled" style="margin:0;">鍚敤璇煶杈撳叆锛堝叏灞€鍒囨崲锛氭寜涓€娆″紑濮嬶紝鍐嶆寜涓€娆″仠姝級</label>
+            <label for="voiceInputEnabled" data-i18n="voice.fields.enable" style="margin:0;">Enable voice input (press once to start, press again to stop)</label>
           </div>
         </div>
 
         <div class="grid">
           <div class="form-group">
-            <label for="voiceInputHotkey">蹇嵎閿?/label>
-            <input type="text" id="voiceInputHotkey" placeholder="渚嬪锛欶3 鎴?A">
-            <div class="form-note">鏀寔 F1鈥揊24銆丄鈥揨銆?鈥?</div>
+            <label for="voiceInputHotkey" data-i18n="voice.fields.hotkey">Hotkey</label>
+            <input type="text" id="voiceInputHotkey" placeholder="e.g. F3 or A" data-i18n-placeholder="voice.placeholders.hotkey">
+            <div class="form-note" data-i18n="voice.notes.hotkey">Supports F1-F24, A-Z, 0-9</div>
           </div>
           <div class="form-group">
-            <label for="voiceInputEngine">杞啓寮曟搸</label>
+            <label for="voiceInputEngine" data-i18n="voice.fields.engine">Transcription Engine</label>
             <select id="voiceInputEngine">
               <option value="openai">OpenAI</option>
               <option value="soniox">Soniox</option>
@@ -80,43 +81,43 @@
             </select>
           </div>
           <div class="form-group">
-            <label for="voiceInputLanguage">杞啓璇█</label>
+            <label for="voiceInputLanguage" data-i18n="voice.fields.language">Transcription Language</label>
             <select id="voiceInputLanguage">
-              <option value="auto">鑷姩妫€娴?/option>
-              <option value="Chinese">涓枃</option>
+              <option value="auto">Auto Detect</option>
+              <option value="Chinese">Chinese</option>
               <option value="English">English</option>
             </select>
           </div>
           <div class="form-group" style="display:flex; flex-direction:column; justify-content:flex-end;">
             <div class="checkbox-group" style="margin:0;">
               <input type="checkbox" id="voiceInputTranslate">
-              <label for="voiceInputTranslate" style="margin:0;">瀹屾垚鍚庢彃鍏ョ炕璇戠粨鏋?/label>
+              <label for="voiceInputTranslate" data-i18n="voice.fields.insertTranslation" style="margin:0;">Insert translation after completion</label>
             </div>
-            <div id="tlNote" class="form-note" style="display:none;">鑻ュ紑鍚紝灏嗗湪鍋滄鍚庢彃鍏ョ炕璇戞枃鏈?/div>
+            <div id="tlNote" class="form-note" data-i18n="voice.fields.insertNote" style="display:none;">If enabled, the translation will be inserted after stopping.</div>
           </div>
           <div class="form-group" id="voiceInputTranslateLanguageGroup" style="display:none;">
-            <label for="voiceInputTranslateLanguage">缈昏瘧鐩爣璇█</label>
+            <label for="voiceInputTranslateLanguage" data-i18n="voice.fields.translateLanguage">Translation Target Language</label>
             <select id="voiceInputTranslateLanguage">
-              <option value="Chinese">涓枃 (Chinese)</option>
+              <option value="Chinese">Chinese</option>
               <option value="English">English</option>
-              <option value="Japanese">鏃ユ湰瑾?(Japanese)</option>
-              <option value="Korean">頃滉淡鞏?(Korean)</option>
-              <option value="Spanish">Espa帽ol (Spanish)</option>
-              <option value="French">Fran莽ais (French)</option>
-              <option value="German">Deutsch (German)</option>
-              <option value="Italian">Italiano (Italian)</option>
-              <option value="Portuguese">Portugu锚s (Portuguese)</option>
-              <option value="Russian">袪褍褋褋泻懈泄 (Russian)</option>
-              <option value="Arabic">丕賱毓乇亘賷丞 (Arabic)</option>
-              <option value="Hindi">啶灌た啶ㄠ啶︵ (Hindi)</option>
-              <option value="Thai">喙勦笚喔?(Thai)</option>
-              <option value="Vietnamese">Ti岷縩g Vi峄噒 (Vietnamese)</option>
-              <option value="Indonesian">Bahasa Indonesia</option>
-              <option value="Turkish">T眉rk莽e (Turkish)</option>
-              <option value="Dutch">Nederlands (Dutch)</option>
-              <option value="Polish">Polski (Polish)</option>
-              <option value="Ukrainian">校泻褉邪褩薪褋褜泻邪 (Ukrainian)</option>
-              <option value="Czech">膶e拧tina (Czech)</option>
+              <option value="Japanese">Japanese</option>
+              <option value="Korean">Korean</option>
+              <option value="Spanish">Spanish</option>
+              <option value="French">French</option>
+              <option value="German">German</option>
+              <option value="Italian">Italian</option>
+              <option value="Portuguese">Portuguese</option>
+              <option value="Russian">Russian</option>
+              <option value="Arabic">Arabic</option>
+              <option value="Hindi">Hindi</option>
+              <option value="Thai">Thai</option>
+              <option value="Vietnamese">Vietnamese</option>
+              <option value="Indonesian">Indonesian</option>
+              <option value="Turkish">Turkish</option>
+              <option value="Dutch">Dutch</option>
+              <option value="Polish">Polish</option>
+              <option value="Ukrainian">Ukrainian</option>
+              <option value="Czech">Czech</option>
             </select>
           </div>
         </div>
@@ -128,8 +129,7 @@
     </div>
 
     <script src="i18n.js"></script>
-  <script src="locales/base.i18n.js"></script>
+    <script src="locales/base.i18n.js"></script>
     <script src="voice-input.js"></script>
   </body>
   </html>
-

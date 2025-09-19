@@ -1,7 +1,7 @@
-﻿let currentConfig = {};
-let autoSaveTimeout = null; // Debounce timer
-
-const DEFAULT_GEMINI_PROMPT = [
+﻿(function () {
+  const DEFAULT_LANGUAGE = 'en';
+  const AUTO_SAVE_DELAY = 800;
+  const DEFAULT_GEMINI_PROMPT = [
     'You are a professional translation assistant.',
     'Translate user text into {{TARGET_LANGUAGE}}.',
     'Requirements:',
@@ -9,799 +9,628 @@ const DEFAULT_GEMINI_PROMPT = [
     '2) Ensure the translation is natural and fluent.',
     '3) If the input is already in {{TARGET_LANGUAGE}}, return it unchanged.',
     '4) Respond with translation only without extra commentary.'
-].join('\n');
+  ].join('\n');
 
-const DEFAULT_LANGUAGE = 'en';
+  let currentConfig = {};
+  let autoSaveTimer = null;
 
-function t(key) {
+  function t(key) {
     if (window.appI18n && typeof window.appI18n.t === 'function') {
-        return window.appI18n.t(key);
+      return window.appI18n.t(key);
     }
     return key;
-}
+  }
 
-function applyLanguageFromConfig(cfg) {
-    if (!window.appI18n || typeof window.appI18n.setLanguage !== 'function') {
-        return;
+  function resolveText(key, fallback) {
+    const value = t(key);
+    if (!value || value === key) {
+      return fallback;
     }
-    const lang = (cfg && cfg.app_language) || DEFAULT_LANGUAGE;
-    window.appI18n.setLanguage(lang);
-}
+    return value;
+  }
 
-function initializeLanguage() {
+  function setDocumentLanguage(lang) {
+    if (!document || !document.documentElement) {
+      return;
+    }
+    const normalized = lang === 'zh' ? 'zh-CN' : 'en';
+    document.documentElement.lang = normalized;
+  }
+
+  function registerSettingsTranslations() {
     if (!window.appI18n) {
-        return;
-    }
-    window.appI18n.setLanguage(DEFAULT_LANGUAGE);
-    document.title = t('settings.nav.title');
-    if (typeof window.appI18n.onChange === 'function') {
-        window.appI18n.onChange(() => {
-            registerSettingsTranslations();
-            window.appI18n.apply();
-            document.title = t('settings.nav.title');
-        });
-    }
-}
-
-
-function registerSettingsTranslations() {
-    if (!window.appI18n) {
-        return;
+      return;
     }
 
     const navTitle = document.querySelector('.nav-title');
     if (navTitle) {
-        navTitle.dataset.i18n = 'settings.nav.title';
+      navTitle.dataset.i18n = 'settings.nav.title';
     }
 
     const backButton = document.querySelector('.back-btn');
     if (backButton) {
-        backButton.dataset.i18n = 'common.backNav';
-        backButton.dataset.i18nTitle = 'settings.nav.backTooltip';
+      backButton.dataset.i18n = 'common.backNav';
+      backButton.dataset.i18nTitle = 'settings.nav.backTooltip';
     }
 
     const headerTitle = document.querySelector('.settings-header h1');
     if (headerTitle) {
-        headerTitle.dataset.i18n = 'settings.header.title';
+      headerTitle.dataset.i18n = 'settings.header.title';
     }
+
     const headerSubtitle = document.querySelector('.settings-header p');
     if (headerSubtitle) {
-        headerSubtitle.dataset.i18n = 'settings.header.subtitle';
+      headerSubtitle.dataset.i18n = 'settings.header.subtitle';
     }
 
     const sectionTitleKeys = [
-        'settings.section.recognitionEngine',
-        'settings.section.translationEngine',
-        'settings.section.openaiCommon',
-        'settings.section.translation',
-        'settings.section.transcription',
-        'settings.section.recording',
-        'settings.section.interfaceLanguage'
+      'settings.section.recognitionEngine',
+      'settings.section.translationEngine',
+      'settings.section.openaiCommon',
+      'settings.section.translation',
+      'settings.section.transcription',
+      'settings.section.recording',
+      'settings.section.interfaceLanguage'
     ];
     document.querySelectorAll('.section-title').forEach((element, index) => {
-        const key = sectionTitleKeys[index];
-        if (key) {
-            element.dataset.i18n = key;
-        }
+      const key = sectionTitleKeys[index];
+      if (key) {
+        element.dataset.i18n = key;
+      }
     });
 
     const labelKeys = {
-        recognitionEngine: 'settings.labels.recognitionEngine',
-        openaiTranscribeModel: 'settings.labels.openaiTranscribeModel',
-        sonioxApiKey: 'settings.labels.sonioxApiKey',
-        dashscopeApiKey: 'settings.labels.dashscopeApiKey',
-        qwen3AsrModel: 'settings.labels.qwen3AsrModel',
-        translationEngine: 'settings.labels.translationEngine',
-        geminiApiKey: 'settings.labels.geminiApiKey',
-        geminiTranslateModel: 'settings.labels.geminiTranslateModel',
-        openaiTranslateModel: 'settings.labels.openaiTranslateModel',
-        apiKey: 'settings.labels.apiKey',
-        apiUrl: 'settings.labels.apiUrl',
-        enableTranslation: 'settings.labels.enableTranslation',
-        translationMode: 'settings.labels.translationMode',
-        targetLanguage: 'settings.labels.targetLanguage',
-        language1: 'settings.labels.language1',
-        language2: 'settings.labels.language2',
-        transcribeLanguage: 'settings.labels.transcribeLanguage',
-        silenceThreshold: 'settings.labels.silenceThreshold',
-        silenceDuration: 'settings.labels.silenceDuration',
-        theaterMode: 'settings.labels.theaterMode',
-        appLanguage: 'settings.labels.appLanguage'
+      recognitionEngine: 'settings.labels.recognitionEngine',
+      openaiTranscribeModel: 'settings.labels.openaiTranscribeModel',
+      sonioxApiKey: 'settings.labels.sonioxApiKey',
+      dashscopeApiKey: 'settings.labels.dashscopeApiKey',
+      qwen3AsrModel: 'settings.labels.qwen3AsrModel',
+      translationEngine: 'settings.labels.translationEngine',
+      geminiApiKey: 'settings.labels.geminiApiKey',
+      geminiTranslateModel: 'settings.labels.geminiTranslateModel',
+      openaiTranslateModel: 'settings.labels.openaiTranslateModel',
+      apiKey: 'settings.labels.apiKey',
+      apiUrl: 'settings.labels.apiUrl',
+      enableTranslation: 'settings.labels.enableTranslation',
+      translationMode: 'settings.labels.translationMode',
+      targetLanguage: 'settings.labels.targetLanguage',
+      language1: 'settings.labels.language1',
+      language2: 'settings.labels.language2',
+      transcribeLanguage: 'settings.labels.transcribeLanguage',
+      silenceThreshold: 'settings.labels.silenceThreshold',
+      silenceDuration: 'settings.labels.silenceDuration',
+      theaterMode: 'settings.labels.theaterMode',
+      appLanguage: 'settings.labels.appLanguage'
     };
     Object.entries(labelKeys).forEach(([id, key]) => {
-        const label = document.querySelector('label[for="' + id + '"]');
-        if (label) {
-            label.dataset.i18n = key;
-        }
+      const label = document.querySelector('label[for="' + id + '"]');
+      if (label) {
+        label.dataset.i18n = key;
+      }
     });
 
-
-    const customLanguageInput = document.getElementById('customLanguage');
-    if (customLanguageInput) {
-        customLanguageInput.dataset.i18nPlaceholder = 'settings.placeholders.customLanguage';
-    }
+    const placeholderMap = {
+      customLanguage: 'settings.placeholders.customLanguage'
+    };
+    Object.entries(placeholderMap).forEach(([id, key]) => {
+      const el = document.getElementById(id);
+      if (el) {
+        el.dataset.i18nPlaceholder = key;
+      }
+    });
 
     const noteMappings = [
-        { labelFor: 'recognitionEngine', key: 'settings.notes.recognitionEngine' },
-        { labelFor: 'openaiTranscribeModel', key: 'settings.notes.openaiTranscribeModel' },
-        { labelFor: 'sonioxApiKey', key: 'settings.notes.sonioxApiKey' },
-        { labelFor: 'dashscopeApiKey', key: 'settings.notes.dashscopeApiKey' },
-        { labelFor: 'qwen3AsrModel', key: 'settings.notes.qwen3AsrModel' },
-        { labelFor: 'translationEngine', key: 'settings.notes.translationEngine' },
-        { labelFor: 'geminiApiKey', key: 'settings.notes.geminiApiKey' },
-        { labelFor: 'geminiTranslateModel', key: 'settings.notes.geminiTranslateModel' },
-        { labelFor: 'openaiTranslateModel', key: 'settings.notes.openaiTranslateModel' },
-        { labelFor: 'apiKey', key: 'settings.notes.apiKey' },
-        { labelFor: 'apiUrl', key: 'settings.notes.apiUrl' },
-        { labelFor: 'translationMode', key: 'settings.notes.translationMode' },
-        { labelFor: 'targetLanguage', key: 'settings.notes.targetLanguage' },
-        { labelFor: 'transcribeLanguage', key: 'settings.notes.transcribeLanguage', mode: 'html' },
-        { inputId: 'theaterMode', key: 'settings.notes.theaterMode', relative: 'next' },
-        { selector: '#appLanguage', key: 'settings.notes.appLanguage', type: 'parent' }
+      { selector: '#recognitionEngine + .form-note', key: 'settings.notes.recognitionEngine' },
+      { selector: '#openaiTranscribeModel + .form-note', key: 'settings.notes.openaiTranscribeModel' },
+      { selector: '#sonioxApiKey + .form-note', key: 'settings.notes.sonioxApiKey' },
+      { selector: '#dashscopeApiKey + .form-note', key: 'settings.notes.dashscopeApiKey' },
+      { selector: '#qwen3AsrModel + .form-note', key: 'settings.notes.qwen3AsrModel' },
+      { selector: '#translationEngine + .form-note', key: 'settings.notes.translationEngine' },
+      { selector: '#geminiApiKey + .form-note', key: 'settings.notes.geminiApiKey' },
+      { selector: '#geminiTranslateModel + .form-note', key: 'settings.notes.geminiTranslateModel' },
+      { selector: '#openaiTranslateModel + .form-note', key: 'settings.notes.openaiTranslateModel' },
+      { selector: '#apiKey + .form-note', key: 'settings.notes.apiKey' },
+      { selector: '#apiUrl + .form-note', key: 'settings.notes.apiUrl' },
+      { selector: '#translationMode + .form-note', key: 'settings.notes.translationMode' },
+      { selector: '#targetLanguage + .form-note', key: 'settings.notes.targetLanguage' },
+      { selector: '#language2 + .form-note', key: 'settings.notes.language2' },
+      { selector: '#transcribeLanguage + .form-note', key: 'settings.notes.transcribeLanguage' },
+      { selector: '#silenceThreshold + .form-note', key: 'settings.notes.silenceThreshold' },
+      { selector: '#silenceDuration + .form-note', key: 'settings.notes.silenceDuration' },
+      { selector: '#theaterMode', key: 'settings.notes.theaterMode', mode: 'tooltip' },
+      { selector: '#appLanguage + .form-note', key: 'settings.notes.appLanguage' }
     ];
 
-    noteMappings.forEach(({ labelFor, selector, inputId, key, mode, relative, type }) => {
-        let note = null;
-        if (labelFor) {
-            const label = document.querySelector('label[for="' + labelFor + '"]');
-            if (label) {
-                const group = label.closest('.form-group') || label.closest('.checkbox-group');
-                if (group) {
-                    note = group.querySelector('.form-note');
-                }
-            }
-        } else if (selector) {
-            const element = document.querySelector(selector);
-            if (element) {
-                if (type === 'parent') {
-                    note = element.closest('.form-group')?.querySelector('.form-note');
-                } else {
-                    note = element;
-                }
-            }
-        } else if (inputId) {
-            const input = document.getElementById(inputId);
-            if (input && relative === 'next') {
-                note = input.closest('.checkbox-group')?.nextElementSibling;
-            }
-        }
-        if (note) {
-            note.dataset.i18n = key;
-            if (mode === 'html') {
-                note.dataset.i18nMode = 'html';
-            }
-        }
+    noteMappings.forEach(({ selector, key, mode }) => {
+      const el = document.querySelector(selector);
+      if (!el) return;
+      if (mode === 'tooltip') {
+        el.dataset.i18nTitle = key;
+      } else {
+        el.dataset.i18n = key;
+      }
     });
+  }
 
-    const backLink = document.querySelector('.button-group .btn.btn-secondary');
-    if (backLink) {
-        backLink.dataset.i18n = 'common.backLink';
+  function applyLanguageFromConfig(cfg) {
+    const lang = (cfg && cfg.app_language) || DEFAULT_LANGUAGE;
+    setDocumentLanguage(lang);
+    if (!window.appI18n || typeof window.appI18n.setLanguage !== 'function') {
+      return;
     }
-}});
-}
-
-
-document.addEventListener('DOMContentLoaded', () => {
-    initializeLanguage();
+    window.appI18n.setLanguage(lang);
     registerSettingsTranslations();
-    if (window.appI18n) { window.appI18n.apply(); }
-    loadCurrentConfig();
-    setupEventListeners();
-    try { updateProviderVisibility(); } catch {}
-    try { scrollToHashSection(); } catch {}
-    try { attachGlobalAutoSave(); } catch {}
-});
+    if (typeof window.appI18n.apply === 'function') {
+      window.appI18n.apply();
+    }
+    document.title = t('settings.nav.title');
+  }
 
-function setupEventListeners() {
-    // Form submission
-    document.getElementById('settingsForm').addEventListener('submit', saveSettings);
-    
-    // Translation switch
-    document.getElementById('enableTranslation').addEventListener('change', toggleTranslationSettings);
-    document.getElementById('enableTranslation').addEventListener('change', autoSave);
-    
-    // Translation mode switching
-    document.getElementById('translationMode').addEventListener('change', () => {
+  function initializeLanguage() {
+    if (!window.appI18n) {
+      return;
+    }
+    registerSettingsTranslations();
+    window.appI18n.setLanguage(DEFAULT_LANGUAGE);
+    if (typeof window.appI18n.apply === 'function') {
+      window.appI18n.apply();
+    }
+    document.title = t('settings.nav.title');
+    if (typeof window.appI18n.onChange === 'function') {
+      window.appI18n.onChange(() => {
+        registerSettingsTranslations();
+        if (typeof window.appI18n.apply === 'function') {
+          window.appI18n.apply();
+        }
+        document.title = t('settings.nav.title');
+      });
+    }
+  }
+
+  function setupEventListeners() {
+    const form = document.getElementById('settingsForm');
+    if (!form) {
+      return;
+    }
+
+    form.addEventListener('submit', saveSettings);
+
+    const enableTranslation = document.getElementById('enableTranslation');
+    if (enableTranslation) {
+      enableTranslation.addEventListener('change', () => {
+        toggleTranslationSettings();
+        updateTranscribeLanguageAvailability();
+        autoSave();
+      });
+    }
+
+    const translationMode = document.getElementById('translationMode');
+    if (translationMode) {
+      translationMode.addEventListener('change', () => {
         updateTranslationModeSettings();
         updateTranscribeLanguageAvailability();
         autoSave();
-    });
-    
-    // Update transcription language availability when translation switch changes
-    document.getElementById('enableTranslation').addEventListener('change', () => {
-        updateTranscribeLanguageAvailability();
-    });
-    
-    // Theater mode switch
-    document.getElementById('theaterMode').addEventListener('change', autoSave);
-    
-    // Target language selection and customization
+      });
+    }
+
     const targetLanguage = document.getElementById('targetLanguage');
-    const customLanguage = document.getElementById('customLanguage');
-    targetLanguage.addEventListener('change', () => {
+    if (targetLanguage) {
+      targetLanguage.addEventListener('change', () => {
         updateCustomLanguageVisibility();
         autoSave();
-    });
-    customLanguage.addEventListener('input', autoSave);
-
-    const appLanguageSelect = document.getElementById('appLanguage');
-    if (appLanguageSelect) {
-        appLanguageSelect.addEventListener('change', () => {
-            const value = appLanguageSelect.value || DEFAULT_LANGUAGE;
-            if (window.appI18n && typeof window.appI18n.setLanguage === 'function') {
-                window.appI18n.setLanguage(value);
-            }
-            autoSave();
-        });
-        appLanguageSelect.addEventListener('blur', autoSave);
+      });
     }
 
-    
-    // Real-time validation of API key format and trigger home page detection
-    document.getElementById('apiKey').addEventListener('input', (event) => {
-        try { validateApiKey(); } catch {}
-        // Trigger auto-save when API key input changes for real-time detection on main page
+    const customLanguage = document.getElementById('customLanguage');
+    if (customLanguage) {
+      customLanguage.addEventListener('input', autoSave);
+      customLanguage.addEventListener('blur', autoSave);
+    }
+
+    const appLanguage = document.getElementById('appLanguage');
+    if (appLanguage) {
+      appLanguage.addEventListener('change', () => {
+        const value = appLanguage.value || DEFAULT_LANGUAGE;
+        applyLanguageFromConfig({ app_language: value });
         autoSave();
-    });
-    
-    // API URL changes also trigger real-time detection
-    document.getElementById('apiUrl').addEventListener('input', autoSave);
-    const geminiApiKey = document.getElementById('geminiApiKey');
-    if (geminiApiKey) {
-        geminiApiKey.addEventListener('input', autoSave);
+      });
     }
-    
-    // Engine switching (recognition & translation)
+
     const recognitionEngine = document.getElementById('recognitionEngine');
-    const translationEngine = document.getElementById('translationEngine');
     if (recognitionEngine) {
-        recognitionEngine.addEventListener('change', () => {
-            updateProviderVisibility();
-            autoSave();
-            try { console.log('[Settings] Recognition engine ->', recognitionEngine.value); } catch {}
-        });
-    }
-    if (translationEngine) {
-        translationEngine.addEventListener('change', () => {
-            updateProviderVisibility();
-            autoSave();
-            try { console.log('[Settings] Translation engine ->', translationEngine.value); } catch {}
-        });
-    }
-    
-    // Voice input listeners
-    const viEnabledEl = document.getElementById('voiceInputEnabled');
-    const viHotkeyEl = document.getElementById('voiceInputHotkey');
-    const viEngineEl = document.getElementById('voiceInputEngine');
-    const viLangEl = document.getElementById('voiceInputLanguage');
-    const viTlChk = document.getElementById('voiceInputTranslate');
-    const viTlLang = document.getElementById('voiceInputTranslateLanguage');
-    const viTlGroup = document.getElementById('voiceInputTranslateLanguageGroup');
-    if (viEnabledEl) viEnabledEl.addEventListener('change', autoSave);
-    if (viHotkeyEl) { viHotkeyEl.addEventListener('blur', autoSave); viHotkeyEl.addEventListener('change', autoSave); }
-    if (viEngineEl) viEngineEl.addEventListener('change', autoSave);
-    if (viLangEl) viLangEl.addEventListener('change', autoSave);
-    if (viTlChk) viTlChk.addEventListener('change', () => {
-        if (viTlGroup) viTlGroup.style.display = viTlChk.checked ? 'block' : 'none';
-        autoSave();
-    });
-    if (viTlLang) viTlLang.addEventListener('input', autoSave);
-    // No trigger mode switch (global toggle only)
-    
-    // Add auto-save on blur for all input fields
-    const autoSaveInputs = [
-        'apiKey', 'apiUrl', 'openaiTranscribeModel', 'openaiTranslateModel', 'geminiApiKey', 'geminiTranslateModel', 'targetLanguage', 'customLanguage', 'transcribeLanguage',
-        'translationMode', 'language1', 'language2', 'recognitionEngine', 'translationEngine', 'sonioxApiKey', 'dashscopeApiKey', 'qwen3AsrModel',
-        'silenceThreshold', 'silenceDuration', 'theaterMode'
-    ];
-    
-    autoSaveInputs.forEach(inputId => {
-        const input = document.getElementById(inputId);
-        if (input) {
-            input.addEventListener('blur', autoSave);
-            input.addEventListener('change', autoSave);
-        }
-    });
-}
-
-// Scroll to anchor section if hash exists (e.g., #voice-input)
-function scrollToHashSection() {
-  const hash = (window.location.hash || '').replace(/^#/, '');
-  if (!hash) return;
-  const el = document.getElementById(hash);
-  if (el && typeof el.scrollIntoView === 'function') {
-    setTimeout(() => {
-      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      try { el.focus({ preventScroll: true }); } catch {}
-    }, 50);
-  }
-}
-
-
-// Auto-save when any control in the settings form loses focus
-  const form = document.getElementById('settingsForm');
-  if (!form) return;
-  const controls = form.querySelectorAll('input, select, textarea');
-  controls.forEach(el => {
-    el.addEventListener('blur', autoSave);
-    el.addEventListener('change', autoSave);
-    if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
-      el.addEventListener('input', debounce(autoSave, 600));
-    }
-  });
-}
-
-async function loadCurrentConfig() {
-    try {
-        currentConfig = await window.electronAPI.getConfig();
-        applyLanguageFromConfig(currentConfig);
-        populateForm(currentConfig);
-    } catch (error) {
-        showTopNotification(`${t('settings.notify.loadFailed')}: ${error.message}`, 'error');
-    }
-}
-
-function populateForm(config) {
-
-    // Engine configuration (compatibility with legacy transcribe_source field)
-        const recEl = document.getElementById('recognitionEngine');
-        const tlEl = document.getElementById('translationEngine');
-        const rec = (config.recognition_engine || config.transcribe_source || 'openai');
-        const tl = (config.translation_engine || 'openai');
-        if (recEl) recEl.value = rec;
-        if (tlEl) tlEl.value = tl;
+      recognitionEngine.addEventListener('change', () => {
         updateProviderVisibility();
-    })();
-    document.getElementById('apiKey').value = config.openai_api_key || '';
-    document.getElementById('apiUrl').value = config.openai_base_url || '';
-    const sonioxEl = document.getElementById('sonioxApiKey');
-    if (sonioxEl) sonioxEl.value = config.soniox_api_key || '';
-    const dashscopeEl = document.getElementById('dashscopeApiKey');
-    if (dashscopeEl) dashscopeEl.value = config.dashscope_api_key || '';
-    const qwenModelEl = document.getElementById('qwen3AsrModel');
-    if (qwenModelEl) qwenModelEl.value = config.qwen3_asr_model || 'qwen3-asr-flash';
-    
-    // OpenAI model fields
-    const oaiTrModel = document.getElementById('openaiTranscribeModel');
-    if (oaiTrModel) oaiTrModel.value = config.openai_transcribe_model || 'gpt-4o-transcribe';
-    const oaiTlModel = document.getElementById('openaiTranslateModel');
-    if (oaiTlModel) oaiTlModel.value = config.openai_translate_model || 'gpt-4o-mini';
-    const geminiKeyEl = document.getElementById('geminiApiKey');
-    if (geminiKeyEl) geminiKeyEl.value = config.gemini_api_key || '';
-    const geminiModelEl = document.getElementById('geminiTranslateModel');
-    if (geminiModelEl) geminiModelEl.value = config.gemini_translate_model || 'gemini-2.0-flash';
-    if (!config.gemini_translate_system_prompt || !String(config.gemini_translate_system_prompt).trim()) {
-        config.gemini_translate_system_prompt = DEFAULT_GEMINI_PROMPT;
+        autoSave();
+      });
     }
 
-    
-    // Translation settings
+    const translationEngine = document.getElementById('translationEngine');
+    if (translationEngine) {
+      translationEngine.addEventListener('change', () => {
+        updateProviderVisibility();
+        autoSave();
+      });
+    }
+
+    const apiKey = document.getElementById('apiKey');
+    if (apiKey) {
+      apiKey.addEventListener('input', () => {
+        validateApiKey();
+        autoSave();
+      });
+    }
+
+    const apiUrl = document.getElementById('apiUrl');
+    if (apiUrl) {
+      apiUrl.addEventListener('input', autoSave);
+    }
+
+    ['geminiApiKey', 'geminiTranslateModel', 'openaiTranscribeModel', 'openaiTranslateModel', 'sonioxApiKey', 'dashscopeApiKey', 'qwen3AsrModel', 'language1', 'language2', 'transcribeLanguage', 'silenceThreshold', 'silenceDuration']
+      .forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) {
+          el.addEventListener('change', autoSave);
+          el.addEventListener('blur', autoSave);
+          if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
+            el.addEventListener('input', autoSave);
+          }
+        }
+      });
+
+    const theaterMode = document.getElementById('theaterMode');
+    if (theaterMode) {
+      theaterMode.addEventListener('change', autoSave);
+    }
+  }
+
+  function scrollToHashSection() {
+    const hash = (window.location.hash || '').replace(/^#/, '');
+    if (!hash) return;
+    const el = document.getElementById(hash);
+    if (el && typeof el.scrollIntoView === 'function') {
+      setTimeout(() => {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        try { el.focus({ preventScroll: true }); } catch (_) {}
+      }, 80);
+    }
+  }
+
+  async function loadCurrentConfig() {
+    if (!window.electronAPI || typeof window.electronAPI.getConfig !== 'function') {
+      return;
+    }
+    try {
+      const cfg = await window.electronAPI.getConfig();
+      currentConfig = cfg || {};
+      applyLanguageFromConfig(currentConfig);
+      populateForm(currentConfig);
+    } catch (error) {
+      showTopNotification(`${resolveText('settings.notify.loadFailed', 'Failed to load configuration')}: ${error.message}`, 'error');
+    }
+  }
+
+  function populateForm(cfg) {
+    const config = cfg || {};
+
+    const rec = config.recognition_engine || config.transcribe_source || 'openai';
+    const tl = config.translation_engine || 'openai';
+    const recEl = document.getElementById('recognitionEngine');
+    const tlEl = document.getElementById('translationEngine');
+    if (recEl) recEl.value = rec;
+    if (tlEl) tlEl.value = tl;
+
+    const fieldMap = {
+      apiKey: config.openai_api_key || '',
+      apiUrl: config.openai_base_url || '',
+      openaiTranscribeModel: config.openai_transcribe_model || 'gpt-4o-transcribe',
+      openaiTranslateModel: config.openai_translate_model || 'gpt-4o-mini',
+      geminiApiKey: config.gemini_api_key || '',
+      geminiTranslateModel: config.gemini_translate_model || 'gemini-2.0-flash',
+      sonioxApiKey: config.soniox_api_key || '',
+      dashscopeApiKey: config.dashscope_api_key || '',
+      qwen3AsrModel: config.qwen3_asr_model || 'qwen3-asr-flash',
+      language1: config.smart_language1 || 'Chinese',
+      language2: config.smart_language2 || 'English',
+      transcribeLanguage: config.transcribe_language || 'auto',
+      silenceThreshold: (typeof config.silence_rms_threshold === 'number' ? config.silence_rms_threshold : 0.01).toString(),
+      silenceDuration: (typeof config.min_silence_seconds === 'number' ? config.min_silence_seconds : 1).toString()
+    };
+    Object.entries(fieldMap).forEach(([id, value]) => {
+      const el = document.getElementById(id);
+      if (el) el.value = value;
+    });
+
     const enableTranslation = document.getElementById('enableTranslation');
-    enableTranslation.checked = config.enable_translation !== false;
-    
-    // Target language: if not in dropdown options, switch to custom
+    if (enableTranslation) {
+      enableTranslation.checked = config.enable_translation !== false;
+    }
+
+    const translationMode = document.getElementById('translationMode');
+    if (translationMode) {
+      translationMode.value = config.translation_mode || 'fixed';
+    }
+
     const targetLanguage = document.getElementById('targetLanguage');
     const customLanguage = document.getElementById('customLanguage');
-    let savedLang = config.translate_language || 'Chinese';
-    if (savedLang === 'zh') savedLang = 'Chinese';
-    const options = Array.from(targetLanguage.options).map(o => o.value);
-    if (options.includes(savedLang)) {
+    if (targetLanguage) {
+      const savedLang = config.translate_language || 'Chinese';
+      const options = Array.from(targetLanguage.options).map((option) => option.value);
+      if (options.includes(savedLang)) {
         targetLanguage.value = savedLang;
         if (customLanguage) {
-            customLanguage.style.display = 'none';
-            customLanguage.value = '';
+          customLanguage.style.display = 'none';
+          customLanguage.value = '';
         }
-    } else {
+      } else {
         targetLanguage.value = '__custom__';
         if (customLanguage) {
-            customLanguage.style.display = 'block';
-            customLanguage.value = savedLang;
+          customLanguage.style.display = 'block';
+          customLanguage.value = savedLang;
         }
-    }
-    
-    // Recording settings
-    (function(){
-        const el = document.getElementById('transcribeLanguage');
-        if (el) el.value = config.transcribe_language || 'auto';
-    })();
-    
-    // Translation mode settings
-    (function(){
-        const el = document.getElementById('translationMode');
-        if (el) el.value = config.translation_mode || 'fixed';
-    })();
-    
-    // Smart translation language settings
-    document.getElementById('language1').value = config.smart_language1 || 'Chinese';
-    document.getElementById('language2').value = config.smart_language2 || 'English';
-    const appLanguageSelect = document.getElementById('appLanguage');
-    if (appLanguageSelect) {
-        const langValue = (config.app_language === 'zh' || config.app_language === 'en') ? config.app_language : DEFAULT_LANGUAGE;
-        appLanguageSelect.value = langValue;
+      }
     }
 
-    
-    // Advanced settings
-    document.getElementById('silenceThreshold').value = config.silence_rms_threshold || 0.010;
-    document.getElementById('silenceDuration').value = config.min_silence_seconds || 1.0;
-    document.getElementById('theaterMode').checked = config.theater_mode === true;
-    
-    // Voice input settings
-    try {
-        const viEnabledEl = document.getElementById('voiceInputEnabled');
-        const viHotkeyEl = document.getElementById('voiceInputHotkey');
-        const viEngineEl = document.getElementById('voiceInputEngine');
-        const viLangEl = document.getElementById('voiceInputLanguage');
-        const viTlChk = document.getElementById('voiceInputTranslate');
-        const viTlLang = document.getElementById('voiceInputTranslateLanguage');
-        const viTlGroup = document.getElementById('voiceInputTranslateLanguageGroup');
-
-        if (viEnabledEl) viEnabledEl.checked = !!(config.voice_input_enabled);
-        if (viHotkeyEl) viHotkeyEl.value = (config.voice_input_hotkey || 'F3');
-    if (viEngineEl) {
-        let eng = (config.voice_input_engine || config.recognition_engine || config.transcribe_source || 'openai');
-        viEngineEl.value = eng;
+    const theaterMode = document.getElementById('theaterMode');
+    if (theaterMode) {
+      theaterMode.checked = !!config.theater_mode;
     }
-        if (viLangEl) viLangEl.value = (config.voice_input_language || 'auto');
-        if (viTlChk) viTlChk.checked = !!config.voice_input_translate;
-        if (viTlLang) viTlLang.value = (config.voice_input_translate_language || config.translate_language || 'Chinese');
-        if (viTlGroup) viTlGroup.style.display = (viTlChk && viTlChk.checked) ? 'block' : 'none';
-        // Trigger mode removed; always global toggle
-    } catch {}
 
-    // Update UI based on current settings (guarded)
-    try { toggleTranslationSettings(); } catch {}
-    try { updateCustomLanguageVisibility(); } catch {}
-    try { updateTranslationModeSettings(); } catch {}
-    try { updateTranscribeLanguageAvailability(); } catch {}
-    try { validateApiKey(); } catch {}
-}
+    const appLanguage = document.getElementById('appLanguage');
+    if (appLanguage) {
+      const langValue = config.app_language === 'zh' ? 'zh' : 'en';
+      appLanguage.value = langValue;
+    }
 
-function toggleTranslationSettings() {
-    const enable = document.getElementById('enableTranslation').checked;
-    const elements = [
-        'targetLanguage', 'customLanguage', 'translationMode', 
-        'language1', 'language2'
-    ];
-    
-    elements.forEach(id => {
-        const element = document.getElementById(id);
-        if (element) {
-            element.disabled = !enable;
-        }
+    toggleTranslationSettings();
+    updateCustomLanguageVisibility();
+    updateTranslationModeSettings();
+    updateTranscribeLanguageAvailability();
+    updateProviderVisibility();
+    validateApiKey();
+  }
+
+  function toggleTranslationSettings() {
+    const enableTranslation = document.getElementById('enableTranslation');
+    const translationSettings = document.getElementById('translationSettings');
+    const enabled = enableTranslation ? enableTranslation.checked : true;
+    const toggleIds = ['translationMode', 'targetLanguage', 'customLanguage', 'language1', 'language2'];
+
+    toggleIds.forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) {
+        el.disabled = !enabled;
+      }
     });
-    
-    // Also disable/enable the translation mode container
-    const modeContainer = document.querySelector('.translation-mode-container');
-    if (modeContainer) {
-        modeContainer.style.opacity = enable ? '1' : '0.5';
-    }
-}
 
-function updateCustomLanguageVisibility() {
+    if (translationSettings) {
+      translationSettings.style.opacity = enabled ? '1' : '0.5';
+    }
+  }
+
+  function updateCustomLanguageVisibility() {
     const targetLanguage = document.getElementById('targetLanguage');
     const customLanguage = document.getElementById('customLanguage');
     if (!targetLanguage || !customLanguage) return;
-    if (targetLanguage.value === '__custom__') {
-        customLanguage.style.display = 'block';
-        customLanguage.required = true;
-    } else {
-        customLanguage.style.display = 'none';
-        customLanguage.required = false;
-    }
-}
+    const isCustom = targetLanguage.value === '__custom__';
+    customLanguage.style.display = isCustom ? 'block' : 'none';
+    customLanguage.required = isCustom;
+  }
 
-function updateTranslationModeSettings() {
+  function updateTranslationModeSettings() {
     const modeEl = document.getElementById('translationMode');
     const mode = modeEl ? modeEl.value : 'fixed';
-    const smartSettings = document.querySelector('.smart-translation-settings');
-    if (!smartSettings) return;
-    if (mode === 'smart') {
-        smartSettings.style.display = 'block';
-    } else {
-        smartSettings.style.display = 'none';
+    const fixedSettings = document.getElementById('fixedTranslationSettings');
+    const smartSettings = document.getElementById('smartTranslationSettings');
+    if (fixedSettings) {
+      fixedSettings.style.display = mode === 'smart' ? 'none' : 'block';
     }
-}
+    if (smartSettings) {
+      smartSettings.style.display = mode === 'smart' ? 'block' : 'none';
+    }
+  }
 
-function updateTranscribeLanguageAvailability() {
-    const enableEl = document.getElementById('enableTranslation');
-    const modeEl = document.getElementById('translationMode');
+  function updateTranscribeLanguageAvailability() {
+    const enableTranslation = document.getElementById('enableTranslation');
+    const translationMode = document.getElementById('translationMode');
     const transcribeLanguage = document.getElementById('transcribeLanguage');
-    if (!enableEl || !modeEl || !transcribeLanguage) return;
-    const transcribeContainer = transcribeLanguage.parentElement;
-    
-    // Transcription language is only available when translation is disabled or in fixed mode
-    const isAvailable = !enableEl.checked || modeEl.value === 'fixed';
-    
-    transcribeLanguage.disabled = !isAvailable;
-    if (transcribeContainer && transcribeContainer.style) {
-        transcribeContainer.style.opacity = isAvailable ? '1' : '0.5';
+    if (!enableTranslation || !translationMode || !transcribeLanguage) {
+      return;
     }
-    
-    // Add a note for smart mode
-    if (transcribeContainer) {
-        const existingNote = transcribeContainer.querySelector('.mode-note');
-        if (existingNote) existingNote.remove();
-    }
-    
-    if (enableEl.checked && modeEl.value === 'smart' && transcribeContainer) {
+    const shouldDisable = enableTranslation.checked && translationMode.value === 'smart';
+    transcribeLanguage.disabled = shouldDisable;
+    const container = transcribeLanguage.parentElement;
+    if (container) {
+      container.style.opacity = shouldDisable ? '0.5' : '1';
+      const existingNote = container.querySelector('.mode-note');
+      if (existingNote) {
+        existingNote.remove();
+      }
+      if (shouldDisable) {
         const note = document.createElement('div');
         note.className = 'mode-note';
-        note.textContent = 'In Smart translation mode, transcription language is auto-detected';
         note.style.fontSize = '12px';
         note.style.color = '#666';
         note.style.marginTop = '5px';
-        transcribeContainer.appendChild(note);
+        note.textContent = resolveText('settings.notes.transcribeLanguage', 'In Smart translation mode, transcription language is auto-detected.');
+        container.appendChild(note);
+      }
     }
-}
+  }
 
-function updateProviderVisibility() {
+  function updateProviderVisibility() {
     const rec = (document.getElementById('recognitionEngine') || {}).value || 'openai';
     const tl = (document.getElementById('translationEngine') || {}).value || 'openai';
 
-    // Show OpenAI common settings when either engine uses OpenAI
-        el.style.display = (rec === 'openai' || tl === 'openai') ? '' : 'none';
-    });
+    const toggleGroup = (selector, visible) => {
+      document.querySelectorAll(selector).forEach((el) => {
+        el.style.display = visible ? '' : 'none';
+      });
+    };
 
-    // Show OpenAI transcription model fields when the recognition engine is OpenAI
-        el.style.display = (rec === 'openai') ? '' : 'none';
-    });
+    toggleGroup('.provider-openai-common', rec === 'openai' || tl === 'openai');
+    toggleGroup('.provider-openai-rec', rec === 'openai');
+    toggleGroup('.provider-openai-trans', tl === 'openai');
+    toggleGroup('.provider-gemini-trans', tl === 'gemini');
+    toggleGroup('.provider-soniox', rec === 'soniox');
+    toggleGroup('.provider-qwen3-asr', rec === 'qwen3-asr');
+  }
 
-    // Show OpenAI translation model fields when the translation engine is OpenAI
-        el.style.display = (tl === 'openai') ? '' : 'none';
-    });
-    document.querySelectorAll('.provider-gemini-trans').forEach(el => {
-        el.style.display = (tl === 'gemini') ? '' : 'none';
-    });
-
-    // Show Soniox fields when the recognition engine is Soniox
-        el.style.display = (rec === 'soniox') ? '' : 'none';
-    });
-
-    // Show Qwen3-ASR fields when the recognition engine is Qwen3-ASR
-        el.style.display = (rec === 'qwen3-asr') ? '' : 'none';
-    });
-}
-
-function validateApiKey() {
-    const apiKey = document.getElementById('apiKey').value;
+  function validateApiKey() {
     const indicator = document.getElementById('apiKeyIndicator');
-    const submitBtn = document.querySelector('.submit-btn');
-    
-    if (!apiKey) {
-        indicator.textContent = '';
-        indicator.className = '';
-        return;
+    const apiKey = document.getElementById('apiKey');
+    if (!indicator || !apiKey) {
+      return;
     }
-    
-    if (apiKey.startsWith('sk-') && apiKey.length > 20) {
-        indicator.textContent = 'Valid format';
-        indicator.className = 'valid';
+    const value = (apiKey.value || '').trim();
+    if (!value) {
+      indicator.textContent = '';
+      indicator.className = '';
+      return;
+    }
+    if (value.startsWith('sk-') && value.length > 20) {
+      indicator.textContent = resolveText('settings.validation.apiKeyValid', 'Valid format');
+      indicator.className = 'valid';
     } else {
-        indicator.textContent = 'Invalid format';
-        indicator.className = 'invalid';
+      indicator.textContent = resolveText('settings.validation.apiKeyInvalid', 'Invalid format');
+      indicator.className = 'invalid';
     }
-}
+  }
 
-function autoSave() {
-    // Clear existing timeout to debounce
-    if (autoSaveTimeout) {
-        clearTimeout(autoSaveTimeout);
+  function autoSave() {
+    if (autoSaveTimer) {
+      clearTimeout(autoSaveTimer);
     }
-    
-    // Set new timeout
-    autoSaveTimeout = setTimeout(() => {
-        saveSettingsInternal(true); // Silent save
-    }, 1000); // 1 second delay
-}
+    autoSaveTimer = setTimeout(() => {
+      saveSettingsInternal(true).catch((error) => {
+        console.warn('[Settings] Auto-save failed:', error);
+      });
+    }, AUTO_SAVE_DELAY);
+  }
 
-async function saveSettings(event) {
+  async function saveSettings(event) {
     if (event) {
-        event.preventDefault();
+      event.preventDefault();
     }
-    
-    await saveSettingsInternal(false); // Non-silent save
-}
+    await saveSettingsInternal(false);
+  }
 
-async function saveSettingsInternal(silent = false) {
+  async function saveSettingsInternal(silent) {
+    const updatedConfig = collectFormData();
+    if (!window.electronAPI || typeof window.electronAPI.saveConfig !== 'function') {
+      currentConfig = { ...currentConfig, ...updatedConfig };
+      if (!silent) {
+        showTopNotification(resolveText('settings.notify.saved', 'Settings saved'), 'success');
+      }
+      return;
+    }
+
     try {
-        const config = collectFormData();
-        
-        // Validate required fields
-        if (config.enable_translation) {
-            const targetLang = document.getElementById('targetLanguage').value === '__custom__' 
-                ? document.getElementById('customLanguage').value 
-                : document.getElementById('targetLanguage').value;
-            
-            if (!targetLang.trim()) {
-                if (!silent) {
-                    showTopNotification(t('settings.error.translationLanguageRequired'), 'error');
-                }
-                return false;
-            }
-        }
-        
-        await window.electronAPI.saveConfig(config);
-        currentConfig = config;
-        
+      const result = await window.electronAPI.saveConfig(updatedConfig);
+      if (result && result.success === false) {
         if (!silent) {
-            showTopNotification(t('settings.notify.saved'), 'success');
+          showTopNotification(result.error || resolveText('settings.notify.saveFailed', 'Save failed'), 'error');
         }
-        return true;
-        
+        return;
+      }
+      currentConfig = { ...currentConfig, ...updatedConfig };
+      applyLanguageFromConfig(currentConfig);
+      if (!silent) {
+        showTopNotification(resolveText('settings.notify.saved', 'Settings saved'), 'success');
+      }
     } catch (error) {
-        if (!silent) {
-            showTopNotification(`${t('settings.notify.saveFailed')}: ${error.message}`, 'error');
-        }
-        console.error('Save settings error:', error);
-        return false;
+      if (!silent) {
+        showTopNotification(`${resolveText('settings.notify.saveFailed', 'Save failed')}: ${error.message}`, 'error');
+      }
     }
-}
+  }
 
-function collectFormData() {
-    const config = {};
-    
+  function collectFormData() {
+    const config = { ...currentConfig };
 
-    // Engine configuration
-    config.translation_engine = (document.getElementById('translationEngine') || { value: 'openai' }).value;
+    const recEl = document.getElementById('recognitionEngine');
+    const tlEl = document.getElementById('translationEngine');
+    const rec = recEl ? recEl.value : 'openai';
+    const tl = tlEl ? tlEl.value : 'openai';
+    config.recognition_engine = rec;
+    config.transcribe_source = rec;
+    config.translation_engine = tl;
 
-    // Backward compatible fields
-    config.openai_api_key = document.getElementById('apiKey').value.trim();
-    config.openai_base_url = document.getElementById('apiUrl').value.trim();
-    const sonioxEl = document.getElementById('sonioxApiKey');
-    if (sonioxEl) config.soniox_api_key = sonioxEl.value.trim();
-    
-    const dashscopeEl = document.getElementById('dashscopeApiKey');
-    if (dashscopeEl) config.dashscope_api_key = dashscopeEl.value.trim();
-    const qwenModelEl = document.getElementById('qwen3AsrModel');
-    if (qwenModelEl) config.qwen3_asr_model = (qwenModelEl.value || '').trim();
-    
-    // OpenAI models
-    const oaiTrModel = document.getElementById('openaiTranscribeModel');
-    if (oaiTrModel) config.openai_transcribe_model = (oaiTrModel.value || '').trim();
-    const oaiTlModel = document.getElementById('openaiTranslateModel');
-    if (oaiTlModel) config.openai_translate_model = (oaiTlModel.value || '').trim();
-    const geminiKeyEl = document.getElementById('geminiApiKey');
-    if (geminiKeyEl) config.gemini_api_key = geminiKeyEl.value.trim();
-    const geminiModelEl = document.getElementById('geminiTranslateModel');
-    if (geminiModelEl) {
-        const geminiModelValue = (geminiModelEl.value || '').trim();
-        config.gemini_translate_model = geminiModelValue || 'gemini-2.0-flash';
-    } else {
-        config.gemini_translate_model = config.gemini_translate_model || 'gemini-2.0-flash';
-    }
-    const previousGeminiPrompt = (currentConfig && typeof currentConfig.gemini_translate_system_prompt === 'string')
-        ? currentConfig.gemini_translate_system_prompt
-        : '';
-    const trimmedPrompt = previousGeminiPrompt ? previousGeminiPrompt.trim() : '';
-    config.gemini_translate_system_prompt = trimmedPrompt || DEFAULT_GEMINI_PROMPT;
+    const readValue = (id, fallback = '') => {
+      const el = document.getElementById(id);
+      return el ? (el.value || fallback) : fallback;
+    };
 
-    
-    // Translation settings
-    config.enable_translation = document.getElementById('enableTranslation').checked;
-    
+    config.openai_api_key = readValue('apiKey');
+    config.openai_base_url = readValue('apiUrl');
+    config.openai_transcribe_model = readValue('openaiTranscribeModel', 'gpt-4o-transcribe');
+    config.openai_translate_model = readValue('openaiTranslateModel', 'gpt-4o-mini');
+    config.gemini_api_key = readValue('geminiApiKey');
+    config.gemini_translate_model = readValue('geminiTranslateModel', 'gemini-2.0-flash');
+    config.gemini_translate_system_prompt = config.gemini_translate_system_prompt || DEFAULT_GEMINI_PROMPT;
+    config.soniox_api_key = readValue('sonioxApiKey');
+    config.dashscope_api_key = readValue('dashscopeApiKey');
+    config.qwen3_asr_model = readValue('qwen3AsrModel', 'qwen3-asr-flash');
+
+    const enableTranslation = document.getElementById('enableTranslation');
+    config.enable_translation = enableTranslation ? enableTranslation.checked : true;
+
+    const translationMode = document.getElementById('translationMode');
+    config.translation_mode = translationMode ? translationMode.value : 'fixed';
+
     if (config.enable_translation) {
-        const targetLanguage = document.getElementById('targetLanguage');
-        const customLanguage = document.getElementById('customLanguage');
-        
-        config.translate_language = targetLanguage.value === '__custom__' 
-            ? customLanguage.value.trim() 
-            : targetLanguage.value;
+      const targetLanguage = document.getElementById('targetLanguage');
+      const customLanguage = document.getElementById('customLanguage');
+      if (targetLanguage && targetLanguage.value === '__custom__' && customLanguage) {
+        config.translate_language = customLanguage.value.trim();
+      } else if (targetLanguage) {
+        config.translate_language = targetLanguage.value;
+      }
+      config.smart_language1 = readValue('language1', 'Chinese');
+      config.smart_language2 = readValue('language2', 'English');
     }
-    
-    // Translation mode
-    config.translation_mode = document.getElementById('translationMode').value;
-    
-    // Smart translation languages
-    config.smart_language1 = document.getElementById('language1').value.trim();
-    config.smart_language2 = document.getElementById('language2').value.trim();
 
-    const appLanguageSelect = document.getElementById('appLanguage');
-
-    config.app_language = (appLanguageSelect ? appLanguageSelect.value : DEFAULT_LANGUAGE) || DEFAULT_LANGUAGE;
-    
-    // Recording settings
-    config.transcribe_language = document.getElementById('transcribeLanguage').value;
-    
-    // Advanced settings
-    const silenceThreshold = parseFloat(document.getElementById('silenceThreshold').value);
-    const silenceDuration = parseFloat(document.getElementById('silenceDuration').value);
-    
-    if (!isNaN(silenceThreshold)) {
-        config.silence_rms_threshold = silenceThreshold;
-    }
-    if (!isNaN(silenceDuration)) {
-        config.min_silence_seconds = silenceDuration;
-    }
-    
-    config.theater_mode = document.getElementById('theaterMode').checked;
-
-    // Voice input
-    try {
-        const viEnabledEl = document.getElementById('voiceInputEnabled');
-        const viHotkeyEl = document.getElementById('voiceInputHotkey');
-        const viEngineEl = document.getElementById('voiceInputEngine');
-        const viLangEl = document.getElementById('voiceInputLanguage');
-        const viTlChk = document.getElementById('voiceInputTranslate');
-        const viTlLang = document.getElementById('voiceInputTranslateLanguage');
-        if (viEnabledEl) config.voice_input_enabled = viEnabledEl.checked;
-        if (viHotkeyEl) config.voice_input_hotkey = (viHotkeyEl.value || '').trim() || 'F3';
-        if (viEngineEl) config.voice_input_engine = viEngineEl.value;
-        if (viLangEl) config.voice_input_language = viLangEl.value;
-        if (viTlChk) config.voice_input_translate = viTlChk.checked;
-        if (viTlLang) config.voice_input_translate_language = (viTlLang.value || '').trim();
-        // Always use global toggle; no extra field needed
-    } catch {}
+    config.app_language = readValue('appLanguage', DEFAULT_LANGUAGE);
+    config.transcribe_language = readValue('transcribeLanguage', 'auto');
+    config.silence_rms_threshold = parseFloat(readValue('silenceThreshold', '0.01')) || 0.01;
+    config.min_silence_seconds = parseFloat(readValue('silenceDuration', '1')) || 1;
+    const theaterMode = document.getElementById('theaterMode');
+    config.theater_mode = theaterMode ? theaterMode.checked : false;
 
     return config;
-}
+  }
 
-// Extend populateForm to handle voice input UI
-// (Removed duplicate function definitions added later)
-
-function showTopNotification(message, type = 'info') {
-    // Remove existing notifications
-    const existingNotifications = document.querySelectorAll('.top-notification');
-    existingNotifications.forEach(n => n.remove());
-    
-    // Create notification element
+  function showTopNotification(message, type = 'info') {
+    if (!message) return;
+    document.querySelectorAll('.top-notification').forEach((el) => el.remove());
     const notification = document.createElement('div');
     notification.className = `top-notification ${type}`;
     notification.textContent = message;
-    
-    // Style the notification
-    notification.style.cssText = `
-        position: fixed;
-        top: 20px;
-        left: 50%;
-        transform: translateX(-50%);
-        background: ${type === 'error' ? '#ff4757' : type === 'success' ? '#2ed573' : '#5352ed'};
-        color: white;
-        padding: 12px 24px;
-        border-radius: 6px;
-        font-size: 14px;
-        z-index: 10000;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-        animation: slideDown 0.3s ease-out;
-    `;
-    
-    // Add CSS animation
-    if (!document.querySelector('#notification-styles')) {
-        const styles = document.createElement('style');
-        styles.id = 'notification-styles';
-        styles.textContent = `
-            @keyframes slideDown {
-                from { opacity: 0; transform: translateX(-50%) translateY(-20px); }
-                to { opacity: 1; transform: translateX(-50%) translateY(0); }
-            }
-        `;
-        document.head.appendChild(styles);
-    }
-    
-    // Add to page
+    notification.style.cssText = [
+      'position: fixed',
+      'top: 20px',
+      'left: 50%',
+      'transform: translateX(-50%)',
+      'padding: 12px 24px',
+      'border-radius: 6px',
+      'color: #fff',
+      'font-size: 14px',
+      'z-index: 10000',
+      'box-shadow: 0 4px 12px rgba(0,0,0,0.15)'
+    ].join(';');
+    const background = type === 'error' ? '#ff4757' : type === 'success' ? '#2ed573' : '#5352ed';
+    notification.style.background = background;
     document.body.appendChild(notification);
-    
-    // Auto remove after 3 seconds
     setTimeout(() => {
-        if (notification.parentNode) {
-            notification.style.animation = 'slideUp 0.3s ease-out';
-            setTimeout(() => notification.remove(), 300);
-        }
-    }, 3000);
-}
+      notification.style.opacity = '0';
+      notification.style.transition = 'opacity 0.3s ease';
+      setTimeout(() => notification.remove(), 300);
+    }, 2800);
+  }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+  document.addEventListener('DOMContentLoaded', () => {
+    initializeLanguage();
+    setupEventListeners();
+    loadCurrentConfig();
+    scrollToHashSection();
+  });
+})();

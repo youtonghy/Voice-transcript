@@ -113,9 +113,6 @@ function initializeLanguage() {
     }
 }
 
-});
-}
-
 // Initialization
 document.addEventListener('DOMContentLoaded', () => {
     initializeLanguage();

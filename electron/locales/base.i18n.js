@@ -6,7 +6,7 @@
 
   const translations = {
     en: {
-      'common.backNav': '← Back',
+      'common.backNav': 'Back',
       'common.backLink': 'Back',
 
       'index.title': 'Voice Transcript Studio',
@@ -117,10 +117,13 @@
       'media.panel.output': 'Output Settings',
       'media.labels.recognitionEngine': 'Transcription Engine',
       'media.labels.translationEngine': 'Translation Engine',
+      'media.hints.recognitionEngine': 'Keep this aligned with the Settings page; changes here only affect this workflow.',
+      'media.hints.translationEngine': 'Engine options stay synced with Settings. Added engines appear automatically.',
       'media.labels.outputPath': 'Save Location',
       'media.setting.enableTranslation': 'Enable Translation',
       'media.setting.targetLanguage': 'Target Language',
       'media.setting.theaterMode': 'Enable Theater Mode (audio enhancement)',
+      'media.languages.custom': 'Custom...',
       'media.actions.choosePathPlaceholder': 'Choose a save location',
       'media.actions.browse': 'Browse',
       'media.actions.start': 'Start Processing',
@@ -164,7 +167,7 @@
     },
 
     zh: {
-      'common.backNav': '← 返回',
+      'common.backNav': '返回',
       'common.backLink': '返回',
 
       'index.title': '语音转写工作台',
@@ -275,10 +278,13 @@
       'media.panel.output': '输出设置',
       'media.labels.recognitionEngine': '转写引擎',
       'media.labels.translationEngine': '翻译引擎',
+      'media.hints.recognitionEngine': '与设置页保持一致，修改后仅影响本页面的处理流程。',
+      'media.hints.translationEngine': '引擎列表与设置页同步，扩展后即可直接使用。',
       'media.labels.outputPath': '保存位置',
       'media.setting.enableTranslation': '启用翻译',
       'media.setting.targetLanguage': '目标语言',
       'media.setting.theaterMode': '启用剧场模式（音频增强）',
+      'media.languages.custom': '自定义...',
       'media.actions.choosePathPlaceholder': '选择保存位置',
       'media.actions.browse': '浏览',
       'media.actions.start': '开始处理',
