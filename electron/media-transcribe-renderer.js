@@ -2,29 +2,35 @@
 
 const DEFAULT_LANGUAGE = 'en';
 
+function setDocumentLanguage(lang) {
+  if (document && document.documentElement) {
+    document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
+  }
+}
+
 const LEGACY_LANGUAGE_MAP = {
-  '中文': 'Chinese',
-  '日本语': 'Japanese',
-  '日本語': 'Japanese',
-  '한국어': 'Korean',
-  '한국語': 'Korean',
-  'Español': 'Spanish',
-  'Français': 'French',
+  '\u4E2D\u6587': 'Chinese',
+  '\u65E5\u672C\u8BED': 'Japanese',
+  '\u65E5\u672C\u8A9E': 'Japanese',
+  '\uD55C\uAD6D\uC5B4': 'Korean',
+  '\uD55C\uAD6D\u8A9E': 'Korean',
+  'Espa\u00F1ol': 'Spanish',
+  'Fran\u00E7ais': 'French',
   'Deutsch': 'German',
   'Italiano': 'Italian',
-  'Português': 'Portuguese',
-  'Русский': 'Russian',
-  'العربية': 'Arabic',
-  'हिन्दी': 'Hindi',
-  'हिंदी': 'Hindi',
-  'ไทย': 'Thai',
-  'Tiếng Việt': 'Vietnamese',
+  'Portugu\u00EAs': 'Portuguese',
+  '\u0420\u0443\u0441\u0441\u043A\u0438\u0439': 'Russian',
+  '\u0627\u0644\u0639\u0631\u0628\u064A\u0629': 'Arabic',
+  '\u0939\u093F\u0928\u094D\u0926\u0940': 'Hindi',
+  '\u0939\u093F\u0902\u0926\u0940': 'Hindi',
+  '\u0E44\u0E17\u0E22': 'Thai',
+  'Ti\u1EBFng Vi\u1EC7t': 'Vietnamese',
   'Bahasa Indonesia': 'Indonesian',
-  'Türkçe': 'Turkish',
+  'T\u00FCrk\u00E7e': 'Turkish',
   'Nederlands': 'Dutch',
   'Polski': 'Polish',
-  'Українська': 'Ukrainian',
-  'Čeština': 'Czech'
+  '\u0423\u043A\u0440\u0430\u0457\u043D\u0441\u044C\u043A\u0430': 'Ukrainian',
+  '\u010Ce\u0161tina': 'Czech'
 };
 
 function normalizeLegacyLanguage(value) {
@@ -47,19 +53,29 @@ function applyLanguageFromConfig(cfg) {
     return;
   }
   const lang = (cfg && cfg.app_language) || DEFAULT_LANGUAGE;
+  setDocumentLanguage(lang);
   window.appI18n.setLanguage(lang);
+  if (typeof window.appI18n.apply === 'function') {
+    window.appI18n.apply();
+  }
 }
 
 function initializeLanguage() {
   if (!window.appI18n) {
     return;
   }
+  setDocumentLanguage(DEFAULT_LANGUAGE);
   window.appI18n.setLanguage(DEFAULT_LANGUAGE);
+  if (typeof window.appI18n.apply === 'function') {
+    window.appI18n.apply();
+  }
   document.title = t('media.pageTitle');
   if (typeof window.appI18n.onChange === 'function') {
     window.appI18n.onChange(() => {
       registerMediaTranslations();
-      window.appI18n.apply();
+      if (typeof window.appI18n.apply === 'function') {
+        window.appI18n.apply();
+      }
       document.title = t('media.pageTitle');
     });
   }
@@ -205,9 +221,6 @@ function registerMediaTranslations() {
 
 
 
-    }
-  });
-}
 
 class MediaTranscribeApp {
   constructor() {

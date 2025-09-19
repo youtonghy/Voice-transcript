@@ -32,6 +32,13 @@ const VOLUME_MAX_DB = 0;
 let silenceMarkerDb = null;
 
 const DEFAULT_LANGUAGE = 'en';
+
+function setDocumentLanguage(lang) {
+    if (document && document.documentElement) {
+        document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
+    }
+}
+
 function getCurrentLanguage() {
     if (window.appI18n && typeof window.appI18n.getLanguage === 'function') {
         return window.appI18n.getLanguage();
@@ -87,7 +94,11 @@ function applyLanguageFromConfig(cfg) {
         return;
     }
     const lang = (cfg && cfg.app_language) || DEFAULT_LANGUAGE;
+    setDocumentLanguage(lang);
     window.appI18n.setLanguage(lang);
+    if (typeof window.appI18n.apply === 'function') {
+        window.appI18n.apply();
+    }
     document.title = t('index.title');
 }
 
@@ -95,7 +106,11 @@ function initializeLanguage() {
     if (!window.appI18n) {
         return;
     }
+    setDocumentLanguage(DEFAULT_LANGUAGE);
     window.appI18n.setLanguage(DEFAULT_LANGUAGE);
+    if (typeof window.appI18n.apply === 'function') {
+        window.appI18n.apply();
+    }
     document.title = t('index.title');
     if (typeof window.appI18n.onChange === 'function') {
         window.appI18n.onChange(() => {
