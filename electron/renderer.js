@@ -928,6 +928,81 @@ function addLogEntry(level, message) {
     }
 }
 
+function collectExportEntries() {
+    if (!logContainer) {
+        return [];
+    }
+    const nodes = Array.from(logContainer.querySelectorAll('.result-entry'));
+    const entries = [];
+
+    nodes.forEach((node) => {
+        const transcriptionDiv = node.querySelector('.result-part.transcription');
+        if (!transcriptionDiv || transcriptionDiv.classList.contains('pending')) {
+            return;
+        }
+        const transcription = transcriptionDiv.textContent ? transcriptionDiv.textContent.trim() : '';
+        if (!transcription) {
+            return;
+        }
+
+        const translationDiv = node.querySelector('.result-part.translation');
+        const translationPending = translationDiv && translationDiv.classList.contains('pending');
+        const translation = translationDiv && !translationPending && translationDiv.textContent
+            ? translationDiv.textContent.trim()
+            : '';
+        const includeTranslation = Boolean(translationEnabled && translation);
+
+        const metaDiv = node.querySelector('.recording-meta');
+        let timeText = metaDiv && metaDiv.textContent ? metaDiv.textContent.trim() : '';
+        if (!timeText) {
+            const recordedAt = node.dataset.recordedAt;
+            if (recordedAt) {
+                timeText = formatRecordedAtText(recordedAt);
+            }
+        }
+
+        entries.push({
+            transcription,
+            translation,
+            includeTranslation,
+            timeText
+        });
+    });
+
+    return entries;
+}
+
+async function exportLogs() {
+    try {
+        const entries = collectExportEntries();
+        if (!entries.length) {
+            addLogEntry('warning', t('index.log.exportNoResults'));
+            return;
+        }
+        if (!window.electronAPI || typeof window.electronAPI.exportLogs !== 'function') {
+            addLogEntry('error', t('index.log.exportUnsupported'));
+            return;
+        }
+
+        const result = await window.electronAPI.exportLogs({ entries });
+        if (result && result.success) {
+            addLogEntry('info', t('index.log.exportSuccess'));
+        } else if (result && result.canceled) {
+            return;
+        } else {
+            const baseMessage = t('index.log.exportFailed');
+            if (result && result.error) {
+                addLogEntry('error', baseMessage + ': ' + result.error);
+            } else {
+                addLogEntry('error', baseMessage);
+            }
+        }
+    } catch (error) {
+        const baseMessage = t('index.log.exportFailed');
+        addLogEntry('error', baseMessage + ': ' + (error.message || error));
+    }
+}
+
 function clearResults() {
     const container = document.getElementById('results');
     if (container) {

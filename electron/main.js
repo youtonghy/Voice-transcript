@@ -894,6 +894,58 @@ ipcMain.handle('export-results', async (_event, { results, outputPath }) => {
   }
 });
 
+ipcMain.handle('export-logs', async (_event, { entries } = {}) => {
+  try {
+    if (!Array.isArray(entries) || !entries.length) {
+      return { success: false, error: 'No logs to export' };
+    }
+
+    const win = BrowserWindow.getFocusedWindow() || mainWindow;
+    const pad = (value) => String(value).padStart(2, '0');
+    const now = new Date();
+    const defaultName = `transcript-${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}.txt`;
+
+    const { canceled, filePath } = await dialog.showSaveDialog(win, {
+      defaultPath: path.join(app.getPath('documents'), defaultName),
+      filters: [{ name: 'Text Files', extensions: ['txt'] }]
+    });
+
+    if (canceled || !filePath) {
+      return { success: false, canceled: true };
+    }
+
+    const segments = entries
+      .map((entry) => {
+        if (!entry || typeof entry !== 'object') {
+          return '';
+        }
+        const lines = [];
+        if (entry.transcription) {
+          lines.push(String(entry.transcription));
+        }
+        if (entry.includeTranslation && entry.translation) {
+          lines.push(String(entry.translation));
+        }
+        if (entry.timeText) {
+          lines.push(String(entry.timeText));
+        }
+        return lines.join('\n');
+      })
+      .filter((block) => Boolean(block && block.trim().length));
+
+    if (!segments.length) {
+      return { success: false, error: 'No logs to export' };
+    }
+
+    const content = segments.join('\n\n');
+    fs.writeFileSync(filePath, content, 'utf8');
+    return { success: true, exportPath: filePath };
+  } catch (err) {
+    const message = err && err.message ? err.message : err;
+    return { success: false, error: String(message) };
+  }
+});
+
 // App lifecycle
 function setupAppMenu() {
   // Minimal menu to keep default shortcuts working; can be customized later

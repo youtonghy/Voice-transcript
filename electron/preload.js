@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   selectMediaFile: () => ipcRenderer.invoke('select-media-file'),
   selectOutputPath: (params) => ipcRenderer.invoke('select-output-path', params),
   exportResults: (params) => ipcRenderer.invoke('export-results', params),
+  exportLogs: (params) => ipcRenderer.invoke('export-logs', params),
   
   onPythonMessage: (callback) => {
     ipcRenderer.on('python-message', (event, message) => callback(message));
