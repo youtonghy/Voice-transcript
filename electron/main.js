@@ -35,15 +35,28 @@ const configPath = isPackaged
   ? path.join(userDataPath, 'config.json')
   : path.join(__dirname, 'config.json');
 
+const DEFAULT_GEMINI_TRANSLATE_PROMPT = [
+  'You are a professional translation assistant.',
+  'Translate user text into {{TARGET_LANGUAGE}}.',
+  'Requirements:',
+  '1) Preserve the tone and intent of the original text.',
+  '2) Provide natural and fluent translations.',
+  '3) If the input is already in {{TARGET_LANGUAGE}}, return it unchanged.',
+  '4) Respond with the translation only without additional commentary.'
+].join('\n');
+
 let config = {
   openai_api_key: '',
   openai_base_url: '',
   openai_transcribe_model: 'gpt-4o-transcribe',
   openai_translate_model: 'gpt-4o-mini',
+  gemini_api_key: '',
+  gemini_translate_model: 'gemini-2.0-flash',
+  gemini_translate_system_prompt: DEFAULT_GEMINI_TRANSLATE_PROMPT,
   // Engines
   // recognition_engine: 'openai' | 'soniox'
   recognition_engine: 'openai',
-  // translation_engine: currently only 'openai'
+  // translation_engine: 'openai' | 'gemini'
   translation_engine: 'openai',
   // Legacy compatibility for older builds
   transcribe_source: 'openai',
@@ -61,6 +74,7 @@ let config = {
   silence_rms_threshold: 0.010,
   min_silence_seconds: 1.0,
   theater_mode: false,
+  app_language: 'en',
   // Voice input defaults
   voice_input_enabled: false,
   voice_input_hotkey: 'F3',
@@ -77,7 +91,16 @@ function loadConfig() {
       const data = fs.readFileSync(configPath, 'utf8');
       const parsed = JSON.parse(data);
       config = { ...config, ...parsed };
+      if (!config.gemini_translate_model) {
+        config.gemini_translate_model = 'gemini-2.0-flash';
+      }
+      if (!config.gemini_translate_system_prompt || !String(config.gemini_translate_system_prompt).trim()) {
+        config.gemini_translate_system_prompt = DEFAULT_GEMINI_TRANSLATE_PROMPT;
+      }
       // Backfill legacy -> new keys if needed
+      if (!config.app_language) {
+        config.app_language = 'en';
+      }
       if (!config.recognition_engine && config.transcribe_source) {
         config.recognition_engine = config.transcribe_source;
       }
@@ -596,7 +619,8 @@ ipcMain.handle('save-config', async (_event, newConfig) => {
       const source = config.transcribe_source || 'openai';
       const oai = !!(config.openai_api_key && config.openai_api_key.trim());
       const sxi = !!(config.soniox_api_key && config.soniox_api_key.trim());
-      console.log('[Main] Config saved:', { source, openaiKeySet: oai, sonioxKeySet: sxi });
+      const gem = !!(config.gemini_api_key && config.gemini_api_key.trim());
+      console.log('[Main] Config saved:', { source, openaiKeySet: oai, sonioxKeySet: sxi, geminiKeySet: gem });
       if (pythonProcess) console.log('[Main] Restart the backend (Ctrl+R or app relaunch) to apply provider changes.');
     } catch {}
     try { registerVoiceInputShortcut(); } catch {}

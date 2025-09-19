@@ -5,6 +5,7 @@ let pythonServiceStatus = 'unknown'; // 'starting', 'running', 'error', 'stopped
 let isVoiceActive = false; // Added: track voice activity status
 let openaiConfigured = false; // Whether OpenAI is configured (when required)
 let sonioxConfigured = false; // Whether Soniox is configured (when required)
+let geminiConfigured = false; // Whether Gemini is configured when selected
 // Qwen3-ASR removed
 let translationEnabled = true; // Read from config, used to control combined display
 let currentResultNode = null; // Current combined result bubble
@@ -23,14 +24,137 @@ const volumeSilenceEl = document.getElementById('volumeSilence');
 const volumeDbValue = document.getElementById('volumeDbValue');
 const volumeRmsValue = document.getElementById('volumeRmsValue');
 const volumeStatusText = document.getElementById('volumeStatusText');
+const volumeToggleBtn = document.getElementById('volumeToggleBtn');
+const mainContent = document.querySelector('.main-content');
 
 const VOLUME_MIN_DB = -60;
 const VOLUME_MAX_DB = 0;
 let silenceMarkerDb = null;
 
+const DEFAULT_LANGUAGE = 'en';
+
+function t(key) {
+    if (window.appI18n && typeof window.appI18n.t === 'function') {
+        return window.appI18n.t(key);
+    }
+    return key;
+}
+
+function applyLanguageFromConfig(cfg) {
+    if (!window.appI18n || typeof window.appI18n.setLanguage !== 'function') {
+        return;
+    }
+    const lang = (cfg && cfg.app_language) || DEFAULT_LANGUAGE;
+    window.appI18n.setLanguage(lang);
+    document.title = t('index.title');
+}
+
+function initializeLanguage() {
+    if (!window.appI18n) {
+        return;
+    }
+    window.appI18n.setLanguage(DEFAULT_LANGUAGE);
+    document.title = t('index.title');
+    if (typeof window.appI18n.onChange === 'function') {
+        window.appI18n.onChange(() => {
+            document.title = t('index.title');
+            updateServiceStatus(pythonServiceStatus);
+            updateUI();
+            if (volumePanel && volumeToggleBtn) {
+                const expanded = !volumePanel.classList.contains('collapsed');
+                updateVolumeToggleState(expanded);
+            }
+        });
+    }
+}
+
+if (window.appI18n && typeof window.appI18n.extend === 'function') {
+    window.appI18n.extend({
+        en: {
+            'index.title': 'Voice Transcription & Translation',
+            'index.tooltips.recordStart': 'Start Recording',
+            'index.tooltips.recordStop': 'Stop Recording',
+            'index.tooltips.voiceInput': 'Voice Input Settings',
+            'index.tooltips.settings': 'Settings',
+            'index.tooltips.media': 'Media Transcription',
+            'index.logTitle': 'Real-time Log',
+            'index.buttons.exportLogs': 'Export Logs',
+            'index.buttons.copyLatest': 'Copy Latest Result',
+            'index.buttons.clearLogs': 'Clear Logs',
+            'index.volume.current': 'Current Volume',
+            'index.volume.waiting': 'Waiting for recording',
+            'index.volume.recording': 'Recording...',
+            'index.volume.expand': 'Expand',
+            'index.volume.collapse': 'Collapse',
+            'index.volume.expandTooltip': 'Expand volume monitor',
+            'index.volume.collapseTooltip': 'Collapse volume monitor',
+            'index.volume.silenceRange': 'Silence Range',
+            'index.status.starting': 'Starting Python service...',
+            'index.status.running': 'Service running',
+            'index.status.error': 'Service error',
+            'index.status.stopped': 'Service stopped',
+            'index.recordButton.starting': 'Service starting...',
+            'index.log.backendFailed': 'Backend connection failed',
+            'index.log.openaiMissing': 'OpenAI not configured (required for selected source)',
+            'index.log.sonioxMissing': 'Soniox not configured (current source: Soniox)',
+            'index.log.geminiMissing': 'Gemini not configured (current translation engine: Gemini)',
+            'index.log.configLoadFailed': 'Failed to load configuration',
+            'index.log.notReadyStart': 'Python service not ready, cannot start recording',
+            'index.log.notReadyRecord': 'Python service not ready, cannot record',
+            'index.log.recordingError': 'Recording error',
+            'index.statusText.recording': 'Recording...',
+            'index.statusText.ready': 'Ready',
+            'index.statusText.notReady': 'Service not ready',
+            'index.result.transcribing': 'Transcribing...',
+            'index.result.translating': 'Translating...'
+        },
+        zh: {
+            'index.title': '语音转写翻译工具',
+            'index.tooltips.recordStart': '开始录音',
+            'index.tooltips.recordStop': '停止录音',
+            'index.tooltips.voiceInput': '语音输入设置',
+            'index.tooltips.settings': '设置',
+            'index.tooltips.media': '媒体文件转写',
+            'index.logTitle': '实时日志',
+            'index.buttons.exportLogs': '导出日志',
+            'index.buttons.copyLatest': '复制最新结果',
+            'index.buttons.clearLogs': '清空日志',
+            'index.volume.current': '当前音量',
+            'index.volume.waiting': '等待录音',
+            'index.volume.recording': '录音中',
+            'index.volume.expand': '展开',
+            'index.volume.collapse': '收起',
+            'index.volume.expandTooltip': '展开音量监视',
+            'index.volume.collapseTooltip': '收起音量监视',
+            'index.volume.silenceRange': '静音范围',
+            'index.status.starting': '正在启动 Python 服务...',
+            'index.status.running': '服务运行中',
+            'index.status.error': '服务错误',
+            'index.status.stopped': '服务已停止',
+            'index.recordButton.starting': '服务启动中...',
+            'index.log.backendFailed': '后端连接失败',
+            'index.log.openaiMissing': '未配置 OpenAI（当前识别源需要）',
+            'index.log.sonioxMissing': '未配置 Soniox（当前识别源为 Soniox）',
+            'index.log.geminiMissing': '未配置 Gemini（当前翻译引擎为 Gemini）',
+            'index.log.configLoadFailed': '读取配置失败',
+            'index.log.notReadyStart': 'Python 服务未就绪，无法开始录音',
+            'index.log.notReadyRecord': 'Python 服务未就绪，无法录音',
+            'index.log.recordingError': '录音错误',
+            'index.statusText.recording': '录音中...',
+            'index.statusText.ready': '就绪',
+            'index.statusText.notReady': '服务未就绪',
+            'index.result.transcribing': '转写中...',
+            'index.result.translating': '翻译中...'
+        }
+    });
+}
+
 // Initialization
 document.addEventListener('DOMContentLoaded', () => {
+    initializeLanguage();
     setupEventListeners();
+    initializeVolumePanel();
+    syncVolumePanelOffset();
     // Initialize service status without logging output
     updateServiceStatus('starting');
 
@@ -52,38 +176,53 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
+window.addEventListener('resize', syncVolumePanelOffset);
+
 // Check provider configuration status
 async function checkOpenAIConfig() {
     if (window.electronAPI && window.electronAPI.getConfig) {
         try {
             const cfg = await window.electronAPI.getConfig();
             currentConfig = cfg || {};
+            applyLanguageFromConfig(currentConfig);
             const transcribeSource = (cfg && cfg.transcribe_source) || 'openai';
+            const translationEngine = (cfg && cfg.translation_engine) || 'openai';
             const newTranslationEnabled = cfg && cfg.enable_translation !== false;
 
             // Determine which providers are required
             // When using Soniox as transcribe source, only require Soniox key in UI
             const openaiRequired = (transcribeSource === 'openai');
             const sonioxRequired = (transcribeSource === 'soniox');
+            const geminiRequired = newTranslationEnabled && translationEngine === 'gemini';
             const qwenRequired = false; // removed
 
             const newOpenaiConfigured = !!(cfg && cfg.openai_api_key && cfg.openai_api_key.trim());
             const newSonioxConfigured = !!(cfg && cfg.soniox_api_key && cfg.soniox_api_key.trim());
+            const newGeminiConfigured = !!(cfg && cfg.gemini_api_key && cfg.gemini_api_key.trim());
             const newQwenConfigured = false;
 
             // Only warn when required and not configured
             if (openaiRequired && openaiConfigured !== newOpenaiConfigured) {
                 openaiConfigured = newOpenaiConfigured;
                 if (!openaiConfigured) {
-                    addLogEntry('warning', 'OpenAI not configured (required for selected source)');
+                    addLogEntry('warning', t('index.log.openaiMissing'));
                 }
             }
 
             if (sonioxRequired && sonioxConfigured !== newSonioxConfigured) {
                 sonioxConfigured = newSonioxConfigured;
                 if (!sonioxConfigured) {
-                    addLogEntry('warning', 'Soniox not configured (current source: Soniox)');
+                    addLogEntry('warning', t('index.log.sonioxMissing'));
                 }
+            }
+
+            if (geminiRequired && geminiConfigured !== newGeminiConfigured) {
+                geminiConfigured = newGeminiConfigured;
+                if (!geminiConfigured) {
+                    addLogEntry('warning', t('index.log.geminiMissing'));
+                }
+            } else if (!geminiRequired) {
+                geminiConfigured = newGeminiConfigured;
             }
 
             // Qwen3-ASR support removed
@@ -94,8 +233,9 @@ async function checkOpenAIConfig() {
             // When configuration loading fails, only update if status changes
             if (openaiConfigured !== false) {
                 openaiConfigured = false;
+                geminiConfigured = false;
                 translationEnabled = true;
-                addLogEntry('warning', 'Failed to load configuration');
+                addLogEntry('warning', t('index.log.configLoadFailed'));
             }
         }
     }
@@ -118,6 +258,10 @@ function stopConfigMonitoring() {
 function setupEventListeners() {
     // Recording button click event
     recordButton.addEventListener('click', toggleRecording);
+
+    if (volumeToggleBtn) {
+        volumeToggleBtn.addEventListener('click', () => toggleVolumePanel());
+    }
     
     // Listen to Python messages
     if (window.electronAPI) {
@@ -133,7 +277,7 @@ function setupEventListeners() {
             if (!isRecording && pythonServiceStatus === 'running') {
                 startRecording();
             } else {
-                addLogEntry('warning', 'Python service not ready, cannot start recording');
+                addLogEntry('warning', t('index.log.notReadyStart'));
             }
         } else if (event.key === 'F2') {
             event.preventDefault();
@@ -144,22 +288,25 @@ function setupEventListeners() {
 
 function updateServiceStatus(status) {
     pythonServiceStatus = status;
-    const serviceStatusText = {
-        'starting': 'Starting Python service...',
-        'running': 'Service running',
-        'error': 'Service error',
-        'stopped': 'Service stopped'
+    const statusKeyMap = {
+        starting: 'index.status.starting',
+        running: 'index.status.running',
+        error: 'index.status.error',
+        stopped: 'index.status.stopped'
     };
-    // Only output logs for failure states; don't output for success
+
     if (status === 'error' || status === 'stopped') {
-        addLogEntry('error', 'Backend connection: failed');
+        addLogEntry('error', t('index.log.backendFailed'));
     }
 
-    // Update UI status
+    if (statusText && status !== 'running' && !isRecording) {
+        statusText.textContent = t(statusKeyMap[status] || status);
+    }
+
     if (status !== 'running') {
         recordButton.disabled = true;
         recordButton.textContent = '🔧';
-        recordButton.title = 'Service starting...';
+        recordButton.title = t('index.recordButton.starting');
         recordButton.className = 'control-bar-btn record-btn start disabled';
         setVolumeRecordingState(false);
     } else {
@@ -170,7 +317,7 @@ function updateServiceStatus(status) {
 
 async function toggleRecording() {
     if (pythonServiceStatus !== 'running') {
-        addLogEntry('error', 'Python service not ready, cannot record');
+        addLogEntry('error', t('index.log.notReadyRecord'));
         return;
     }
     
@@ -214,8 +361,7 @@ async function stopRecording() {
 function updateUI() {
     if (isRecording) {
         recordButton.textContent = '⏹️';
-        recordButton.title = '停止录音';
-        // Turn red when recording, decide whether to have pulse animation based on voice activity status
+        recordButton.title = t('index.tooltips.recordStop');
         if (isVoiceActive) {
             recordButton.className = 'control-bar-btn record-btn stop recording-active';
         } else {
@@ -225,17 +371,19 @@ function updateUI() {
             statusDot.className = 'status-dot recording';
         }
         if (typeof statusText !== 'undefined' && statusText) {
-            statusText.textContent = '录音中...';
+            statusText.textContent = t('index.statusText.recording');
         }
     } else {
         recordButton.textContent = '🎤';
-        recordButton.title = '开始录音';
+        recordButton.title = t('index.tooltips.recordStart');
         recordButton.className = 'control-bar-btn record-btn start';
         if (typeof statusDot !== 'undefined' && statusDot) {
             statusDot.className = 'status-dot idle';
         }
         if (typeof statusText !== 'undefined' && statusText) {
-            statusText.textContent = pythonServiceStatus === 'running' ? '就绪' : '服务未就绪';
+            statusText.textContent = pythonServiceStatus === 'running'
+                ? t('index.statusText.ready')
+                : t('index.statusText.notReady');
         }
     }
 
@@ -251,21 +399,23 @@ function setVolumeRecordingState(active) {
         volumePanel.classList.remove('inactive');
         volumePanel.classList.add('active');
         if (volumeStatusText) {
-            volumeStatusText.textContent = '录音中';
+            volumeStatusText.textContent = t('index.volume.recording');
         }
         if (volumeLevelEl) {
             volumeLevelEl.style.width = '0%';
             volumeLevelEl.className = 'volume-level low';
         }
         if (volumeSilenceEl && silenceMarkerDb === null) {
-            volumeSilenceEl.textContent = '静音范围';
+            volumeSilenceEl.textContent = t('index.volume.silenceRange');
             volumeSilenceEl.style.width = '33%';
         }
     } else {
         volumePanel.classList.remove('active');
         volumePanel.classList.add('inactive');
         if (volumeStatusText) {
-            volumeStatusText.textContent = pythonServiceStatus === 'running' ? '等待录音' : '服务未就绪';
+            volumeStatusText.textContent = pythonServiceStatus === 'running'
+                ? t('index.volume.waiting')
+                : t('index.statusText.notReady');
         }
         if (volumeDbValue) {
             volumeDbValue.textContent = '-inf dB';
@@ -279,10 +429,63 @@ function setVolumeRecordingState(active) {
         }
         if (volumeSilenceEl) {
             volumeSilenceEl.style.width = '33%';
-            volumeSilenceEl.textContent = '静音范围';
+            volumeSilenceEl.textContent = t('index.volume.silenceRange');
         }
         silenceMarkerDb = null;
     }
+
+    syncVolumePanelOffset();
+}
+
+function initializeVolumePanel() {
+    if (!volumePanel) {
+        return;
+    }
+
+    const isCollapsed = volumePanel.classList.contains('collapsed');
+    volumePanel.classList.toggle('expanded', !isCollapsed);
+    updateVolumeToggleState(!isCollapsed);
+}
+
+function toggleVolumePanel(forceExpand) {
+    if (!volumePanel || !volumeToggleBtn) {
+        return;
+    }
+
+    const shouldExpand = typeof forceExpand === 'boolean'
+        ? forceExpand
+        : volumePanel.classList.contains('collapsed');
+
+    if (shouldExpand) {
+        volumePanel.classList.remove('collapsed');
+        volumePanel.classList.add('expanded');
+    } else {
+        volumePanel.classList.add('collapsed');
+        volumePanel.classList.remove('expanded');
+    }
+
+    updateVolumeToggleState(shouldExpand);
+}
+
+function updateVolumeToggleState(expanded) {
+    if (volumeToggleBtn) {
+        const expandedValue = expanded ? 'true' : 'false';
+        volumeToggleBtn.setAttribute('aria-expanded', expandedValue);
+        volumeToggleBtn.dataset.expanded = expandedValue;
+        volumeToggleBtn.textContent = expanded ? t('index.volume.collapse') : t('index.volume.expand');
+        volumeToggleBtn.title = expanded ? t('index.volume.collapseTooltip') : t('index.volume.expandTooltip');
+    }
+
+    syncVolumePanelOffset();
+}
+
+function syncVolumePanelOffset() {
+    if (!mainContent || !volumePanel) {
+        return;
+    }
+
+    const panelHeight = volumePanel.offsetHeight || 0;
+    mainContent.style.setProperty('--volume-offset', `${panelHeight}px`);
 }
 
 function getVolumeLevelClass(db) {
@@ -546,7 +749,7 @@ function renderResultEntry(transcription, translation = null, translationPending
     const transDiv = document.createElement('div');
     if (transcriptionPending || !transcription) {
         transDiv.className = 'result-part transcription pending';
-        transDiv.textContent = 'Transcribing...';
+        transDiv.textContent = t('index.result.transcribing');
     } else {
         transDiv.className = 'result-part transcription';
         transDiv.textContent = transcription;
@@ -569,7 +772,7 @@ function renderResultEntry(transcription, translation = null, translationPending
 
         const tranDiv = document.createElement('div');
         tranDiv.className = 'result-part translation pending';
-        tranDiv.textContent = 'Translating...';
+        tranDiv.textContent = t('index.result.translating');
         entry.appendChild(tranDiv);
     }
 

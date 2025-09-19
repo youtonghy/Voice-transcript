@@ -320,12 +320,82 @@ def _translate_text_openai(text, target_language):
             model = OPENAI_TRANSLATE_MODEL
         return modles.translate_openai(text, target_language, api_key, base_url, model=model)
     except Exception as e:
-        log_message("error", f"Translation error: {e}")
+        log_message('error', f'Translation error: {e}')
         return None
 
-def translate_text(text, target_language="Chinese"):
-    """Compatibility wrapper: translate text using OpenAI via models module."""
+
+def _translate_text_gemini(text, target_language):
+    """Translate text via Gemini using models module."""
+    if isinstance(config, dict):
+        api_key = config.get('gemini_api_key')
+        model = config.get('gemini_translate_model')
+        prompt = config.get('gemini_translate_system_prompt')
+    else:
+        api_key = None
+        model = None
+        prompt = None
+    api_key = api_key or os.environ.get('GEMINI_API_KEY') or os.environ.get('GOOGLE_API_KEY')
+    try:
+        return modles.translate_gemini(text, target_language, api_key, model=model, system_prompt=prompt)
+    except Exception as e:
+        log_message('error', f'Gemini translation error: {e}')
+        return None
+
+
+SUPPORTED_TRANSLATION_ENGINES = {'openai', 'gemini'}
+
+
+def _get_translation_engine():
+    """Get configured translation engine (defaults to openai)."""
+    engine = 'openai'
+    try:
+        if isinstance(config, dict):
+            candidate = config.get('translation_engine') or ''
+            if isinstance(candidate, str):
+                candidate = candidate.strip().lower()
+                if candidate in SUPPORTED_TRANSLATION_ENGINES:
+                    engine = candidate
+    except Exception:
+        pass
+    return engine
+
+
+def _translation_credentials_available(engine=None):
+    """Return True when credentials are available for the given translation engine."""
+    engine = engine or _get_translation_engine()
+    if engine == 'gemini':
+        key = None
+        try:
+            if isinstance(config, dict):
+                key = config.get('gemini_api_key')
+        except Exception:
+            key = None
+        if key and isinstance(key, str) and key.strip():
+            return True
+        return bool(os.environ.get('GEMINI_API_KEY') or os.environ.get('GOOGLE_API_KEY'))
+    # default: openai
+    key = None
+    try:
+        if isinstance(config, dict):
+            key = config.get('openai_api_key')
+    except Exception:
+        key = None
+    if key and isinstance(key, str) and key.strip():
+        return True
+    return bool(os.environ.get('OPENAI_API_KEY'))
+
+
+def _translate_text_dispatch(text, target_language):
+    engine = _get_translation_engine()
+    if engine == 'gemini':
+        return _translate_text_gemini(text, target_language)
     return _translate_text_openai(text, target_language)
+
+
+def translate_text(text, target_language='Chinese'):
+    """Translate text using the configured translation engine."""
+    return _translate_text_dispatch(text, target_language)
+
 
 def determine_smart_translation_target(text, language1, language2):
     """Wrapper to select target language for smart translation using models (OpenAI)."""
@@ -434,7 +504,7 @@ def translation_worker():
                 log_message("info", f"Processing translation task #{order}: {result_id}")
                 
                 # Execute translation
-                translation = _translate_text_openai(transcription, target_language)
+                translation = _translate_text_dispatch(transcription, target_language)
                 
                 if translation:
                     # Send translation update message
@@ -477,7 +547,7 @@ def translation_worker():
                                 _, t_result_id, t_transcription, t_target_language, t_context = t
                                 log_message("info", f"Processing waiting translation task #{t_order}: {t_result_id}")
                                 
-                                t_translation = _translate_text_openai(t_transcription, t_target_language)
+                                t_translation = _translate_text_dispatch(t_transcription, t_target_language)
                                 if t_translation:
                                     t_payload2 = {
                                         "type": "translation_update",
@@ -687,12 +757,17 @@ def start_recording():
     
     # Reset translation worker/queue depending on context and overrides
     try:
-        openai_ok = bool(config.get('openai_api_key') or os.environ.get('OPENAI_API_KEY'))
+        engine = _get_translation_engine()
+        credentials_ok = _translation_credentials_available(engine)
+        enable_flag = bool(config.get('enable_translation', True)) if isinstance(config, dict) else True
         if current_recording_context == 'voice_input':
-            should_translate = bool(override_translate) and openai_ok
+            should_translate = bool(override_translate) and credentials_ok
+            if override_translate and not credentials_ok:
+                log_message('warning', f"Voice input translation requested but {engine} credentials are missing")
         else:
-            should_translate = bool(config.get('enable_translation', True)) and openai_ok
-
+            should_translate = enable_flag and credentials_ok
+            if enable_flag and not credentials_ok:
+                log_message('warning', f"Translation enabled but {engine} credentials missing; translation skipped")
         if should_translate:
             restart_translation_worker()
             log_message("info", f"Translation worker restarted; next order will be #{translation_next_expected}")
@@ -924,34 +999,38 @@ def process_combined_audio(combined_audio, seg_idx=None, from_split=False, resul
                         if queue_success:
                             log_message("info", f"VoiceInput: queued translation (order #{translation_order}) for result {result_id}")
             elif config.get('enable_translation', True):
-                translation_mode = config.get('translation_mode', 'fixed')
-                
-                if translation_mode == 'smart':
-                    # Smart translation mode
-                    language1 = config.get('smart_language1', 'Chinese')
-                    language2 = config.get('smart_language2', 'English')
-                    
-                    # Determine transcription text language and target translation
-                    smart_target = determine_smart_translation_target(transcription, language1, language2)
-                    
-                    if smart_target:
-                        # Asynchronously queue translation task, get translation order
-                        ctx = ("voice_input" if current_recording_context == 'voice_input' else None)
-                        queue_success, translation_order = queue_translation(result_id, transcription, smart_target, context=ctx)
-                        
-                        # For translation, we rely on translation_update later; placeholder already exists
-                        # If queue fails, do nothing further here
-                    else:
-                        # Smart translation failed; keep transcription only
-                        pass
+                if not translation_worker_running:
+                    # Translation worker not ready; skip queuing translation tasks for this result
+                    pass
                 else:
-                    # Fixed translation mode (non-voice_input)
-                    target_language = config.get('translate_language', 'Chinese')
-                    if target_language and target_language.strip() and translation_worker_running:
-                        # Asynchronously queue translation task, get translation order
-                        ctx = ("voice_input" if current_recording_context == 'voice_input' else None)
-                        queue_success, translation_order = queue_translation(result_id, transcription, target_language, context=ctx)
-                        # If queue fails, we keep transcription only
+                    translation_mode = config.get('translation_mode', 'fixed')
+                    
+                    if translation_mode == 'smart':
+                        # Smart translation mode
+                        language1 = config.get('smart_language1', 'Chinese')
+                        language2 = config.get('smart_language2', 'English')
+                        
+                        # Determine transcription text language and target translation
+                        smart_target = determine_smart_translation_target(transcription, language1, language2)
+                        
+                        if smart_target:
+                            # Asynchronously queue translation task, get translation order
+                            ctx = ("voice_input" if current_recording_context == 'voice_input' else None)
+                            queue_success, translation_order = queue_translation(result_id, transcription, smart_target, context=ctx)
+                            
+                            # For translation, we rely on translation_update later; placeholder already exists
+                            # If queue fails, do nothing further here
+                        else:
+                            # Smart translation failed; keep transcription only
+                            pass
+                    else:
+                        # Fixed translation mode (non-voice_input)
+                        target_language = config.get('translate_language', 'Chinese')
+                        if target_language and target_language.strip():
+                            # Asynchronously queue translation task, get translation order
+                            ctx = ("voice_input" if current_recording_context == 'voice_input' else None)
+                            queue_success, translation_order = queue_translation(result_id, transcription, target_language, context=ctx)
+                            # If queue fails, we keep transcription only
             else:
                 # Translation not enabled: nothing else to do; placeholder already filled
                 pass
@@ -986,20 +1065,8 @@ def determine_smart_translation_target(text, language1, language2):
         return language2
 
 def translate_text(text, target_language="Chinese"):
-    """Translate text via models helper (OpenAI)."""
-    api_key = (config.get('openai_api_key') if isinstance(config, dict) else None) or os.environ.get('OPENAI_API_KEY')
-    base_url = (config.get('openai_base_url') if isinstance(config, dict) else None) or os.environ.get('OPENAI_BASE_URL')
-    try:
-        model = None
-        try:
-            if isinstance(config, dict):
-                model = config.get('openai_translate_model') or OPENAI_TRANSLATE_MODEL
-        except Exception:
-            model = OPENAI_TRANSLATE_MODEL
-        return modles.translate_openai(text, target_language, api_key, base_url, model=model)
-    except Exception as e:
-        log_message("error", f"Translation failed: {e}")
-        return None
+    """Translate text via configured translation engine (override)."""
+    return _translate_text_dispatch(text, target_language)
 
 def transcribe_audio_file(filepath):
     """Transcribe audio file using selected source."""
@@ -1105,7 +1172,8 @@ def handle_message(message):
                 src = config.get('transcribe_source', 'openai')
                 oai_set = bool(config.get('openai_api_key') or os.environ.get('OPENAI_API_KEY'))
                 sxi_set = bool(config.get('soniox_api_key') or os.environ.get('SONIOX_API_KEY'))
-                log_message("info", f"Config applied. transcribe_source={src}, openai_key_set={oai_set}, soniox_key_set={sxi_set}")
+                gemini_set = bool(config.get('gemini_api_key') or os.environ.get('GEMINI_API_KEY') or os.environ.get('GOOGLE_API_KEY'))
+                log_message("info", f"Config applied. transcribe_source={src}, openai_key_set={oai_set}, soniox_key_set={sxi_set}, gemini_key_set={gemini_set}")
             except Exception:
                 pass
 
@@ -1127,14 +1195,19 @@ def handle_message(message):
             # Manage translation worker based on config (initial)
             enable_tr = config.get('enable_translation', True)
             global translation_worker_running
-            # Start translation worker only when translation is enabled and OpenAI API key is present
-            translation_ready = enable_tr and bool(config.get('openai_api_key') or os.environ.get('OPENAI_API_KEY'))
+            engine = _get_translation_engine()
+            credentials_ok = _translation_credentials_available(engine)
+            translation_ready = bool(enable_tr) and credentials_ok
             if translation_ready:
                 start_translation_worker()
+                log_message('info', f"Translation worker ready (engine={engine})")
             else:
                 if translation_worker_running:
                     stop_translation_worker()
-                    log_message("info", "Stopped translation worker (disabled or OpenAI not configured)")
+                    reason = 'disabled'
+                    if enable_tr and not credentials_ok:
+                        reason = f'{engine} credentials missing'
+                    log_message('info', f"Stopped translation worker ({reason})")
         else:
             log_message("warning", f"Unknown message type: {msg_type}")
             

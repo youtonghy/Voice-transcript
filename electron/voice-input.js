@@ -1,6 +1,145 @@
+﻿const DEFAULT_LANGUAGE = 'en';
+
+function t(key) {
+  if (window.appI18n && typeof window.appI18n.t === 'function') {
+    return window.appI18n.t(key);
+  }
+  return key;
+}
+
+function applyLanguageFromConfig(cfg) {
+  if (!window.appI18n || typeof window.appI18n.setLanguage !== 'function') {
+    return;
+  }
+  const lang = (cfg && cfg.app_language) || DEFAULT_LANGUAGE;
+  window.appI18n.setLanguage(lang);
+}
+
+function initializeLanguage() {
+  if (!window.appI18n) {
+    return;
+  }
+  window.appI18n.setLanguage(DEFAULT_LANGUAGE);
+  document.title = t('voice.pageTitle');
+  if (typeof window.appI18n.onChange === 'function') {
+    window.appI18n.onChange(() => {
+      registerVoiceInputTranslations();
+      window.appI18n.apply();
+      document.title = t('voice.pageTitle');
+    });
+  }
+}
+
+
+function registerVoiceInputTranslations() {
+  if (!window.appI18n) {
+    return;
+  }
+  const navTitle = document.querySelector('.nav-title');
+  if (navTitle) {
+    navTitle.dataset.i18n = 'voice.nav.title';
+  }
+  const backButton = document.querySelector('.back-btn');
+  if (backButton) {
+    backButton.dataset.i18n = 'common.backNav';
+    backButton.dataset.i18nTitle = 'voice.nav.backTooltip';
+  }
+  const sectionTitle = document.querySelector('.section-title');
+  if (sectionTitle) {
+    sectionTitle.dataset.i18n = 'voice.section.title';
+  }
+  const enableLabel = document.querySelector('label[for="voiceInputEnabled"]');
+  if (enableLabel) {
+    enableLabel.dataset.i18n = 'voice.fields.enable';
+  }
+  const hotkeyInput = document.getElementById('voiceInputHotkey');
+  if (hotkeyInput) {
+    hotkeyInput.dataset.i18nPlaceholder = 'voice.placeholders.hotkey';
+  }
+
+  const hotkeyLabel = document.querySelector('label[for="voiceInputHotkey"]');
+  if (hotkeyLabel) {
+    hotkeyLabel.dataset.i18n = 'voice.fields.hotkey';
+  }
+  const hotkeyNote = document.querySelector('#voiceInputHotkey')?.parentElement?.querySelector('.form-note');
+  if (hotkeyNote) {
+    hotkeyNote.dataset.i18n = 'voice.notes.hotkey';
+  }
+  const engineLabel = document.querySelector('label[for="voiceInputEngine"]');
+  if (engineLabel) {
+    engineLabel.dataset.i18n = 'voice.fields.engine';
+  }
+  const languageLabel = document.querySelector('label[for="voiceInputLanguage"]');
+  if (languageLabel) {
+    languageLabel.dataset.i18n = 'voice.fields.language';
+  }
+  const insertLabel = document.querySelector('label[for="voiceInputTranslate"]');
+  if (insertLabel) {
+    insertLabel.dataset.i18n = 'voice.fields.insertTranslation';
+  }
+  const insertNote = document.getElementById('tlNote');
+  if (insertNote) {
+    insertNote.dataset.i18n = 'voice.fields.insertNote';
+  }
+  const translateLabel = document.querySelector('label[for="voiceInputTranslateLanguage"]');
+  if (translateLabel) {
+    translateLabel.dataset.i18n = 'voice.fields.translateLanguage';
+  }
+  const backLink = document.querySelector('.buttons .btn-secondary');
+  if (backLink) {
+    backLink.dataset.i18n = 'common.backLink';
+  }
+}
+
+
+if (window.appI18n && typeof window.appI18n.extend === 'function') {
+  window.appI18n.extend({
+    en: {
+      'common.backNav': '\u2190 Back',
+      'common.backLink': 'Back',
+      'voice.pageTitle': 'Voice Input Settings',
+      'voice.nav.title': 'Voice Input Settings',
+      'voice.nav.backTooltip': 'Back to main window',
+      'voice.section.title': 'Voice Input',
+      'voice.fields.enable': 'Enable voice input (press once to start, press again to stop)',
+      'voice.fields.hotkey': 'Hotkey',
+      'voice.fields.engine': 'Transcription Engine',
+      'voice.fields.language': 'Transcription Language',
+      'voice.fields.insertTranslation': 'Insert translation after completion',
+      'voice.fields.insertNote': 'If enabled, the translation will be inserted after stopping.',
+      'voice.fields.translateLanguage': 'Translation Target Language',
+      'voice.placeholders.hotkey': 'e.g. F3 or A',
+      'voice.notes.hotkey': 'Supports F1-F24, A-Z, 0-9',
+      'voice.notify.loadFailed': 'Failed to load configuration',
+      'voice.notify.saveFailed': 'Save failed'
+    },
+    zh: {
+      'common.backNav': '\u2190 返回',
+      'common.backLink': '返回',
+      'voice.nav.title': '语音输入设置',
+      'voice.nav.backTooltip': '返回主界面',
+      'voice.section.title': '语音输入',
+      'voice.fields.enable': '启用语音输入（按一次开始，再按一次停止）',
+      'voice.fields.hotkey': '快捷键',
+      'voice.fields.engine': '转写引擎',
+      'voice.fields.language': '转写语言',
+      'voice.fields.insertTranslation': '完成后插入翻译结果',
+      'voice.fields.insertNote': '启用后将在停止时插入翻译文本。',
+      'voice.fields.translateLanguage': '翻译目标语言',
+      'voice.placeholders.hotkey': '例如：F3 或 A',
+      'voice.notes.hotkey': '支持 F1-F24、A-Z、0-9',
+      'voice.notify.loadFailed': '配置加载失败',
+      'voice.notify.saveFailed': '保存失败'
+    }
+  });
+}
+
 let currentConfig = {};
 
 document.addEventListener('DOMContentLoaded', () => {
+  initializeLanguage();
+  registerVoiceInputTranslations();
+  if (window.appI18n) { window.appI18n.apply(); }
   loadConfig();
   setupEvents();
 });
@@ -8,9 +147,10 @@ document.addEventListener('DOMContentLoaded', () => {
 async function loadConfig() {
   try {
     currentConfig = await window.electronAPI.getConfig();
+    applyLanguageFromConfig(currentConfig);
     fillForm(currentConfig);
   } catch (e) {
-    notify('❌ 加载配置失败', 'error');
+    notify(t('voice.notify.loadFailed'), 'error');
   }
 }
 
@@ -73,7 +213,7 @@ function setupEvents() {
     autoSave();
   });
 
-  // 所有控件默认失焦即保存
+  // Auto-save when inputs change or blur
   document.querySelectorAll('input, select, textarea').forEach(el => {
     el.addEventListener('change', autoSave);
     el.addEventListener('blur', autoSave);
@@ -100,16 +240,16 @@ async function save() {
     currentConfig = cfg;
     return true;
   } catch (e) {
-    notify('❌ 保存失败', 'error');
+    notify(t('voice.notify.saveFailed'), 'error');
     return false;
   }
 }
 
 // Debounced autosave
-let t = null;
+let autoSaveTimer = null;
 function autoSave() {
-  if (t) clearTimeout(t);
-  t = setTimeout(() => { save(); }, 600);
+  if (autoSaveTimer) clearTimeout(autoSaveTimer);
+  autoSaveTimer = setTimeout(() => { save(); }, 600);
 }
 
 function debounce(fn, ms) {
@@ -124,3 +264,4 @@ function notify(text, type) {
   document.body.appendChild(div);
   setTimeout(() => div.remove(), 2200);
 }
+

@@ -13,9 +13,12 @@ Engines & configuration (for extension):
   * soniox_api_key: str (env SONIOX_API_KEY)
   * transcribe_language: str (e.g. 'auto')
 
-- translation_engine: 'openai' (default)
+- translation_engine: 'openai' | 'gemini' (default openai)
   * openai_api_key / openai_base_url (shared)
   * openai_translate_model: str (default gpt-4o-mini)
+  * gemini_api_key: str (env GEMINI_API_KEY or GOOGLE_API_KEY)
+  * gemini_translate_model: str (default gemini-2.0-flash)
+  * gemini_translate_system_prompt: str (optional; auto-generated when missing)
 
 Legacy compatibility:
 - transcribe_source (legacy key) maps to recognition_engine when missing.
@@ -161,6 +164,9 @@ THEATER_MODE_MAX_GAIN = 10.0
 # OpenAI configuration
 OPENAI_TRANSCRIBE_MODEL = "gpt-4o-transcribe"
 OPENAI_TRANSLATE_MODEL = "gpt-4o-mini"
+
+# Gemini configuration
+GEMINI_TRANSLATE_MODEL = 'gemini-2.0-flash'
 
 # Supported file formats
 AUDIO_FORMATS = ['.wav', '.mp3', '.flac', '.aac', '.ogg', '.m4a', '.wma']
@@ -483,54 +489,53 @@ class MediaProcessor:
             return None
 
     def translate_text(self, text: str, target_language: str = "Chinese") -> Optional[str]:
-        """Translate text via the configured translation engine (currently OpenAI)."""
+        """Translate text via the configured translation engine."""
         if not text.strip():
             return None
 
+        raw_engine = None
         try:
-            engine = (self.config.get('translation_engine') or 'openai').strip().lower()
-            if engine != 'openai':
-                _log("warning", f"Unsupported translation engine '{engine}', falling back to OpenAI")
-            api_key = os.environ.get("OPENAI_API_KEY") or self.config.get("openai_api_key")
-            base_url = os.environ.get("OPENAI_BASE_URL") or self.config.get("openai_base_url")
-            model = None
-            try:
-                model = (self.config.get('openai_translate_model') or OPENAI_TRANSLATE_MODEL)
-            except Exception:
-                model = OPENAI_TRANSLATE_MODEL
-            _log_if("info", f"Translating to {target_language} using model={model}")
+            if isinstance(self.config, dict):
+                raw_engine = self.config.get('translation_engine')
+        except Exception:
+            raw_engine = None
+        engine = raw_engine if isinstance(raw_engine, str) and raw_engine.strip() else 'openai'
+        if isinstance(engine, str):
+            engine = engine.strip().lower()
+        else:
+            engine = 'openai'
+
+        if engine not in ('openai', 'gemini'):
+            _log('warning', f"Unsupported translation engine '{engine}', falling back to OpenAI")
+            engine = 'openai'
+
+        try:
+            if engine == 'gemini':
+                api_key = os.environ.get('GEMINI_API_KEY') or os.environ.get('GOOGLE_API_KEY')
+                if isinstance(self.config, dict):
+                    api_key = api_key or self.config.get('gemini_api_key')
+                model = None
+                prompt = None
+                if isinstance(self.config, dict):
+                    model = self.config.get('gemini_translate_model')
+                    prompt = self.config.get('gemini_translate_system_prompt')
+                model = (model or GEMINI_TRANSLATE_MODEL)
+                _log_if('info', f"Translating to {target_language} using Gemini model={model}")
+                return modles.translate_gemini(text, target_language, api_key, model=model, system_prompt=prompt)
+
+            api_key = os.environ.get('OPENAI_API_KEY')
+            base_url = os.environ.get('OPENAI_BASE_URL')
+            if isinstance(self.config, dict):
+                api_key = api_key or self.config.get('openai_api_key')
+                base_url = base_url or self.config.get('openai_base_url')
+                model = self.config.get('openai_translate_model')
+            else:
+                model = None
+            model = (model or OPENAI_TRANSLATE_MODEL)
+            _log_if('info', f"Translating to {target_language} using OpenAI model={model}")
             return modles.translate_openai(text, target_language, api_key, base_url, model=model)
         except Exception as e:
-            _log("error", f"Translation failed: {e}")
-            return None
-
-        try:
-            system_prompt = f"""You are a professional translation assistant. Please translate the text provided by the user to {target_language}.
-
-Translation requirements:
-1. Maintain the tone and style of the original text
-2. Ensure accurate and natural translation
-3. If the original text is already in {target_language}, please return the original text directly
-4. Only return the translation result, do not add any explanations or comments"""
-
-            response = self.openai_client.chat.completions.create(
-                model=OPENAI_TRANSLATE_MODEL,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": text}
-                ],
-                max_tokens=5000,
-                temperature=0.1,
-                top_p=0.95,
-                frequency_penalty=0,
-                presence_penalty=0,
-                stream=False
-            )
-            
-            return response.choices[0].message.content.strip()
-            
-        except Exception as e:
-            print(f"Translation failed: {e}")
+            _log('error', f"Translation failed ({engine}): {e}")
             return None
 
     def process_file(self, file_path: str, theater_mode: bool = False, enable_translation: bool = True, target_language: str = "Chinese", progress_callback=None) -> bool:
@@ -1071,7 +1076,7 @@ def main():
     parser.add_argument('--language', default='Chinese', help='Target translation language')
     parser.add_argument('--theater-mode', action='store_true', help='Enable theater mode')
     parser.add_argument('--gui', action='store_true', help='Launch GUI mode')
-    parser.add_argument('--source', choices=['openai', 'soniox'], help='Transcription provider')
+    parser.add_argument('--source', choices=['openai', 'soniox', 'qwen3-asr'], help='Transcription provider')
     parser.add_argument('--verbose', action='store_true', help='Enable verbose debug logging')
     parser.add_argument('--log-level', choices=['debug', 'info', 'warning', 'error'], help='Set log level')
     

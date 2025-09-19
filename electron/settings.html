@@ -1,5 +1,5 @@
-﻿<!DOCTYPE html>
-<html lang="zh-CN">
+<!DOCTYPE html>
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -12,7 +12,7 @@
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Apple Color Emoji', 'Noto Color Emoji', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
             background: #ffffff;
             min-height: 100vh;
             color: #333;
@@ -48,25 +48,31 @@
         }
 
         .back-btn {
-            width: 40px;
-            height: 40px;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 12px;
             border: 1px solid #e5e5e5;
             border-radius: 8px;
             background: #ffffff;
-            color: #666;
+            color: #333;
             cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: all 0.2s ease;
             text-decoration: none;
-            font-size: 1.2rem;
+            transition: all 0.2s ease;
+            font-size: 0.95rem;
+            line-height: 1.2;
+            font-weight: 500;
         }
 
         .back-btn:hover {
             border-color: #333;
-            color: #333;
+            color: #111;
             background: #f5f5f5;
+        }
+
+        .back-btn-icon {
+            font-size: 1rem;
+            line-height: 1;
         }
 
         .nav-title {
@@ -373,7 +379,10 @@
     <div class="nav-bar">
         <div class="nav-content">
             <div class="nav-left">
-                <a href="#" class="back-btn" title="Back to Home" onclick="window.close(); return false;">←</a>
+                <a href="#" class="back-btn" title="Back to Home" data-i18n-title="settings.nav.backTooltip" onclick="window.close(); return false;">
+                    <span class="back-btn-icon" aria-hidden="true">&#8592;</span>
+                    <span data-i18n="common.backLink">Back</span>
+                </a>
                 <div class="nav-title">Settings</div>
             </div>
         </div>
@@ -424,12 +433,38 @@
 
             <div class="section-title">Translation Engine</div>
             <div class="form-group">
-                <label for="translationEngine">Translation Engine</label>
-                <select id="translationEngine" name="translation_engine">
+                <label for="translationEngine">Translation Engine</label>                <select id="translationEngine" name="translation_engine">
+
                     <option value="openai" selected>OpenAI (default gpt-4o-mini)</option>
+
+                    <option value="gemini">Gemini (default gemini-2.0-flash)</option>
+
                 </select>
-                <div class="form-note">Choose the provider for text translation (currently only OpenAI)</div>
+
+                <div class="form-note">Choose the provider for text translation (OpenAI or Gemini)</div>
             </div>
+            <div class="form-group provider-gemini-trans">
+
+                <label for="geminiApiKey">Gemini API Key</label>
+
+                <input type="password" id="geminiApiKey" name="gemini_api_key" placeholder="AIza...">
+
+                <div class="form-note">Gemini Developer API key stored locally for translation</div>
+
+            </div>
+
+            <div class="form-group provider-gemini-trans">
+
+                <label for="geminiTranslateModel">Gemini Model</label>
+
+                <input type="text" id="geminiTranslateModel" name="gemini_translate_model" placeholder="gemini-2.0-flash">
+
+                <div class="form-note">Default system prompt is generated automatically; override the model if needed</div>
+
+            </div>
+
+
+
             <div class="form-group provider-openai-trans">
                 <label for="openaiTranslateModel">Translate Model</label>
                 <input type="text" id="openaiTranslateModel" name="openai_translate_model" placeholder="gpt-4o-mini">
@@ -613,19 +648,34 @@
 
             <div class="divider"></div>
 
+            <div class="section-title">Interface Language</div>
+
+            <div class="form-group">
+                <label for="appLanguage">Choose Language</label>
+                <select id="appLanguage" name="app_language">
+                    <option value="en" selected>English</option>
+                    <option value="zh">简体中文</option>
+                </select>
+                <div class="form-note">Changes take effect immediately and will be saved to your configuration.</div>
+            </div>
+
+            <div class="divider"></div>
+
             
 
             <div id="statusMessage"></div>
 
             <div class="button-group">
-                <a href="#" onclick="window.close(); return false;" class="btn btn-secondary" style="text-align:center; display:inline-block; line-height: 20px;">Back</a>
+                <a href="#" onclick="window.close(); return false;" class="btn btn-secondary" data-i18n="common.backLink">Back</a>
             </div>
         </form>
     </div>
 
+    <script src="i18n.js"></script>
     <script src="settings.js"></script>
 </body>
 </html>
+
 
 
 

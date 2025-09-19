@@ -1,7 +1,316 @@
 ﻿let currentConfig = {};
 let autoSaveTimeout = null; // Debounce timer
 
+const DEFAULT_GEMINI_PROMPT = [
+    'You are a professional translation assistant.',
+    'Translate user text into {{TARGET_LANGUAGE}}.',
+    'Requirements:',
+    '1) Preserve the tone and intent of the original text.',
+    '2) Ensure the translation is natural and fluent.',
+    '3) If the input is already in {{TARGET_LANGUAGE}}, return it unchanged.',
+    '4) Respond with translation only without extra commentary.'
+].join('\n');
+
+const DEFAULT_LANGUAGE = 'en';
+
+function t(key) {
+    if (window.appI18n && typeof window.appI18n.t === 'function') {
+        return window.appI18n.t(key);
+    }
+    return key;
+}
+
+function applyLanguageFromConfig(cfg) {
+    if (!window.appI18n || typeof window.appI18n.setLanguage !== 'function') {
+        return;
+    }
+    const lang = (cfg && cfg.app_language) || DEFAULT_LANGUAGE;
+    window.appI18n.setLanguage(lang);
+}
+
+function initializeLanguage() {
+    if (!window.appI18n) {
+        return;
+    }
+    window.appI18n.setLanguage(DEFAULT_LANGUAGE);
+    document.title = t('settings.nav.title');
+    if (typeof window.appI18n.onChange === 'function') {
+        window.appI18n.onChange(() => {
+            registerSettingsTranslations();
+            window.appI18n.apply();
+            document.title = t('settings.nav.title');
+        });
+    }
+}
+
+
+function registerSettingsTranslations() {
+    if (!window.appI18n) {
+        return;
+    }
+
+    const navTitle = document.querySelector('.nav-title');
+    if (navTitle) {
+        navTitle.dataset.i18n = 'settings.nav.title';
+    }
+
+    const backButton = document.querySelector('.back-btn');
+    if (backButton) {
+        backButton.dataset.i18n = 'common.backNav';
+        backButton.dataset.i18nTitle = 'settings.nav.backTooltip';
+    }
+
+    const headerTitle = document.querySelector('.settings-header h1');
+    if (headerTitle) {
+        headerTitle.dataset.i18n = 'settings.header.title';
+    }
+    const headerSubtitle = document.querySelector('.settings-header p');
+    if (headerSubtitle) {
+        headerSubtitle.dataset.i18n = 'settings.header.subtitle';
+    }
+
+    const sectionTitleKeys = [
+        'settings.section.recognitionEngine',
+        'settings.section.translationEngine',
+        'settings.section.openaiCommon',
+        'settings.section.translation',
+        'settings.section.transcription',
+        'settings.section.recording',
+        'settings.section.interfaceLanguage'
+    ];
+    document.querySelectorAll('.section-title').forEach((element, index) => {
+        const key = sectionTitleKeys[index];
+        if (key) {
+            element.dataset.i18n = key;
+        }
+    });
+
+    const labelKeys = {
+        recognitionEngine: 'settings.labels.recognitionEngine',
+        openaiTranscribeModel: 'settings.labels.openaiTranscribeModel',
+        sonioxApiKey: 'settings.labels.sonioxApiKey',
+        dashscopeApiKey: 'settings.labels.dashscopeApiKey',
+        qwen3AsrModel: 'settings.labels.qwen3AsrModel',
+        translationEngine: 'settings.labels.translationEngine',
+        geminiApiKey: 'settings.labels.geminiApiKey',
+        geminiTranslateModel: 'settings.labels.geminiTranslateModel',
+        openaiTranslateModel: 'settings.labels.openaiTranslateModel',
+        apiKey: 'settings.labels.apiKey',
+        apiUrl: 'settings.labels.apiUrl',
+        enableTranslation: 'settings.labels.enableTranslation',
+        translationMode: 'settings.labels.translationMode',
+        targetLanguage: 'settings.labels.targetLanguage',
+        language1: 'settings.labels.language1',
+        language2: 'settings.labels.language2',
+        transcribeLanguage: 'settings.labels.transcribeLanguage',
+        silenceThreshold: 'settings.labels.silenceThreshold',
+        silenceDuration: 'settings.labels.silenceDuration',
+        theaterMode: 'settings.labels.theaterMode',
+        appLanguage: 'settings.labels.appLanguage'
+    };
+    Object.entries(labelKeys).forEach(([id, key]) => {
+        const label = document.querySelector('label[for="' + id + '"]');
+        if (label) {
+            label.dataset.i18n = key;
+        }
+    });
+
+
+    const customLanguageInput = document.getElementById('customLanguage');
+    if (customLanguageInput) {
+        customLanguageInput.dataset.i18nPlaceholder = 'settings.placeholders.customLanguage';
+    }
+
+    const noteMappings = [
+        { labelFor: 'recognitionEngine', key: 'settings.notes.recognitionEngine' },
+        { labelFor: 'openaiTranscribeModel', key: 'settings.notes.openaiTranscribeModel' },
+        { labelFor: 'sonioxApiKey', key: 'settings.notes.sonioxApiKey' },
+        { labelFor: 'dashscopeApiKey', key: 'settings.notes.dashscopeApiKey' },
+        { labelFor: 'qwen3AsrModel', key: 'settings.notes.qwen3AsrModel' },
+        { labelFor: 'translationEngine', key: 'settings.notes.translationEngine' },
+        { labelFor: 'geminiApiKey', key: 'settings.notes.geminiApiKey' },
+        { labelFor: 'geminiTranslateModel', key: 'settings.notes.geminiTranslateModel' },
+        { labelFor: 'openaiTranslateModel', key: 'settings.notes.openaiTranslateModel' },
+        { labelFor: 'apiKey', key: 'settings.notes.apiKey' },
+        { labelFor: 'apiUrl', key: 'settings.notes.apiUrl' },
+        { labelFor: 'translationMode', key: 'settings.notes.translationMode' },
+        { labelFor: 'targetLanguage', key: 'settings.notes.targetLanguage' },
+        { labelFor: 'transcribeLanguage', key: 'settings.notes.transcribeLanguage', mode: 'html' },
+        { inputId: 'theaterMode', key: 'settings.notes.theaterMode', relative: 'next' },
+        { selector: '#appLanguage', key: 'settings.notes.appLanguage', type: 'parent' }
+    ];
+
+    noteMappings.forEach(({ labelFor, selector, inputId, key, mode, relative, type }) => {
+        let note = null;
+        if (labelFor) {
+            const label = document.querySelector('label[for="' + labelFor + '"]');
+            if (label) {
+                const group = label.closest('.form-group') || label.closest('.checkbox-group');
+                if (group) {
+                    note = group.querySelector('.form-note');
+                }
+            }
+        } else if (selector) {
+            const element = document.querySelector(selector);
+            if (element) {
+                if (type === 'parent') {
+                    note = element.closest('.form-group')?.querySelector('.form-note');
+                } else {
+                    note = element;
+                }
+            }
+        } else if (inputId) {
+            const input = document.getElementById(inputId);
+            if (input && relative === 'next') {
+                note = input.closest('.checkbox-group')?.nextElementSibling;
+            }
+        }
+        if (note) {
+            note.dataset.i18n = key;
+            if (mode === 'html') {
+                note.dataset.i18nMode = 'html';
+            }
+        }
+    });
+
+    const backLink = document.querySelector('.button-group .btn.btn-secondary');
+    if (backLink) {
+        backLink.dataset.i18n = 'common.backLink';
+    }
+}
+
+
+
+if (window.appI18n && typeof window.appI18n.extend === 'function') {
+    window.appI18n.extend({
+        en: {
+            'common.backNav': '← Back',
+            'common.backLink': 'Back',
+            'settings.nav.title': 'Settings',
+            'settings.nav.backTooltip': 'Back to main window',
+            'settings.header.title': 'Settings',
+            'settings.header.subtitle': 'Configure API keys and transcription/translation options.',
+            'settings.section.recognitionEngine': 'Recognition Engine',
+            'settings.section.translationEngine': 'Translation Engine',
+            'settings.section.openaiCommon': 'OpenAI Common Settings',
+            'settings.section.translation': 'Translation Settings',
+            'settings.section.transcription': 'Transcription Settings',
+            'settings.section.recording': 'Recording Settings',
+            'settings.section.interfaceLanguage': 'Interface Language',
+            'settings.labels.recognitionEngine': 'Recognition Engine',
+            'settings.labels.openaiTranscribeModel': 'Transcribe Model',
+            'settings.labels.sonioxApiKey': 'Soniox API Key',
+            'settings.labels.dashscopeApiKey': 'DashScope API Key',
+            'settings.labels.qwen3AsrModel': 'Qwen3-ASR Model',
+            'settings.labels.translationEngine': 'Translation Engine',
+            'settings.labels.geminiApiKey': 'Gemini API Key',
+            'settings.labels.geminiTranslateModel': 'Gemini Model',
+            'settings.labels.openaiTranslateModel': 'Translate Model',
+            'settings.labels.apiKey': 'OpenAI API Key',
+            'settings.labels.apiUrl': 'API Base URL (optional)',
+            'settings.labels.enableTranslation': 'Enable Auto Translation',
+            'settings.labels.translationMode': 'Translation Mode',
+            'settings.labels.targetLanguage': 'Target Language',
+            'settings.labels.language1': 'Language 1',
+            'settings.labels.language2': 'Language 2',
+            'settings.labels.transcribeLanguage': 'Transcription Language',
+            'settings.labels.silenceThreshold': 'Silence Threshold',
+            'settings.labels.silenceDuration': 'Silence Split Duration (seconds)',
+            'settings.labels.theaterMode': 'Theater Mode',
+            'settings.labels.appLanguage': 'Choose Language',
+            'settings.placeholders.customLanguage': 'Enter a custom language',
+            'settings.notes.recognitionEngine': 'Choose the provider for speech recognition (transcription).',
+            'settings.notes.openaiTranscribeModel': 'Audio transcription model (default gpt-4o-transcribe).',
+            'settings.notes.sonioxApiKey': 'Required when the recognition engine is Soniox.',
+            'settings.notes.dashscopeApiKey': 'Qwen3-ASR is provided via DashScope. Enter your DashScope API Key (or set environment variable DASHSCOPE_API_KEY).',
+            'settings.notes.qwen3AsrModel': 'Default is qwen3-asr-flash; change if you need another model.',
+            'settings.notes.translationEngine': 'Choose the provider for text translation (OpenAI or Gemini).',
+            'settings.notes.geminiApiKey': 'Gemini Developer API key stored locally for translation.',
+            'settings.notes.geminiTranslateModel': 'Default system prompt is generated automatically; override the model if needed.',
+            'settings.notes.openaiTranslateModel': 'Model used for text translation.',
+            'settings.notes.apiKey': 'Saved to local config.json; shared by transcription and translation.',
+            'settings.notes.apiUrl': 'Leave empty to use OpenAI default; if custom, end with /v1.',
+            'settings.notes.translationMode': 'Fixed: always translate to the target; Smart: better for bilingual conversations.',
+            'settings.notes.targetLanguage': 'Select a common language or choose "Custom..." and type a language name.',
+            'settings.notes.transcribeLanguage': 'Choosing "Auto Detect" will not use a prompt; choosing a specific language will use the prompt "Please transcribe in XX language".<br><strong>Note: In Smart translation mode, transcription language will be auto-detected.</strong>',
+            'settings.notes.silenceThreshold': 'Smaller is more sensitive. Recommended range: 0.005–0.02.',
+            'settings.notes.silenceDuration': 'Split when continuous silence exceeds this duration.',
+            'settings.notes.theaterMode': 'Amplify quiet audio to normal speech volume to improve recognition.',
+            'settings.notes.appLanguage': 'Changes take effect immediately and will be saved to your configuration.',
+            'settings.notify.saved': 'Settings saved',
+            'settings.notify.saveFailed': 'Save failed',
+            'settings.notify.loadFailed': 'Failed to load configuration',
+            'settings.notify.reloaded': 'Configuration reloaded',
+            'settings.error.translationLanguageRequired': 'Please set the target translation language'
+        },
+        zh: {
+            'common.backNav': '← 返回',
+            'common.backLink': '返回',
+            'settings.nav.title': '设置',
+            'settings.nav.backTooltip': '返回主窗口',
+            'settings.header.title': '设置',
+            'settings.header.subtitle': '配置 API 密钥以及转写、翻译相关选项。',
+            'settings.section.recognitionEngine': '识别引擎',
+            'settings.section.translationEngine': '翻译引擎',
+            'settings.section.openaiCommon': 'OpenAI 通用设置',
+            'settings.section.translation': '翻译设置',
+            'settings.section.transcription': '转写设置',
+            'settings.section.recording': '录音设置',
+            'settings.section.interfaceLanguage': '界面语言',
+            'settings.labels.recognitionEngine': '识别引擎',
+            'settings.labels.openaiTranscribeModel': '转写模型',
+            'settings.labels.sonioxApiKey': 'Soniox API 密钥',
+            'settings.labels.dashscopeApiKey': 'DashScope API 密钥',
+            'settings.labels.qwen3AsrModel': 'Qwen3-ASR 模型',
+            'settings.labels.translationEngine': '翻译引擎',
+            'settings.labels.geminiApiKey': 'Gemini API 密钥',
+            'settings.labels.geminiTranslateModel': 'Gemini 模型',
+            'settings.labels.openaiTranslateModel': '翻译模型',
+            'settings.labels.apiKey': 'OpenAI API 密钥',
+            'settings.labels.apiUrl': 'API 基础地址（可选）',
+            'settings.labels.enableTranslation': '启用自动翻译',
+            'settings.labels.translationMode': '翻译模式',
+            'settings.labels.targetLanguage': '目标语言',
+            'settings.labels.language1': '语言 1',
+            'settings.labels.language2': '语言 2',
+            'settings.labels.transcribeLanguage': '转写语言',
+            'settings.labels.silenceThreshold': '静音阈值',
+            'settings.labels.silenceDuration': '静音切分时长（秒）',
+            'settings.labels.theaterMode': '剧场模式',
+            'settings.labels.appLanguage': '界面语言',
+            'settings.placeholders.customLanguage': '输入自定义语言',
+            'settings.notes.recognitionEngine': '选择语音识别（转写）所使用的服务商。',
+            'settings.notes.openaiTranscribeModel': '音频转写模型（默认 gpt-4o-transcribe）。',
+            'settings.notes.sonioxApiKey': '当识别引擎选择 Soniox 时必须填写。',
+            'settings.notes.dashscopeApiKey': 'Qwen3-ASR 由 DashScope 提供，请填写 DashScope API Key（或设置环境变量 DASHSCOPE_API_KEY）。',
+            'settings.notes.qwen3AsrModel': '默认使用 qwen3-asr-flash，可根据需要更换模型。',
+            'settings.notes.translationEngine': '选择文本翻译服务商（OpenAI 或 Gemini）。',
+            'settings.notes.geminiApiKey': '用于翻译的 Gemini 开发者 API 密钥，保存在本地。',
+            'settings.notes.geminiTranslateModel': '系统提示会自动生成，如需可自定义模型。',
+            'settings.notes.openaiTranslateModel': '用于文本翻译的模型。',
+            'settings.notes.apiKey': '保存在本地 config.json，供转写与翻译共用。',
+            'settings.notes.apiUrl': '留空将使用 OpenAI 默认地址；自定义地址请以 /v1 结尾。',
+            'settings.notes.translationMode': '固定模式：始终翻译为目标语言；智能模式：适合双语对话场景。',
+            'settings.notes.targetLanguage': '在常用语言中选择，或选 “Custom...” 并输入自定义语言名称。',
+            'settings.notes.transcribeLanguage': '选择 “Auto Detect” 时不会附带提示；指定语言则会使用 “Please transcribe in XX language”。<br><strong>注意：智能翻译模式下会自动检测转写语言。</strong>',
+            'settings.notes.silenceThreshold': '数值越小越灵敏。推荐范围：0.005–0.02。',
+            'settings.notes.silenceDuration': '当持续静音超过该时长时进行切分。',
+            'settings.notes.theaterMode': '放大较小的音量，使其达到正常语音水平以提升识别效果。',
+            'settings.notes.appLanguage': '更改后立即生效并写入配置文件。',
+            'settings.notify.saved': '设置已保存',
+            'settings.notify.saveFailed': '保存失败',
+            'settings.notify.loadFailed': '读取配置失败',
+            'settings.notify.reloaded': '配置已重新载入',
+            'settings.error.translationLanguageRequired': '请设置目标翻译语言'
+        }
+    });
+}
+
+
 document.addEventListener('DOMContentLoaded', () => {
+    initializeLanguage();
+    registerSettingsTranslations();
+    if (window.appI18n) { window.appI18n.apply(); }
     loadCurrentConfig();
     setupEventListeners();
     try { updateProviderVisibility(); } catch {}
@@ -40,6 +349,19 @@ function setupEventListeners() {
         autoSave();
     });
     customLanguage.addEventListener('input', autoSave);
+
+    const appLanguageSelect = document.getElementById('appLanguage');
+    if (appLanguageSelect) {
+        appLanguageSelect.addEventListener('change', () => {
+            const value = appLanguageSelect.value || DEFAULT_LANGUAGE;
+            if (window.appI18n && typeof window.appI18n.setLanguage === 'function') {
+                window.appI18n.setLanguage(value);
+            }
+            autoSave();
+        });
+        appLanguageSelect.addEventListener('blur', autoSave);
+    }
+
     
     // Real-time validation of API key format and trigger home page detection
     document.getElementById('apiKey').addEventListener('input', (event) => {
@@ -50,6 +372,10 @@ function setupEventListeners() {
     
     // API URL changes also trigger real-time detection
     document.getElementById('apiUrl').addEventListener('input', autoSave);
+    const geminiApiKey = document.getElementById('geminiApiKey');
+    if (geminiApiKey) {
+        geminiApiKey.addEventListener('input', autoSave);
+    }
     
     // 寮曟搸鍒囨崲锛堣瘑鍒?缈昏瘧锛?
     const recognitionEngine = document.getElementById('recognitionEngine');
@@ -90,7 +416,7 @@ function setupEventListeners() {
     
     // Add auto-save on blur for all input fields
     const autoSaveInputs = [
-        'apiKey', 'apiUrl', 'openaiTranscribeModel', 'openaiTranslateModel', 'targetLanguage', 'customLanguage', 'transcribeLanguage',
+        'apiKey', 'apiUrl', 'openaiTranscribeModel', 'openaiTranslateModel', 'geminiApiKey', 'geminiTranslateModel', 'targetLanguage', 'customLanguage', 'transcribeLanguage',
         'translationMode', 'language1', 'language2', 'recognitionEngine', 'translationEngine', 'sonioxApiKey', 'dashscopeApiKey', 'qwen3AsrModel',
         'silenceThreshold', 'silenceDuration', 'theaterMode'
     ];
@@ -131,14 +457,13 @@ function attachGlobalAutoSave() {
   });
 }
 
-function debounce(fn, ms) { let h=null; return (...args)=>{ if (h) clearTimeout(h); h=setTimeout(()=>fn(...args), ms); }; }
-
 async function loadCurrentConfig() {
     try {
         currentConfig = await window.electronAPI.getConfig();
+        applyLanguageFromConfig(currentConfig);
         populateForm(currentConfig);
     } catch (error) {
-        showTopNotification(`Failed to load configuration: ${error.message}`, 'error');
+        showTopNotification(`${t('settings.notify.loadFailed')}: ${error.message}`, 'error');
     }
 }
 
@@ -157,7 +482,6 @@ function populateForm(config) {
     document.getElementById('apiUrl').value = config.openai_base_url || '';
     const sonioxEl = document.getElementById('sonioxApiKey');
     if (sonioxEl) sonioxEl.value = config.soniox_api_key || '';
-    
     const dashscopeEl = document.getElementById('dashscopeApiKey');
     if (dashscopeEl) dashscopeEl.value = config.dashscope_api_key || '';
     const qwenModelEl = document.getElementById('qwen3AsrModel');
@@ -168,6 +492,14 @@ function populateForm(config) {
     if (oaiTrModel) oaiTrModel.value = config.openai_transcribe_model || 'gpt-4o-transcribe';
     const oaiTlModel = document.getElementById('openaiTranslateModel');
     if (oaiTlModel) oaiTlModel.value = config.openai_translate_model || 'gpt-4o-mini';
+    const geminiKeyEl = document.getElementById('geminiApiKey');
+    if (geminiKeyEl) geminiKeyEl.value = config.gemini_api_key || '';
+    const geminiModelEl = document.getElementById('geminiTranslateModel');
+    if (geminiModelEl) geminiModelEl.value = config.gemini_translate_model || 'gemini-2.0-flash';
+    if (!config.gemini_translate_system_prompt || !String(config.gemini_translate_system_prompt).trim()) {
+        config.gemini_translate_system_prompt = DEFAULT_GEMINI_PROMPT;
+    }
+
     
     // Translation settings
     const enableTranslation = document.getElementById('enableTranslation');
@@ -208,6 +540,12 @@ function populateForm(config) {
     // Smart translation language settings
     document.getElementById('language1').value = config.smart_language1 || 'Chinese';
     document.getElementById('language2').value = config.smart_language2 || 'English';
+    const appLanguageSelect = document.getElementById('appLanguage');
+    if (appLanguageSelect) {
+        const langValue = (config.app_language === 'zh' || config.app_language === 'en') ? config.app_language : DEFAULT_LANGUAGE;
+        appLanguageSelect.value = langValue;
+    }
+
     
     // Advanced settings
     document.getElementById('silenceThreshold').value = config.silence_rms_threshold || 0.010;
@@ -338,6 +676,9 @@ function updateProviderVisibility() {
     document.querySelectorAll('.provider-openai-trans').forEach(el => {
         el.style.display = (tl === 'openai') ? '' : 'none';
     });
+    document.querySelectorAll('.provider-gemini-trans').forEach(el => {
+        el.style.display = (tl === 'gemini') ? '' : 'none';
+    });
     // Soniox：仅当识别引擎为 Soniox 时显示
     document.querySelectorAll('.provider-soniox').forEach(el => {
         el.style.display = (rec === 'soniox') ? '' : 'none';
@@ -400,7 +741,7 @@ async function saveSettingsInternal(silent = false) {
             
             if (!targetLang.trim()) {
                 if (!silent) {
-                    showTopNotification('Please set the target translation language', 'error');
+                    showTopNotification(t('settings.error.translationLanguageRequired'), 'error');
                 }
                 return false;
             }
@@ -410,13 +751,13 @@ async function saveSettingsInternal(silent = false) {
         currentConfig = config;
         
         if (!silent) {
-            showTopNotification('Settings saved', 'success');
+            showTopNotification(t('settings.notify.saved'), 'success');
         }
         return true;
         
     } catch (error) {
         if (!silent) {
-            showTopNotification(`Save failed: ${error.message}`, 'error');
+            showTopNotification(`${t('settings.notify.saveFailed')}: ${error.message}`, 'error');
         }
         console.error('Save settings error:', error);
         return false;
@@ -446,6 +787,21 @@ function collectFormData() {
     if (oaiTrModel) config.openai_transcribe_model = (oaiTrModel.value || '').trim();
     const oaiTlModel = document.getElementById('openaiTranslateModel');
     if (oaiTlModel) config.openai_translate_model = (oaiTlModel.value || '').trim();
+    const geminiKeyEl = document.getElementById('geminiApiKey');
+    if (geminiKeyEl) config.gemini_api_key = geminiKeyEl.value.trim();
+    const geminiModelEl = document.getElementById('geminiTranslateModel');
+    if (geminiModelEl) {
+        const geminiModelValue = (geminiModelEl.value || '').trim();
+        config.gemini_translate_model = geminiModelValue || 'gemini-2.0-flash';
+    } else {
+        config.gemini_translate_model = config.gemini_translate_model || 'gemini-2.0-flash';
+    }
+    const previousGeminiPrompt = (currentConfig && typeof currentConfig.gemini_translate_system_prompt === 'string')
+        ? currentConfig.gemini_translate_system_prompt
+        : '';
+    const trimmedPrompt = previousGeminiPrompt ? previousGeminiPrompt.trim() : '';
+    config.gemini_translate_system_prompt = trimmedPrompt || DEFAULT_GEMINI_PROMPT;
+
     
     // Translation settings
     config.enable_translation = document.getElementById('enableTranslation').checked;
@@ -465,6 +821,10 @@ function collectFormData() {
     // Smart translation languages
     config.smart_language1 = document.getElementById('language1').value.trim();
     config.smart_language2 = document.getElementById('language2').value.trim();
+
+    const appLanguageSelect = document.getElementById('appLanguage');
+
+    config.app_language = (appLanguageSelect ? appLanguageSelect.value : DEFAULT_LANGUAGE) || DEFAULT_LANGUAGE;
     
     // Recording settings
     config.transcribe_language = document.getElementById('transcribeLanguage').value;
@@ -555,6 +915,10 @@ function showTopNotification(message, type = 'info') {
         }
     }, 3000);
 }
+
+
+
+
 
 
 

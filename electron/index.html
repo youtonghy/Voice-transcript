@@ -1,9 +1,9 @@
-<!DOCTYPE html>
-<html lang="zh-CN">
+﻿<!DOCTYPE html>
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>语音转写翻译工具</title>
+    <title data-i18n="index.title">Voice Transcript Studio</title>
     <style>
         * {
             box-sizing: border-box;
@@ -12,7 +12,7 @@
         }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Apple Color Emoji', 'Noto Color Emoji', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
             background: #ffffff;
             margin: 0;
             padding: 0;
@@ -21,7 +21,7 @@
             color: #333;
         }
 
-        /* 固定顶部控制条 */
+        
         .control-bar {
             position: fixed;
             top: 0;
@@ -45,7 +45,7 @@
             margin: 0 auto;
         }
 
-        /* 控制条按钮（仅图标） */
+        
         .control-bar-btn {
             width: 45px;
             height: 45px;
@@ -67,25 +67,25 @@
             transform: translateY(-1px);
         }
 
-        /* 录音按钮（仅图标） */
+        
         .record-btn.start { color: #333; }
         .record-btn.stop { color: #d32f2f; }
         .record-btn.recording-active { color: #d32f2f; animation: pulse-icon 1.6s ease-in-out infinite; }
         .record-btn.recording-idle { color: #d32f2f; }
         .record-btn.disabled { color: #ccc !important; cursor: not-allowed !important; animation: none !important; }
 
-        /* 其他按钮（仅图标） */
+        
         .settings-btn, .media-btn, .keyboard-btn { color: #666; }
         .settings-btn:hover, .media-btn:hover, .keyboard-btn:hover { color: #111; }
 
-        /* 脉冲动画（图标缩放） */
+        
         @keyframes pulse-icon {
             0% { transform: scale(1); }
             50% { transform: scale(1.12); }
             100% { transform: scale(1); }
         }
 
-        /* 状态指示器（首页隐藏“就绪”提示） */
+        
         .status-indicator {
           display: none;
         }
@@ -111,19 +111,21 @@
             51%, 100% { opacity: 0.3; }
         }
 
-        /* 主内容区域 */
+        
         .main-content {
-          padding-top: 60px; /* 为固定控制条留出空间 */
-          padding-right: 72px; /* 为右侧边栏留出空间 */
-          padding-bottom: 140px; /* 为底部音量条留出空间 */
+          --volume-offset: 72px;
+          padding-top: 60px; 
+          padding-right: 72px; 
+          padding-bottom: var(--volume-offset);
+          transition: padding-bottom 0.25s ease;
           height: 100vh;
           overflow: hidden;
         }
 
-        /* 右侧边栏 */
+        
         .right-sidebar {
           position: fixed;
-          top: 60px; /* 避开顶部栏 */
+          top: 60px; 
           right: 0;
           bottom: 0;
           width: 72px;
@@ -134,10 +136,10 @@
           align-items: center;
           gap: 12px;
           padding: 12px 12px;
-          box-shadow: 0 0 0 rgba(0,0,0,0); /* 占位，便于将来扩展 */
+          box-shadow: 0 0 0 rgba(0,0,0,0); 
         }
 
-        /* 底部音量监视面板 */
+        
         .volume-panel {
           position: fixed;
           left: 0;
@@ -151,6 +153,34 @@
           flex-direction: column;
           gap: 10px;
           z-index: 900;
+          transition: transform 0.2s ease, padding 0.2s ease, max-height 0.25s ease;
+          max-height: 260px;
+          overflow: hidden;
+        }
+
+        .volume-panel.collapsed {
+          padding-top: 12px;
+          padding-bottom: 12px;
+          gap: 0;
+          max-height: 64px;
+        }
+
+        .volume-panel.collapsed .volume-header {
+          margin-bottom: 0;
+        }
+
+        .volume-panel.collapsed .volume-body {
+          display: none;
+        }
+
+        .volume-panel.expanded {
+          box-shadow: 0 -6px 18px rgba(0, 0, 0, 0.12);
+        }
+
+        .volume-body {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
         }
 
         .volume-header {
@@ -161,9 +191,51 @@
           color: #555;
         }
 
+        .volume-title {
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+          line-height: 1.2;
+        }
+
         .volume-header span:first-child {
           font-weight: 600;
           color: #333;
+        }
+
+        .volume-toggle-btn {
+          border: 1px solid #d8d8d8;
+          background: #f7f7f7;
+          color: #555;
+          font-size: 0.8rem;
+          border-radius: 16px;
+          padding: 4px 12px;
+          cursor: pointer;
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+        }
+
+        .volume-toggle-btn:hover {
+          background: #ececec;
+          color: #333;
+          border-color: #c8c8c8;
+        }
+
+        .volume-toggle-btn:focus-visible {
+          outline: 2px solid #1976d2;
+          outline-offset: 2px;
+        }
+
+        .volume-toggle-btn[data-expanded="true"]::after {
+          content: '\25B2';
+          font-size: 0.65rem;
+        }
+
+        .volume-toggle-btn[data-expanded="false"]::after {
+          content: '\25BC';
+          font-size: 0.65rem;
         }
 
         .volume-bar-wrapper {
@@ -245,13 +317,13 @@
           color: #999;
         }
 
-        /* 边栏按钮（复用基础按钮样式） */
+        
         .right-sidebar .control-bar-btn {
           width: 45px;
           height: 45px;
         }
 
-        /* 日志面板 */
+        
         .log-panel {
             height: 100%;
             background: white;
@@ -290,7 +362,7 @@
             display: block;
         }
 
-        /* 结果组合气泡：上半部分转写，下半部分翻译 */
+        
         .result-entry {
             background: #ffffff;
             border: 1px solid #e5e5e5;
@@ -366,7 +438,7 @@
             border-color: #000 !important;
         }
 
-        /* 响应式设计 */
+        
         @media (max-width: 768px) {
             .control-bar-content {
                 gap: 15px;
@@ -385,7 +457,7 @@
             }
 
             .status-text {
-                display: none; /* 移动端隐藏状态文本 */
+                display: none; 
             }
         }
 
@@ -404,61 +476,73 @@
     </style>
 </head>
 <body>
-    <!-- 固定顶部控制条（仅保留麦克风按钮） -->
-    <div class="control-bar">
-        <div class="control-bar-content">
-            <!-- 录音控制 -->
-            <button class="control-bar-btn record-btn start" id="recordButton" title="开始录音">
-                🎤
-            </button>
-        </div>
+  <div class="control-bar">
+    <div class="control-bar-content">
+      <button class="control-bar-btn record-btn start" id="recordButton" title="Start Recording" data-i18n-title="index.tooltips.recordStart">
+        🎙️
+      </button>
     </div>
+  </div>
 
-    <!-- 右侧边栏：设置与媒体转写置顶 -->
-    <div class="right-sidebar">
-      <button class="control-bar-btn keyboard-btn" onclick="openKeyboardSettings()" title="语音输入设置">⌨️</button>
-      <button class="control-bar-btn settings-btn" onclick="openSettings()" title="设置">⚙️</button>
-      <button class="control-bar-btn media-btn" onclick="openMediaTranscribe()" title="媒体文件转写">🎬</button>
+  <div class="right-sidebar">
+    <button class="control-bar-btn keyboard-btn" onclick="openKeyboardSettings()" title="Voice Input Settings" data-i18n-title="index.tooltips.voiceInput">&#x2328;&#xFE0F;</button>
+    <button class="control-bar-btn settings-btn" onclick="openSettings()" title="Settings" data-i18n-title="index.tooltips.settings">&#x2699;&#xFE0F;</button>
+    <button class="control-bar-btn media-btn" onclick="openMediaTranscribe()" title="Media File Transcription" data-i18n-title="index.tooltips.media">&#x1F39E;&#xFE0F;</button>
+  </div>
+
+  <div class="main-content">
+    <div class="log-panel">
+      <h2 data-i18n="index.logTitle">Real-Time Logs</h2>
+      <div class="log-container" id="logContainer"></div>
+      <div class="log-controls">
+        <button onclick="exportLogs()" data-i18n="index.buttons.exportLogs">Export Logs</button>
+        <button onclick="copyLastResult()" data-i18n="index.buttons.copyLatest">Copy Latest Result</button>
+        <button class="clear-btn" onclick="clearLogs()" data-i18n="index.buttons.clearLogs">Clear Logs</button>
+      </div>
     </div>
+  </div>
 
-    <!-- 主内容区域 -->
-    <div class="main-content">
-        <div class="log-panel">
-            <h2>实时日志</h2>
-            <div class="log-container" id="logContainer"></div>
-            <div class="log-controls">
-                <button onclick="exportLogs()">导出日志</button>
-                <button onclick="copyLastResult()">复制最新结果</button>
-                <button class="clear-btn" onclick="clearLogs()">清空日志</button>
-            </div>
-        </div>
+  <div class="volume-panel inactive collapsed" id="volumePanel">
+    <div class="volume-header">
+      <div class="volume-title">
+        <span data-i18n="index.volume.current">Current Volume</span>
+        <span id="volumeStatusText" data-i18n="index.volume.waiting">Waiting For Recording</span>
+      </div>
+      <button class="volume-toggle-btn" id="volumeToggleBtn" type="button" aria-expanded="false" aria-controls="volumeBody" data-expanded="false" data-i18n="index.volume.expand">Expand</button>
     </div>
-
-    <!-- 底部音量条 -->
-    <div class="volume-panel inactive" id="volumePanel">
-        <div class="volume-header">
-            <span>当前音量</span>
-            <span id="volumeStatusText">等待录音</span>
+    <div class="volume-body" id="volumeBody">
+      <div class="volume-bar-wrapper">
+        <div class="volume-scale">
+          <span>-60 dB</span>
+          <span>-40 dB</span>
+          <span>-20 dB</span>
+          <span>-10 dB</span>
+          <span>0 dB</span>
         </div>
-        <div class="volume-bar-wrapper">
-            <div class="volume-scale">
-                <span>-60 dB</span>
-                <span>-40 dB</span>
-                <span>-20 dB</span>
-                <span>-10 dB</span>
-                <span>0 dB</span>
-            </div>
-            <div class="volume-bar">
-                <div class="volume-silence" id="volumeSilence">静音范围</div>
-                <div class="volume-level idle" id="volumeLevel"></div>
-            </div>
+        <div class="volume-bar">
+          <div class="volume-silence" id="volumeSilence" data-i18n="index.volume.silenceRange">Silence Range</div>
+          <div class="volume-level idle" id="volumeLevel"></div>
         </div>
-        <div class="volume-values">
-            <span id="volumeDbValue">-inf dB</span>
-            <span id="volumeRmsValue">RMS 0.000</span>
-        </div>
+      </div>
+      <div class="volume-values">
+        <span id="volumeDbValue">-inf dB</span>
+        <span id="volumeRmsValue">RMS 0.000</span>
+      </div>
     </div>
+  </div>
 
-    <script src="renderer.js"></script>
+  <script src="i18n.js"></script>
+  <script src="locales/index.i18n.js"></script>
+  <script src="renderer.js"></script>
 </body>
 </html>
+
+
+
+
+
+
+
+
+
+

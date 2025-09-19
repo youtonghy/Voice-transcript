@@ -1,4 +1,4 @@
-# Repository Guidelines
+﻿# Repository Guidelines
 
 This repository contains an Electron desktop app with a bundled Python transcription backend. Use this guide to navigate the codebase, build artifacts, and contribute changes safely.
 
@@ -20,7 +20,7 @@ This repository contains an Electron desktop app with a bundled Python transcrip
 - Test media EXE: `node test-media-transcribe.js` (expects `dist-python/win/media_transcribe.exe`)
 
 ## Coding Style & Naming Conventions
-- Please use English when coding. Use Chinese for reply.
+- Please use English when coding. Use Chinese for reply. Use the UTF-8.
 - JavaScript/HTML: 2-space indent; semicolons; camelCase for variables/functions; PascalCase for classes; filenames: single-word `*.js` or kebab-case for multiword (e.g., `media-transcribe-renderer.js`).
 - Python: 4-space indent; snake_case for modules/functions; UPPER_SNAKE_CASE for constants.
 - Strings: prefer single quotes in JS; double quotes in JSON.
@@ -37,4 +37,8 @@ This repository contains an Electron desktop app with a bundled Python transcrip
 
 ## Security & Configuration Tips
 - Do not commit secrets. `config.json` holds API keys and is generated per-user. Typical locations: project root in dev; packaged app user-data in production.
-- Keep `ffmpeg.exe` in repo root for dev; it’s bundled for Windows builds.
+- Keep `ffmpeg.exe` in repo root for dev; it鈥檚 bundled for Windows builds.
+## Localization & Encoding
+- Keep all user-facing Chinese text inside localization assets (e.g., `locales/`) and reference them via `data-i18n` keys.
+- Write source code, identifiers, and comments in English only.
+- Save text files with UTF-8 encoding to avoid mojibake.

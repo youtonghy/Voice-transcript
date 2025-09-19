@@ -9,6 +9,9 @@ import os
 from typing import Optional
 import json
 from datetime import datetime
+import urllib.request
+import urllib.error
+import urllib.parse
 
 
 # ---------------------------- OpenAI helpers ----------------------------
@@ -94,6 +97,104 @@ def detect_language_openai(text: str, language1: str, language2: str, api_key: O
     if detected == language2:
         return language1
     return language2
+
+# ---------------------------- Gemini ----------------------------
+
+DEFAULT_GEMINI_MODEL = 'gemini-2.0-flash'
+DEFAULT_GEMINI_SYSTEM_PROMPT = (
+    'You are a professional translation assistant. Translate user text into {{TARGET_LANGUAGE}}.\n'
+    'Requirements:\n'
+    '1) Preserve the tone and intent of the original text.\n'
+    '2) Ensure the translation is natural and fluent.\n'
+    '3) If the input is already in {{TARGET_LANGUAGE}}, return it unchanged.\n'
+    '4) Respond with the translation only without additional commentary.'
+)
+
+
+def translate_gemini(
+    text: str,
+    target_language: str,
+    api_key: Optional[str],
+    model: Optional[str] = None,
+    system_prompt: Optional[str] = None,
+) -> Optional[str]:
+    if not text or not text.strip():
+        return None
+    key = api_key or os.environ.get('GEMINI_API_KEY') or os.environ.get('GOOGLE_API_KEY')
+    if not key:
+        raise RuntimeError('Missing Gemini API key')
+    model_name = (model or DEFAULT_GEMINI_MODEL).strip() or DEFAULT_GEMINI_MODEL
+    prompt = (system_prompt or DEFAULT_GEMINI_SYSTEM_PROMPT) or DEFAULT_GEMINI_SYSTEM_PROMPT
+    if target_language:
+        prompt = prompt.replace('{{TARGET_LANGUAGE}}', target_language)
+    else:
+        prompt = prompt.replace('{{TARGET_LANGUAGE}}', 'the target language')
+    body = {
+        'systemInstruction': {
+            'parts': [{'text': prompt}]
+        },
+        'contents': [
+            {
+                'role': 'user',
+                'parts': [{'text': text.strip()}]
+            }
+        ],
+        'generationConfig': {
+            'temperature': 0.1,
+            'topP': 0.95,
+            'maxOutputTokens': 2048,
+        }
+    }
+    data = json.dumps(body, ensure_ascii=False).encode('utf-8')
+    endpoint = (
+        f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
+        f"?key={urllib.parse.quote(key)}"
+    )
+    request = urllib.request.Request(
+        endpoint,
+        data=data,
+        headers={
+            'Content-Type': 'application/json; charset=utf-8'
+        }
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=60) as response:
+            payload = response.read().decode('utf-8')
+    except urllib.error.HTTPError as exc:
+        detail = ''
+        try:
+            detail = exc.read().decode('utf-8', 'ignore')
+        except Exception:
+            pass
+        message = detail or exc.reason or ''
+        raise RuntimeError(f'Gemini API error {exc.code}: {message}') from exc
+    except Exception as exc:
+        raise RuntimeError(f'Gemini API request failed: {exc}') from exc
+
+    try:
+        parsed = json.loads(payload) if isinstance(payload, str) else payload
+    except Exception as exc:
+        raise RuntimeError(f'Gemini API returned invalid JSON: {exc}') from exc
+
+    candidates = parsed.get('candidates') if isinstance(parsed, dict) else None
+    if isinstance(candidates, list):
+        for candidate in candidates:
+            content = candidate.get('content') if isinstance(candidate, dict) else None
+            if not isinstance(content, dict):
+                continue
+            parts = content.get('parts')
+            if isinstance(parts, list):
+                for part in parts:
+                    text_part = part.get('text') if isinstance(part, dict) else None
+                    if isinstance(text_part, str) and text_part.strip():
+                        return text_part.strip()
+    # Fallback: top-level text field
+    top_level_text = parsed.get('text') if isinstance(parsed, dict) else None
+    if isinstance(top_level_text, str) and top_level_text.strip():
+        return top_level_text.strip()
+    return None
+
+
 
 
 # ---------------------------- Qwen3-ASR (DashScope) ----------------------------
