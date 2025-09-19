@@ -8,7 +8,6 @@ let sonioxConfigured = false; // Whether Soniox is configured (when required)
 let geminiConfigured = false; // Whether Gemini is configured when selected
 // Qwen3-ASR removed
 let translationEnabled = true; // Read from config, used to control combined display
-let currentResultNode = null; // Current combined result bubble
 let resultNodes = new Map(); // Result node mapping table, key is result_id, value is DOM element
 let currentConfig = {}; // Store current configuration
 let configCheckInterval = null; // Timer for periodic configuration checks
@@ -29,9 +28,25 @@ const mainContent = document.querySelector('.main-content');
 
 const VOLUME_MIN_DB = -60;
 const VOLUME_MAX_DB = 0;
+const SILENCE_PLACEHOLDER_DB = (VOLUME_MIN_DB + VOLUME_MAX_DB) / 2;
 let silenceMarkerDb = null;
 
 const DEFAULT_LANGUAGE = 'en';
+
+function formatSilenceLabel(db) {
+    const template = t('index.volume.silenceRangeLabel');
+    if (template && template !== 'index.volume.silenceRangeLabel' && template.includes('{value}') && typeof db === 'number' && isFinite(db)) {
+        return template.replace('{value}', db.toFixed(1));
+    }
+    const fallback = t('index.volume.silenceRange');
+    if (fallback && fallback !== 'index.volume.silenceRange') {
+        return fallback;
+    }
+    if (typeof db === 'number' && isFinite(db)) {
+        return `${t('index.volume.silenceRange')} (${db.toFixed(1)} dB)`;
+    }
+    return t('index.volume.silenceRange');
+}
 
 function setDocumentLanguage(lang) {
     if (document && document.documentElement) {
@@ -44,6 +59,24 @@ function getCurrentLanguage() {
         return window.appI18n.getLanguage();
     }
     return DEFAULT_LANGUAGE;
+}
+
+function changeLanguage(lang) {
+    let normalized = lang;
+
+    if (!window.appI18n || typeof window.appI18n.setLanguage !== 'function') {
+        setDocumentLanguage(lang);
+    } else {
+        normalized = window.appI18n.setLanguage(lang);
+        setDocumentLanguage(normalized);
+    }
+
+    currentConfig = currentConfig || {};
+    if (currentConfig.app_language !== normalized) {
+        currentConfig.app_language = normalized;
+    }
+
+    document.title = t('index.title');
 }
 
 function getLocalizedList(key) {
@@ -90,13 +123,9 @@ function t(key) {
 }
 
 function applyLanguageFromConfig(cfg) {
-    if (!window.appI18n || typeof window.appI18n.setLanguage !== 'function') {
-        return;
-    }
     const lang = (cfg && cfg.app_language) || DEFAULT_LANGUAGE;
-    setDocumentLanguage(lang);
-    window.appI18n.setLanguage(lang);
-    if (typeof window.appI18n.apply === 'function') {
+    changeLanguage(lang);
+    if (window.appI18n && typeof window.appI18n.apply === 'function') {
         window.appI18n.apply();
     }
     document.title = t('index.title');
@@ -282,6 +311,17 @@ function updateServiceStatus(status) {
         statusText.textContent = t(statusKeyMap[status] || status);
     }
 
+    if (statusDot && !isRecording) {
+        const statusClassMap = {
+            running: 'running',
+            starting: 'starting',
+            error: 'error',
+            stopped: 'stopped'
+        };
+        const statusClass = statusClassMap[status] || 'idle';
+        statusDot.className = `status-dot ${statusClass}`;
+    }
+
     if (status !== 'running') {
         recordButton.disabled = true;
         recordButton.textContent = '馃敡';
@@ -363,7 +403,14 @@ function updateUI() {
         recordButton.title = t('index.tooltips.recordStart');
         recordButton.className = 'control-bar-btn record-btn start';
         if (typeof statusDot !== 'undefined' && statusDot) {
-            statusDot.className = 'status-dot idle';
+            const statusClassMap = {
+                running: 'running',
+                starting: 'starting',
+                error: 'error',
+                stopped: 'stopped'
+            };
+            const dotClass = statusClassMap[pythonServiceStatus] || 'idle';
+            statusDot.className = `status-dot ${dotClass}`;
         }
         if (typeof statusText !== 'undefined' && statusText) {
             statusText.textContent = pythonServiceStatus === 'running'
@@ -391,9 +438,8 @@ function setVolumeRecordingState(active) {
             volumeLevelEl.className = 'volume-level low';
         }
         if (volumeSilenceEl && silenceMarkerDb === null) {
-            const labelTemplate = t('index.volume.silenceRangeLabel');
-    volumeSilenceEl.textContent = labelTemplate.replace('{value}', clamped.toFixed(1));
             volumeSilenceEl.style.width = '33%';
+            volumeSilenceEl.textContent = formatSilenceLabel(SILENCE_PLACEHOLDER_DB);
         }
     } else {
         volumePanel.classList.remove('active');
@@ -415,8 +461,7 @@ function setVolumeRecordingState(active) {
         }
         if (volumeSilenceEl) {
             volumeSilenceEl.style.width = '33%';
-            const labelTemplate = t('index.volume.silenceRangeLabel');
-    volumeSilenceEl.textContent = labelTemplate.replace('{value}', clamped.toFixed(1));
+            volumeSilenceEl.textContent = formatSilenceLabel(SILENCE_PLACEHOLDER_DB);
         }
         silenceMarkerDb = null;
     }
@@ -503,8 +548,7 @@ function updateSilenceMarker(db) {
     const percent = ((clamped - VOLUME_MIN_DB) / (VOLUME_MAX_DB - VOLUME_MIN_DB)) * 100;
     const width = Math.max(0, Math.min(100, percent));
     volumeSilenceEl.style.width = `${width}%`;
-    const labelTemplate = t('index.volume.silenceRangeLabel');
-    volumeSilenceEl.textContent = labelTemplate.replace('{value}', clamped.toFixed(1));
+    volumeSilenceEl.textContent = formatSilenceLabel(clamped);
 }
 
 function updateVolumeMeter(payload) {
@@ -677,36 +721,6 @@ function handlePythonMessage(message) {
     }
 }
 
-function addResultBubble(transcription, translation = null, translationPending = false) {
-    const container = document.getElementById('results');
-    const bubble = document.createElement('div');
-    bubble.className = 'result-bubble';
-    
-    const transcriptionDiv = document.createElement('div');
-    transcriptionDiv.className = 'transcription';
-    transcriptionDiv.textContent = transcription;
-    bubble.appendChild(transcriptionDiv);
-    
-    if (translation) {
-        const translationDiv = document.createElement('div');
-        translationDiv.className = 'translation';
-        translationDiv.textContent = translation;
-        bubble.appendChild(translationDiv);
-    } else if (translationPending) {
-        const translationDiv = document.createElement('div');
-        translationDiv.className = 'translation pending';
-        const loadingSpan = document.createElement('span');
-        loadingSpan.className = 'translation-loading';
-        loadingSpan.textContent = t('index.translation.loading');
-        translationDiv.appendChild(loadingSpan);
-        bubble.appendChild(translationDiv);
-    }
-container.appendChild(bubble);
-    container.scrollTop = container.scrollHeight;
-    
-    return bubble;
-}
-
 function updateTranslationInBubble(bubble, translation) {
     let translationDiv = bubble.querySelector('.result-part.translation') || bubble.querySelector('.translation');
     if (translationDiv) {
@@ -763,15 +777,18 @@ function renderResultEntry(transcription, translation = null, translationPending
         tranDiv.textContent = translation;
         entry.appendChild(tranDiv);
     } else if (translationPending) {
+        if (transcription && !transcriptionPending) {
+            const sep = document.createElement('div');
+            sep.className = 'result-separator';
+            entry.appendChild(sep);
+        }
         const translationDiv = document.createElement('div');
-        translationDiv.className = 'translation pending';
-        const loadingSpan = document.createElement('span');
-        loadingSpan.className = 'translation-loading';
-        loadingSpan.textContent = t('index.translation.loading');
-        translationDiv.appendChild(loadingSpan);
-        bubble.appendChild(translationDiv);
+        translationDiv.className = 'result-part translation pending';
+        translationDiv.textContent = t('index.translation.loading');
+        entry.appendChild(translationDiv);
     }
-logContainer.appendChild(entry);
+
+    logContainer.appendChild(entry);
     logContainer.scrollTop = logContainer.scrollHeight;
     return entry;
 }
@@ -796,7 +813,10 @@ function addLogEntry(level, message) {
 }
 
 function clearResults() {
-    document.getElementById('results').innerHTML = '';
+    const container = document.getElementById('results');
+    if (container) {
+        container.innerHTML = '';
+    }
     resultNodes.clear();
     lastTranscription = '';
     lastTranslation = '';
