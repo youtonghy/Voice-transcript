@@ -42,3 +42,6 @@ This repository contains an Electron desktop app with a bundled Python transcrip
 - Keep all user-facing Chinese text inside localization assets (e.g., `locales/`) and reference them via `data-i18n` keys.
 - Write source code, identifiers, and comments in English only.
 - Save text files with UTF-8 encoding to avoid mojibake.
+
+## Agent Activity Log
+- Updated settings UI to use sidebar-driven sections and added JS toggling logic.

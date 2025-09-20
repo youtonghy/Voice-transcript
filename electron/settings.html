@@ -82,31 +82,107 @@
         }
 
         .settings-container {
-            max-width: 700px;
+            max-width: 1200px;
             margin: 0 auto;
+            padding: 80px 20px 40px;
+            display: flex;
+            gap: 24px;
+            align-items: flex-start;
+        }
+
+        .settings-sidebar {
+            flex: 0 0 220px;
             background: #ffffff;
             border: 1px solid #e5e5e5;
             border-radius: 12px;
-            padding: 30px;
+            padding: 16px;
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-            margin-top: 80px; /* spacing*/
+            position: sticky;
+            top: 80px;
+        }
+
+        .sidebar-title {
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: #666;
+            margin-bottom: 12px;
+        }
+
+        .sidebar-nav {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .sidebar-item {
+            border: none;
+            background: transparent;
+            text-align: left;
+            padding: 10px 12px;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            color: #555;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .sidebar-item:hover {
+            background: #f5f5f5;
+            color: #222;
+        }
+
+        .sidebar-item.active {
+            background: #333;
+            color: #fff;
+        }
+
+        .settings-main {
+            flex: 1;
+            background: #ffffff;
+            border: 1px solid #e5e5e5;
+            border-radius: 12px;
+            padding: 32px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
         }
 
         .settings-header {
-            text-align: center;
-            margin-bottom: 30px;
+            margin-bottom: 24px;
         }
 
         .settings-header h1 {
             color: #333;
             font-size: 1.8rem;
             font-weight: 600;
-            margin-bottom: 10px;
+            margin-bottom: 6px;
         }
 
         .settings-header p {
             color: #666;
             font-size: 0.9rem;
+        }
+
+        .settings-section {
+            display: none;
+            animation: fadeIn 0.2s ease;
+        }
+
+        .settings-section.active {
+            display: block;
+        }
+
+        .section-group + .section-group {
+            margin-top: 28px;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(6px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
         .form-group {
@@ -372,6 +448,42 @@
             color: #666;
             margin-top: 6px;
         }
+
+        @media (max-width: 960px) {
+            .settings-container {
+                flex-direction: column;
+                padding: 80px 16px 32px;
+            }
+
+            .settings-sidebar {
+                width: 100%;
+                position: static;
+                display: flex;
+                flex-direction: column;
+                gap: 12px;
+            }
+
+            .sidebar-nav {
+                flex-direction: row;
+                flex-wrap: wrap;
+                gap: 8px;
+            }
+
+            .sidebar-item {
+                flex: 1 1 120px;
+                text-align: center;
+            }
+        }
+
+        @media (max-width: 600px) {
+            .settings-header h1 {
+                font-size: 1.5rem;
+            }
+
+            .settings-main {
+                padding: 24px;
+            }
+        }
     </style>
 </head>
 <body>
@@ -391,110 +503,109 @@
     <div class="top-notification" id="topNotification"></div>
     
     <div class="settings-container">
-        <div class="settings-header">
+        <aside class="settings-sidebar">
+            <div class="sidebar-title">Sections</div>
+            <div class="sidebar-nav">
+                <button type="button" class="sidebar-item active" data-section="engine">Engine</button>
+                <button type="button" class="sidebar-item" data-section="transcription">Transcription</button>
+                <button type="button" class="sidebar-item" data-section="translation">Translation</button>
+                <button type="button" class="sidebar-item" data-section="recording">Recording</button>
+                <button type="button" class="sidebar-item" data-section="interface">Interface</button>
+            </div>
+        </aside>
+        <div class="settings-main">
+            <div class="settings-header">
             <h1>Settings</h1>
             <p>Configure API keys and transcription/translation options</p>
         </div>
 
         <form id="settingsForm">
-            <div class="section-title">Recognition Engine</div>
-            <div class="form-group">
-                <label for="recognitionEngine">Recognition Engine</label>
-                <select id="recognitionEngine" name="recognition_engine">
-                    <option value="openai" selected>OpenAI</option>
-                    <option value="soniox">Soniox</option>
-                    <option value="qwen3-asr">Qwen3-ASR (DashScope)</option>
-                </select>
-                <div class="form-note">Choose the provider for speech recognition (transcription)</div>
-            </div>
-            <div class="form-group provider-openai-rec">
-                <label for="openaiTranscribeModel">Transcribe Model</label>
-                <input type="text" id="openaiTranscribeModel" name="openai_transcribe_model" placeholder="gpt-4o-transcribe">
-                <div class="form-note">Audio transcription model (default gpt-4o-transcribe)</div>
-            </div>
-            <div class="form-group provider-soniox" style="display:none;">
-                <label for="sonioxApiKey">Soniox API Key</label>
-                <input type="password" id="sonioxApiKey" name="soniox_api_key" placeholder="sxk-...">
-                <div class="form-note">Required when the recognition engine is Soniox</div>
-            </div>
-            <div class="form-group provider-qwen3-asr" style="display:none;">
-                <label for="dashscopeApiKey">DashScope API Key</label>
-                <input type="password" id="dashscopeApiKey" name="dashscope_api_key" placeholder="sk-...">
-                <div class="form-note">Qwen3-ASR is provided via DashScope. Enter your DashScope API Key (or set environment variable DASHSCOPE_API_KEY).</div>
-            </div>
-            <div class="form-group provider-qwen3-asr" style="display:none;">
-                <label for="qwen3AsrModel">Qwen3-ASR Model</label>
-                <input type="text" id="qwen3AsrModel" name="qwen3_asr_model" placeholder="qwen3-asr-flash">
-                <div class="form-note">Default is qwen3-asr-flash; change if you need another model</div>
-            </div>
-            
+            <section class="settings-section active" data-section="engine">
+                <div class="section-group">
+                    <div class="section-title" data-section-key="recognition">Recognition Engine</div>
+                    <div class="form-group">
+                        <label for="recognitionEngine">Recognition Engine</label>
+                        <select id="recognitionEngine" name="recognition_engine">
+                            <option value="openai" selected>OpenAI</option>
+                            <option value="soniox">Soniox</option>
+                            <option value="qwen3-asr">Qwen3-ASR (DashScope)</option>
+                        </select>
+                        <div class="form-note">Choose the provider for speech recognition (transcription)</div>
+                    </div>
+                    <div class="form-group provider-openai-rec">
+                        <label for="openaiTranscribeModel">Transcribe Model</label>
+                        <input type="text" id="openaiTranscribeModel" name="openai_transcribe_model" placeholder="gpt-4o-transcribe">
+                        <div class="form-note">Audio transcription model (default gpt-4o-transcribe)</div>
+                    </div>
+                    <div class="form-group provider-soniox" style="display:none;">
+                        <label for="sonioxApiKey">Soniox API Key</label>
+                        <input type="password" id="sonioxApiKey" name="soniox_api_key" placeholder="sxk-...">
+                        <div class="form-note">Required when the recognition engine is Soniox</div>
+                    </div>
+                    <div class="form-group provider-qwen3-asr" style="display:none;">
+                        <label for="dashscopeApiKey">DashScope API Key</label>
+                        <input type="password" id="dashscopeApiKey" name="dashscope_api_key" placeholder="sk-...">
+                        <div class="form-note">Qwen3-ASR is provided via DashScope. Enter your DashScope API Key (or set environment variable DASHSCOPE_API_KEY).</div>
+                    </div>
+                    <div class="form-group provider-qwen3-asr" style="display:none;">
+                        <label for="qwen3AsrModel">Qwen3-ASR Model</label>
+                        <input type="text" id="qwen3AsrModel" name="qwen3_asr_model" placeholder="qwen3-asr-flash">
+                        <div class="form-note">Default is qwen3-asr-flash; change if you need another model</div>
+                    </div>
+                </div>
 
-            <div class="divider"></div>
+                <div class="section-group">
+                    <div class="section-title" data-section-key="translationEngine">Translation Engine</div>
+                    <div class="form-group">
+                        <label for="translationEngine">Translation Engine</label>
+                        <select id="translationEngine" name="translation_engine">
+                            <option value="openai" selected>OpenAI (default gpt-4o-mini)</option>
+                            <option value="gemini">Gemini (default gemini-2.0-flash)</option>
+                        </select>
+                        <div class="form-note">Choose the provider for text translation (OpenAI or Gemini)</div>
+                    </div>
+                    <div class="form-group provider-gemini-trans">
+                        <label for="geminiApiKey">Gemini API Key</label>
+                        <input type="password" id="geminiApiKey" name="gemini_api_key" placeholder="AIza...">
+                        <div class="form-note">Gemini Developer API key stored locally for translation</div>
+                    </div>
+                    <div class="form-group provider-gemini-trans">
+                        <label for="geminiTranslateModel">Gemini Model</label>
+                        <input type="text" id="geminiTranslateModel" name="gemini_translate_model" placeholder="gemini-2.0-flash">
+                        <div class="form-note">Default system prompt is generated automatically; override the model if needed</div>
+                    </div>
+                    <div class="form-group provider-openai-trans">
+                        <label for="openaiTranslateModel">Translate Model</label>
+                        <input type="text" id="openaiTranslateModel" name="openai_translate_model" placeholder="gpt-4o-mini">
+                        <div class="form-note">Model used for text translation</div>
+                    </div>
+                </div>
 
-            <div class="section-title">Translation Engine</div>
-            <div class="form-group">
-                <label for="translationEngine">Translation Engine</label>                <select id="translationEngine" name="translation_engine">
+                <div class="section-group">
+                    <div class="section-title" data-section-key="openaiCommon">OpenAI Common Settings</div>
+                    <div class="form-group provider-openai-common">
+                        <label for="apiKey">OpenAI API Key</label>
+                        <input type="password" id="apiKey" name="openai_api_key" placeholder="sk-...">
+                        <div class="form-note">Saved to local config.json; shared by transcription and translation</div>
+                    </div>
+                    <div class="form-group provider-openai-common">
+                        <label for="apiUrl">API Base URL (optional)</label>
+                        <input type="url" id="apiUrl" name="openai_base_url" placeholder="https://api.openai.com/v1">
+                        <div class="form-note">Leave empty to use OpenAI default; if custom, end with /v1</div>
+                    </div>
+                </div>
+            </section>
 
-                    <option value="openai" selected>OpenAI (default gpt-4o-mini)</option>
+            <section class="settings-section" data-section="translation">
+                <div class="section-group">
+                    <div class="section-title" data-section-key="translation">Translation Settings</div>
 
-                    <option value="gemini">Gemini (default gemini-2.0-flash)</option>
-
-                </select>
-
-                <div class="form-note">Choose the provider for text translation (OpenAI or Gemini)</div>
-            </div>
-            <div class="form-group provider-gemini-trans">
-
-                <label for="geminiApiKey">Gemini API Key</label>
-
-                <input type="password" id="geminiApiKey" name="gemini_api_key" placeholder="AIza...">
-
-                <div class="form-note">Gemini Developer API key stored locally for translation</div>
-
-            </div>
-
-            <div class="form-group provider-gemini-trans">
-
-                <label for="geminiTranslateModel">Gemini Model</label>
-
-                <input type="text" id="geminiTranslateModel" name="gemini_translate_model" placeholder="gemini-2.0-flash">
-
-                <div class="form-note">Default system prompt is generated automatically; override the model if needed</div>
-
-            </div>
-
-
-
-            <div class="form-group provider-openai-trans">
-                <label for="openaiTranslateModel">Translate Model</label>
-                <input type="text" id="openaiTranslateModel" name="openai_translate_model" placeholder="gpt-4o-mini">
-                <div class="form-note">Model used for text translation</div>
-            </div>
-
-            <div class="divider"></div>
-
-            <div class="section-title">OpenAI Common Settings</div>
-            <div class="form-group provider-openai-common">
-                <label for="apiKey">OpenAI API Key</label>
-                <input type="password" id="apiKey" name="openai_api_key" placeholder="sk-...">
-                <div class="form-note">Saved to local config.json; shared by transcription and translation</div>
-            </div>
-            <div class="form-group provider-openai-common">
-                <label for="apiUrl">API Base URL (optional)</label>
-                <input type="url" id="apiUrl" name="openai_base_url" placeholder="https://api.openai.com/v1">
-                <div class="form-note">Leave empty to use OpenAI default; if custom, end with /v1</div>
-            </div>
-
-            <div class="divider"></div>
-
-            <div class="section-title">Translation Settings</div>
-
-            <div class="checkbox-group">
+                    <div class="checkbox-group">
                 <input type="checkbox" id="enableTranslation" name="enable_translation">
                 <label for="enableTranslation">Enable Auto Translation</label>
             </div>
 
-            <div class="form-group" id="translationSettings">
+                    <div class="form-group" id="translationSettings">
                 <label for="translationMode">Translation Mode</label>
                 <select id="translationMode" name="translation_mode">
                     <option value="fixed" selected>Fixed Translation</option>
@@ -582,17 +693,19 @@
                         <option value="Ukrainian">Ukrainian</option>
                         <option value="Czech">Czech</option>
                     </select>
-                    <div class="form-note">
-                        
+                            <div class="form-note">
+                                
+                            </div>
+                        </div>
                     </div>
                 </div>
-            </div>
+            </section>
 
-            <div class="divider"></div>
-
-            <div class="section-title">Transcription Settings</div>
+            <section class="settings-section" data-section="transcription">
+                <div class="section-group">
+                    <div class="section-title" data-section-key="transcription">Transcription Settings</div>
             
-            <div class="form-group">
+                    <div class="form-group">
                 <label for="transcribeLanguage">Transcription Language</label>
                 <select id="transcribeLanguage" name="transcribe_language">
                     <option value="auto" selected>Auto Detect</option>
@@ -618,50 +731,54 @@
                 <div class="form-note">Choosing "Auto Detect" will not use a prompt; choosing a specific language will use the prompt "Please transcribe in XX language".<br><strong>Note: In Smart translation mode, transcription language will be auto-detected.</strong></div>
             </div>
 
-            <div class="divider"></div>
+                </div>
+            </section>
 
-            <div class="section-title">Recording Settings</div>
+            <section class="settings-section" data-section="recording">
+                <div class="section-group">
+                    <div class="section-title" data-section-key="recording">Recording Settings</div>
 
-            <div class="form-group">
+                    <div class="form-group">
                 <label for="silenceThreshold">Silence Threshold</label>
                 <input type="number" id="silenceThreshold" name="silence_rms_threshold" 
                        min="0.001" max="0.1" step="0.001" value="0.01">
                 <div class="form-note">Smaller is more sensitive. Recommended range: 0.005-0.02</div>
-            </div>
+                    </div>
 
-            <div class="form-group">
+                    <div class="form-group">
                 <label for="silenceDuration">Silence Split Duration (seconds)</label>
                 <input type="number" id="silenceDuration" name="min_silence_seconds" 
                        min="0.5" max="5" step="0.1" value="1.0">
                 <div class="form-note">
                     Split when continuous silence exceeds this duration
                 </div>
-            </div>
+                    </div>
 
-            <div class="checkbox-group">
+                    <div class="checkbox-group">
                 <input type="checkbox" id="theaterMode" name="theater_mode">
                 <label for="theaterMode">Theater Mode</label>
-            </div>
-            <div class="form-note" style="margin-left: 32px; margin-top: -15px; margin-bottom: 20px;">
-                Amplify quiet audio to normal speech volume to improve recognition.
-            </div>
+                    </div>
+                    <div class="form-note inline-note">
+                        Amplify quiet audio to normal speech volume to improve recognition.
+                    </div>
+                </div>
+            </section>
 
-            <div class="divider"></div>
+            <section class="settings-section" data-section="interface">
+                <div class="section-group">
+                    <div class="section-title" data-section-key="interface">Interface Language</div>
 
-            <div class="section-title">Interface Language</div>
+                    <div class="form-group">
+                        <label for="appLanguage">Choose Language</label>
+                        <select id="appLanguage" name="app_language">
+                            <option value="en" selected>English</option>
+                            <option value="zh" data-i18n="settings.languageOption.zh">Simplified Chinese</option>
+                        </select>
+                        <div class="form-note">Changes take effect immediately and will be saved to your configuration.</div>
+                    </div>
 
-            <div class="form-group">
-                <label for="appLanguage">Choose Language</label>
-                <select id="appLanguage" name="app_language">
-                    <option value="en" selected>English</option>
-                    <option value="zh" data-i18n="settings.languageOption.zh">Simplified Chinese</option>
-                </select>
-                <div class="form-note">Changes take effect immediately and will be saved to your configuration.</div>
-            </div>
-
-            <div class="divider"></div>
-
-            
+                </div>
+            </section>
 
             <div id="statusMessage"></div>
 
@@ -669,6 +786,7 @@
                 <a href="#" onclick="window.close(); return false;" class="btn btn-secondary" data-i18n="common.backLink">Back</a>
             </div>
         </form>
+        </div>
     </div>
 
     <script src="i18n.js"></script>

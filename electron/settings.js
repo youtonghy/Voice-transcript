@@ -1,6 +1,8 @@
 ﻿(function () {
   const DEFAULT_LANGUAGE = 'en';
   const AUTO_SAVE_DELAY = 800;
+  const DEFAULT_SECTION = 'engine';
+  const SECTION_IDS = ['engine', 'transcription', 'translation', 'recording', 'interface'];
   const DEFAULT_GEMINI_PROMPT = [
     'You are a professional translation assistant.',
     'Translate user text into {{TARGET_LANGUAGE}}.',
@@ -13,6 +15,7 @@
 
   let currentConfig = {};
   let autoSaveTimer = null;
+  let currentSection = DEFAULT_SECTION;
 
   function t(key) {
     if (window.appI18n && typeof window.appI18n.t === 'function') {
@@ -63,19 +66,19 @@
       headerSubtitle.dataset.i18n = 'settings.header.subtitle';
     }
 
-    const sectionTitleKeys = [
-      'settings.section.recognitionEngine',
-      'settings.section.translationEngine',
-      'settings.section.openaiCommon',
-      'settings.section.translation',
-      'settings.section.transcription',
-      'settings.section.recording',
-      'settings.section.interfaceLanguage'
-    ];
-    document.querySelectorAll('.section-title').forEach((element, index) => {
-      const key = sectionTitleKeys[index];
-      if (key) {
-        element.dataset.i18n = key;
+    const sectionTitleMap = {
+      recognition: 'settings.section.recognitionEngine',
+      translationEngine: 'settings.section.translationEngine',
+      openaiCommon: 'settings.section.openaiCommon',
+      translation: 'settings.section.translation',
+      transcription: 'settings.section.transcription',
+      recording: 'settings.section.recording',
+      interface: 'settings.section.interfaceLanguage'
+    };
+    Object.entries(sectionTitleMap).forEach(([key, i18nKey]) => {
+      const element = document.querySelector(`.section-title[data-section-key="${key}"]`);
+      if (element) {
+        element.dataset.i18n = i18nKey;
       }
     });
 
@@ -149,6 +152,59 @@
       } else {
         el.dataset.i18n = key;
       }
+    });
+  }
+
+  function activateSection(sectionId, options = {}) {
+    const { updateHash = true } = options;
+    let nextSection = sectionId;
+    if (!SECTION_IDS.includes(nextSection)) {
+      nextSection = DEFAULT_SECTION;
+    }
+
+    document.querySelectorAll('.settings-section').forEach((section) => {
+      const isActive = section.dataset.section === nextSection;
+      section.classList.toggle('active', isActive);
+    });
+
+    document.querySelectorAll('.sidebar-item').forEach((item) => {
+      const isActive = item.dataset.section === nextSection;
+      item.classList.toggle('active', isActive);
+    });
+
+    currentSection = nextSection;
+    if (updateHash) {
+      const targetHash = `#${nextSection}`;
+      if (window.location.hash !== targetHash) {
+        try {
+          history.replaceState(null, '', targetHash);
+        } catch (_) {
+          // ignore history errors
+        }
+      }
+    }
+  }
+
+  function setupSidebarNavigation() {
+    const sidebarItems = document.querySelectorAll('.sidebar-item');
+    if (!sidebarItems.length) {
+      return;
+    }
+    const activeItem = document.querySelector('.sidebar-item.active');
+    if (activeItem && SECTION_IDS.includes(activeItem.dataset.section)) {
+      currentSection = activeItem.dataset.section;
+    } else {
+      currentSection = DEFAULT_SECTION;
+      activateSection(DEFAULT_SECTION, { updateHash: false });
+    }
+    sidebarItems.forEach((item) => {
+      item.addEventListener('click', () => {
+        const targetSection = item.dataset.section;
+        if (!targetSection) {
+          return;
+        }
+        activateSection(targetSection);
+      });
     });
   }
 
@@ -286,6 +342,10 @@
   function scrollToHashSection() {
     const hash = (window.location.hash || '').replace(/^#/, '');
     if (!hash) return;
+    if (SECTION_IDS.includes(hash)) {
+      activateSection(hash, { updateHash: false });
+      return;
+    }
     const el = document.getElementById(hash);
     if (el && typeof el.scrollIntoView === 'function') {
       setTimeout(() => {
@@ -629,6 +689,7 @@
 
   document.addEventListener('DOMContentLoaded', () => {
     initializeLanguage();
+    setupSidebarNavigation();
     setupEventListeners();
     loadCurrentConfig();
     scrollToHashSection();
