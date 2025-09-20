@@ -125,6 +125,12 @@
           color: #333;
         }
 
+        .history-actions {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+
         .history-create-btn {
           padding: 6px 12px;
           border-radius: 6px;
@@ -141,22 +147,19 @@
           border-color: #333;
         }
 
-        .history-list {
-          margin-top: 16px;
-          flex: 1;
-          overflow-y: auto;
-          display: flex;
-          flex-direction: column;
-          gap: 10px;
-        }
         .history-toggle-btn {
-          padding: 6px 12px;
+          width: 32px;
+          height: 32px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          padding: 0;
           border-radius: 6px;
           border: 1px solid #e5e5e5;
           background: #ffffff;
           color: #333;
           cursor: pointer;
-          font-size: 0.85rem;
+          font-size: 1rem;
           transition: all 0.2s ease;
           flex-shrink: 0;
         }
@@ -166,11 +169,38 @@
           border-color: #333;
         }
 
+        .history-list {
+          margin-top: 16px;
+          flex: 1;
+          overflow-y: auto;
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
         .main-content.history-collapsed .history-panel {
+          flex: 0 0 54px;
+          min-width: 54px;
+          padding: 16px 10px;
+          align-items: center;
+        }
+
+        .main-content.history-collapsed .history-header {
+          flex-direction: column;
+          align-items: center;
+          gap: 12px;
+        }
+
+        .main-content.history-collapsed .history-header h2,
+        .main-content.history-collapsed .history-actions .history-create-btn,
+        .main-content.history-collapsed .history-list {
           display: none;
         }
 
+        .main-content.history-collapsed .history-actions {
+          flex-direction: column;
+        }
 
+        
         .history-item {
           display: flex;
           flex-direction: column;
@@ -614,7 +644,10 @@
     <div class="history-panel" id="historyPanel">
       <div class="history-header">
         <h2 data-i18n="index.history.title">History</h2>
-        <button type="button" class="history-create-btn" id="newConversationButton" data-i18n="index.history.newConversation">New Conversation</button>
+        <div class="history-actions">
+          <button type="button" class="history-create-btn" id="newConversationButton" data-i18n="index.history.newConversation">New Conversation</button>
+          <button type="button" class="history-toggle-btn" id="toggleHistoryButton" aria-label="Hide History" title="Hide History">&#x2190;</button>
+        </div>
       </div>
       <div class="history-list" id="historyList">
         <div class="history-empty" data-i18n="index.history.empty">No conversations yet</div>
@@ -626,7 +659,6 @@
           <h2 data-i18n="index.logTitle">Real-Time Logs</h2>
           <span class="active-conversation-name" id="activeConversationName"></span>
         </div>
-        <button type="button" class="history-toggle-btn" id="toggleHistoryButton">Hide History</button>
       </div>
       <div class="log-container" id="logContainer"></div>
       <div class="log-controls">

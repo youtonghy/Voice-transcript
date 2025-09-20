@@ -78,6 +78,8 @@ let silenceMarkerDb = null;
 const DEFAULT_LANGUAGE = 'en';
 const RECORD_ICON_MIC = String.fromCodePoint(0x1F3A4);
 const RECORD_ICON_STOP = String.fromCodePoint(0x23F9, 0xFE0F);
+const HISTORY_TOGGLE_ICON_EXPANDED = String.fromCodePoint(0x2190);
+const HISTORY_TOGGLE_ICON_COLLAPSED = String.fromCodePoint(0x2192);
 
 function formatSilenceLabel(db) {
     const template = t('index.volume.silenceRangeLabel');
@@ -315,8 +317,10 @@ function updateHistoryToggleUI() {
     }
     const key = historyCollapsed ? 'index.history.show' : 'index.history.hide';
     const label = t(key);
-    toggleHistoryButton.textContent = label;
+    const icon = historyCollapsed ? HISTORY_TOGGLE_ICON_COLLAPSED : HISTORY_TOGGLE_ICON_EXPANDED;
+    toggleHistoryButton.textContent = icon;
     toggleHistoryButton.title = label;
+    toggleHistoryButton.setAttribute('aria-label', label);
     toggleHistoryButton.setAttribute('aria-expanded', historyCollapsed ? 'false' : 'true');
     toggleHistoryButton.setAttribute('data-collapsed', historyCollapsed ? 'true' : 'false');
 }
