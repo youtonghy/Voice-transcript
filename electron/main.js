@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, dialog, Menu, clipboard, globalShortcut, Tr
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
+const { randomUUID } = require('crypto');
 
 // Windows-specific: avoid creating multiple instances
 if (!app.requestSingleInstanceLock()) {
@@ -27,6 +28,7 @@ let pendingVoiceInsert = new Map();
 let voiceInsertAwaiting = false; // set true after stop pressed; insert on next final pieces
 let lastVoiceTranscription = '';
 let lastVoiceResultId = null;
+const pendingConversationTitleRequests = new Map();
 
 // Config
 const isPackaged = app.isPackaged;
@@ -45,6 +47,12 @@ const DEFAULT_GEMINI_TRANSLATE_PROMPT = [
   '4) Respond with the translation only without additional commentary.'
 ].join('\n');
 
+const DEFAULT_CONVERSATION_TITLE_PROMPT = [
+  'You are a helpful assistant who writes concise conversation titles in {{TARGET_LANGUAGE}}.',
+  'Summarize the provided conversation transcript into one short, descriptive sentence.',
+  'Only return the title without extra commentary.'
+].join('\n');
+
 let config = {
   openai_api_key: '',
   openai_base_url: '',
@@ -53,6 +61,7 @@ let config = {
   gemini_api_key: '',
   gemini_translate_model: 'gemini-2.0-flash',
   gemini_translate_system_prompt: DEFAULT_GEMINI_TRANSLATE_PROMPT,
+  conversation_title_system_prompt: DEFAULT_CONVERSATION_TITLE_PROMPT,
   // Engines
   // recognition_engine: 'openai' | 'soniox'
   recognition_engine: 'openai',
@@ -96,6 +105,9 @@ function loadConfig() {
       }
       if (!config.gemini_translate_system_prompt || !String(config.gemini_translate_system_prompt).trim()) {
         config.gemini_translate_system_prompt = DEFAULT_GEMINI_TRANSLATE_PROMPT;
+      }
+      if (!config.conversation_title_system_prompt || !String(config.conversation_title_system_prompt).trim()) {
+        config.conversation_title_system_prompt = DEFAULT_CONVERSATION_TITLE_PROMPT;
       }
       // Backfill legacy -> new keys if needed
       if (!config.app_language) {
@@ -407,6 +419,20 @@ function processPythonStdout(data) {
             continue;
           }
           sendToPythonDirect(msg);
+        }
+      }
+
+      if (obj && obj.type === 'conversation_summary') {
+        const reqId = obj.request_id;
+        if (reqId && pendingConversationTitleRequests.has(reqId)) {
+          const pending = pendingConversationTitleRequests.get(reqId);
+          try {
+            if (pending && pending.timeout) clearTimeout(pending.timeout);
+          } catch (_) {}
+          if (pending && typeof pending.resolve === 'function') {
+            try { pending.resolve(obj); } catch (_) {}
+          }
+          pendingConversationTitleRequests.delete(reqId);
         }
       }
 
@@ -866,6 +892,90 @@ ipcMain.handle('process-media-file', async (_event, { filePath, settings }) => {
     });
   } catch (err) {
     return { success: false, error: String(err.message || err) };
+  }
+});
+
+ipcMain.handle('summarize-conversation-title', async (_event, payload = {}) => {
+  try {
+    const conversationId = payload.conversationId || null;
+    const segments = Array.isArray(payload.segments) ? payload.segments : [];
+    const targetLanguage = typeof payload.targetLanguage === 'string' && payload.targetLanguage.trim()
+      ? payload.targetLanguage.trim()
+      : 'Chinese';
+    const emptyTitle = typeof payload.emptyTitle === 'string' ? payload.emptyTitle : '';
+    const fallbackTitle = typeof payload.fallbackTitle === 'string' && payload.fallbackTitle.trim()
+      ? payload.fallbackTitle.trim()
+      : emptyTitle;
+    const systemPrompt = typeof payload.systemPrompt === 'string' && payload.systemPrompt.trim()
+      ? payload.systemPrompt.trim()
+      : null;
+    const updatedAt = typeof payload.updatedAt === 'string' && payload.updatedAt.trim() ? payload.updatedAt.trim() : null;
+
+    if (!segments.length) {
+      return {
+        type: 'conversation_summary',
+        request_id: null,
+        conversation_id: conversationId,
+        title: emptyTitle || fallbackTitle || '',
+        source: 'empty',
+      };
+    }
+
+    const requestId = randomUUID();
+    const message = {
+      type: 'summarize_conversation',
+      request_id: requestId,
+      conversation_id: conversationId,
+      segments,
+      target_language: targetLanguage,
+      empty_title: emptyTitle,
+      fallback_title: fallbackTitle,
+      system_prompt: systemPrompt,
+      updated_at: updatedAt,
+    };
+
+    const resultPromise = new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        pendingConversationTitleRequests.delete(requestId);
+        resolve({
+          type: 'conversation_summary',
+          request_id: requestId,
+          conversation_id: conversationId,
+          title: fallbackTitle || emptyTitle || '',
+          source: 'timeout',
+        });
+      }, 15000);
+      pendingConversationTitleRequests.set(requestId, { resolve, timeout });
+    });
+
+    const sent = sendToPython(message);
+    if (!sent) {
+      if (pendingConversationTitleRequests.has(requestId)) {
+        const pending = pendingConversationTitleRequests.get(requestId);
+        try {
+          if (pending && pending.timeout) clearTimeout(pending.timeout);
+        } catch (_) {}
+        pendingConversationTitleRequests.delete(requestId);
+      }
+      return {
+        type: 'conversation_summary',
+        request_id: requestId,
+        conversation_id: conversationId,
+        title: fallbackTitle || emptyTitle || '',
+        source: 'unavailable',
+      };
+    }
+
+    return resultPromise;
+  } catch (error) {
+    return {
+      type: 'conversation_summary',
+      request_id: null,
+      conversation_id: payload && payload.conversationId ? payload.conversationId : null,
+      title: (payload && typeof payload.fallbackTitle === 'string' && payload.fallbackTitle) || (payload && typeof payload.emptyTitle === 'string' ? payload.emptyTitle : ''),
+      source: 'error',
+      error: error.message,
+    };
   }
 });
 

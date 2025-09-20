@@ -76,6 +76,48 @@ def translate_openai(
     return resp.choices[0].message.content.strip()
 
 
+def summarize_openai(
+    segments_text: str,
+    target_language: Optional[str],
+    api_key: Optional[str],
+    base_url: Optional[str],
+    model: Optional[str] = None,
+    system_prompt: Optional[str] = None,
+    max_tokens: int = 120,
+) -> Optional[str]:
+    if not segments_text or not segments_text.strip():
+        return None
+    client = _create_openai_client(api_key, base_url)
+    prompt = (system_prompt or '').strip()
+    if target_language:
+        prompt = prompt.replace('{{TARGET_LANGUAGE}}', target_language)
+    prompt = prompt or (
+        'You are an assistant who writes concise, policy-compliant conversation titles in {{TARGET_LANGUAGE}}.\n'
+        'Summarize the provided transcript into one short sentence. Return only the title.'
+    )
+    if target_language and '{{TARGET_LANGUAGE}}' in prompt:
+        prompt = prompt.replace('{{TARGET_LANGUAGE}}', target_language)
+    elif '{{TARGET_LANGUAGE}}' in prompt:
+        prompt = prompt.replace('{{TARGET_LANGUAGE}}', 'the requested language')
+    resp = client.chat.completions.create(
+        model=(model or 'gpt-4o-mini'),
+        messages=[
+            {'role': 'system', 'content': prompt},
+            {'role': 'user', 'content': segments_text.strip()},
+        ],
+        max_tokens=max_tokens,
+        temperature=0.2,
+        top_p=0.9,
+    )
+    content = resp.choices[0].message.content if resp.choices else None
+    if isinstance(content, str):
+        try:
+            return content.encode('utf-8', 'ignore').decode('utf-8', 'ignore').strip()
+        except Exception:
+            return ''.join(ch for ch in content if 0xD800 > ord(ch) or ord(ch) > 0xDFFF).strip()
+    return None
+
+
 def detect_language_openai(text: str, language1: str, language2: str, api_key: Optional[str], base_url: Optional[str]) -> str:
     client = _create_openai_client(api_key, base_url)
     system_prompt = (
@@ -187,8 +229,104 @@ def translate_gemini(
                 for part in parts:
                     text_part = part.get('text') if isinstance(part, dict) else None
                     if isinstance(text_part, str) and text_part.strip():
-                        return text_part.strip()
+                        try:
+                            return text_part.encode('utf-8', 'ignore').decode('utf-8', 'ignore').strip()
+                        except Exception:
+                            return ''.join(ch for ch in text_part if 0xD800 > ord(ch) or ord(ch) > 0xDFFF).strip()
     # Fallback: top-level text field
+    top_level_text = parsed.get('text') if isinstance(parsed, dict) else None
+    if isinstance(top_level_text, str) and top_level_text.strip():
+        try:
+            return top_level_text.encode('utf-8', 'ignore').decode('utf-8', 'ignore').strip()
+        except Exception:
+            return ''.join(ch for ch in top_level_text if 0xD800 > ord(ch) or ord(ch) > 0xDFFF).strip()
+    return None
+
+
+def summarize_gemini(
+    segments_text: str,
+    target_language: Optional[str],
+    api_key: Optional[str],
+    model: Optional[str] = None,
+    system_prompt: Optional[str] = None,
+    max_tokens: int = 160,
+) -> Optional[str]:
+    if not segments_text or not segments_text.strip():
+        return None
+    key = api_key or os.environ.get('GEMINI_API_KEY') or os.environ.get('GOOGLE_API_KEY')
+    if not key:
+        raise RuntimeError('Missing Gemini API key')
+    model_name = (model or DEFAULT_GEMINI_MODEL).strip() or DEFAULT_GEMINI_MODEL
+    prompt = (system_prompt or '').strip()
+    if target_language:
+        prompt = prompt.replace('{{TARGET_LANGUAGE}}', target_language)
+    prompt = prompt or (
+        'You write concise conversation titles in {{TARGET_LANGUAGE}}.\n'
+        'Summarize the transcript into one short sentence and return only the title.'
+    )
+    if target_language and '{{TARGET_LANGUAGE}}' in prompt:
+        prompt = prompt.replace('{{TARGET_LANGUAGE}}', target_language)
+    elif '{{TARGET_LANGUAGE}}' in prompt:
+        prompt = prompt.replace('{{TARGET_LANGUAGE}}', 'the requested language')
+    body = {
+        'systemInstruction': {
+            'parts': [{'text': prompt}]
+        },
+        'contents': [
+            {
+                'role': 'user',
+                'parts': [{'text': segments_text.strip()}]
+            }
+        ],
+        'generationConfig': {
+            'temperature': 0.2,
+            'topP': 0.9,
+            'maxOutputTokens': max_tokens,
+        }
+    }
+    data = json.dumps(body, ensure_ascii=False).encode('utf-8')
+    endpoint = (
+        f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
+        f"?key={urllib.parse.quote(key)}"
+    )
+    request = urllib.request.Request(
+        endpoint,
+        data=data,
+        headers={
+            'Content-Type': 'application/json; charset=utf-8'
+        }
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=60) as response:
+            payload = response.read().decode('utf-8')
+    except urllib.error.HTTPError as exc:
+        detail = ''
+        try:
+            detail = exc.read().decode('utf-8', 'ignore')
+        except Exception:
+            pass
+        message = detail or exc.reason or ''
+        raise RuntimeError(f'Gemini API error {exc.code}: {message}') from exc
+    except Exception as exc:
+        raise RuntimeError(f'Gemini API request failed: {exc}') from exc
+
+    try:
+        parsed = json.loads(payload) if isinstance(payload, str) else payload
+    except Exception as exc:
+        raise RuntimeError(f'Gemini API returned invalid JSON: {exc}') from exc
+
+    candidates = parsed.get('candidates') if isinstance(parsed, dict) else None
+    if isinstance(candidates, list):
+        for candidate in candidates:
+            content = candidate.get('content') if isinstance(candidate, dict) else None
+            if not isinstance(content, dict):
+                continue
+            parts = content.get('parts')
+            if isinstance(parts, list):
+                for part in parts:
+                    text_part = part.get('text') if isinstance(part, dict) else None
+                    if isinstance(text_part, str) and text_part.strip():
+                        return text_part.strip()
     top_level_text = parsed.get('text') if isinstance(parsed, dict) else None
     if isinstance(top_level_text, str) and top_level_text.strip():
         return top_level_text.strip()

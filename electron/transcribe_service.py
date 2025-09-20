@@ -65,6 +65,17 @@ THEATER_MODE_MAX_GAIN = 10.0    # Maximum amplification factor
 OPENAI_TRANSCRIBE_MODEL = "gpt-4o-transcribe"
 OPENAI_TRANSLATE_MODEL = "gpt-4o-mini"
 
+DEFAULT_CONVERSATION_TITLE_PROMPT = (
+    "You are a helpful assistant who writes concise, policy-compliant conversation titles in {{TARGET_LANGUAGE}}.\n"
+    "Summarize the provided conversation transcript into one short, descriptive sentence.\n"
+    "Do not repeat explicit phrases; if a safe title is impossible, respond exactly with 'Sensitive conversation'."
+)
+
+DEFAULT_EMPTY_CONVERSATION_TITLE = '空对话'
+MAX_SUMMARY_SEGMENTS = 12
+MAX_SUMMARY_TOTAL_CHARS = 4000
+CONVERSATION_TITLE_MAX_TOKENS = 96
+
 # Global variables
 is_recording = False
 audio_data = []
@@ -100,6 +111,15 @@ translation_next_expected = 1  # Worker starts expecting this order
 transcription_counter = 0  # Used to ensure transcription order/placeholders
 pending_translations = {}  # Store pending translation tasks {result_id: task_info}
 last_volume_emit = 0.0
+
+
+def _sanitize_utf8_text(text):
+    if not isinstance(text, str):
+        return ''
+    try:
+        return text.encode('utf-8', 'ignore').decode('utf-8', 'ignore')
+    except Exception:
+        return ''.join(ch for ch in text if 0xD800 > ord(ch) or ord(ch) > 0xDFFF)
 
 def log_message(level, message):
     """Send log message to Electron"""
@@ -395,6 +415,89 @@ def _translate_text_dispatch(text, target_language):
 def translate_text(text, target_language='Chinese'):
     """Translate text using the configured translation engine."""
     return _translate_text_dispatch(text, target_language)
+
+
+def _build_summary_text(segments):
+    if not isinstance(segments, list):
+        return ''
+    lines = []
+    count = 0
+    for item in segments:
+        if count >= MAX_SUMMARY_SEGMENTS:
+            break
+        if not isinstance(item, dict):
+            continue
+        transcription = _sanitize_utf8_text(item.get('transcription') if isinstance(item.get('transcription'), str) else '')
+        translation = _sanitize_utf8_text(item.get('translation') if isinstance(item.get('translation'), str) else '')
+        parts = []
+        if transcription and transcription.strip():
+            parts.append(transcription.strip())
+        if translation and translation.strip() and translation.strip() != transcription.strip():
+            parts.append(f"Translation: {translation.strip()}")
+        if not parts:
+            continue
+        count += 1
+        lines.append(f"{count}. {' '.join(parts)}")
+    summary_text = _sanitize_utf8_text('\n'.join(lines).strip())
+    if len(summary_text) > MAX_SUMMARY_TOTAL_CHARS:
+        summary_text = summary_text[:MAX_SUMMARY_TOTAL_CHARS]
+    return summary_text
+
+
+def _summarize_text_openai(segments_text, target_language, system_prompt):
+    try:
+        clean_text = _sanitize_utf8_text(segments_text)
+        if not clean_text:
+            return None
+        api_key = None
+        base_url = None
+        model = OPENAI_TRANSLATE_MODEL
+        if isinstance(config, dict):
+            api_key = config.get('openai_api_key') or os.environ.get('OPENAI_API_KEY')
+            base_url = config.get('openai_base_url') or os.environ.get('OPENAI_BASE_URL')
+            model = config.get('openai_translate_model') or OPENAI_TRANSLATE_MODEL
+        return modles.summarize_openai(
+            clean_text,
+            target_language,
+            api_key,
+            base_url,
+            model=model,
+            system_prompt=system_prompt,
+            max_tokens=CONVERSATION_TITLE_MAX_TOKENS,
+        )
+    except Exception as exc:
+        log_message('error', f'OpenAI conversation title error: {exc}')
+        return None
+
+
+def _summarize_text_gemini(segments_text, target_language, system_prompt):
+    try:
+        clean_text = _sanitize_utf8_text(segments_text)
+        if not clean_text:
+            return None
+        api_key = None
+        model = None
+        if isinstance(config, dict):
+            api_key = config.get('gemini_api_key') or os.environ.get('GEMINI_API_KEY') or os.environ.get('GOOGLE_API_KEY')
+            model = config.get('gemini_translate_model')
+        return modles.summarize_gemini(
+            clean_text,
+            target_language,
+            api_key,
+            model=model,
+            system_prompt=system_prompt,
+            max_tokens=CONVERSATION_TITLE_MAX_TOKENS,
+        )
+    except Exception as exc:
+        log_message('error', f'Gemini conversation title error: {exc}')
+        return None
+
+
+def _summarize_text_dispatch(segments_text, target_language, system_prompt):
+    engine = _get_translation_engine()
+    if engine == 'gemini':
+        return _summarize_text_gemini(segments_text, target_language, system_prompt)
+    return _summarize_text_openai(segments_text, target_language, system_prompt)
 
 
 def determine_smart_translation_target(text, language1, language2):
@@ -1159,6 +1262,68 @@ def handle_message(message):
             override_transcribe_language = None
             override_translate = False
             override_translate_language = None
+        elif msg_type == "summarize_conversation":
+            request_id = message.get('request_id') or str(uuid.uuid4())
+            conversation_id = message.get('conversation_id')
+            segments = message.get('segments') if isinstance(message.get('segments'), list) else []
+            empty_title = _sanitize_utf8_text(message.get('empty_title') if isinstance(message.get('empty_title'), str) else DEFAULT_EMPTY_CONVERSATION_TITLE)
+            fallback_title = _sanitize_utf8_text(message.get('fallback_title') if isinstance(message.get('fallback_title'), str) else empty_title)
+            target_language = _sanitize_utf8_text(message.get('target_language') if isinstance(message.get('target_language'), str) and message.get('target_language').strip() else 'Chinese')
+            if not target_language:
+                target_language = 'Chinese'
+            system_prompt = message.get('system_prompt') if isinstance(message.get('system_prompt'), str) and message.get('system_prompt').strip() else None
+            if not system_prompt:
+                candidate_prompt = None
+                if isinstance(config, dict):
+                    candidate_prompt = config.get('conversation_title_system_prompt')
+                if isinstance(candidate_prompt, str) and candidate_prompt.strip():
+                    system_prompt = _sanitize_utf8_text(candidate_prompt.strip())
+                else:
+                    system_prompt = DEFAULT_CONVERSATION_TITLE_PROMPT
+            elif isinstance(system_prompt, str):
+                system_prompt = _sanitize_utf8_text(system_prompt) or DEFAULT_CONVERSATION_TITLE_PROMPT
+            summary_text = _build_summary_text(segments)
+            payload = {
+                'type': 'conversation_summary',
+                'request_id': request_id,
+                'conversation_id': conversation_id,
+                'context_updated_at': message.get('updated_at') if isinstance(message.get('updated_at'), str) else None,
+            }
+            if not summary_text:
+                payload.update({'title': empty_title, 'source': 'empty'})
+                send_message(payload)
+                return
+            engine = _get_translation_engine()
+            if not _translation_credentials_available(engine):
+                payload.update({'title': fallback_title, 'source': 'credentials_missing', 'engine': engine})
+                send_message(payload)
+                return
+            try:
+                title = _summarize_text_dispatch(summary_text, target_language, system_prompt)
+                if isinstance(title, str) and title.strip():
+                    cleaned = title.replace('\n', ' ').strip()
+                else:
+                    cleaned = ''
+                if cleaned and len(cleaned) > 80:
+                    cleaned = cleaned[:80].strip()
+                if cleaned and cleaned.lower() == 'sensitive conversation':
+                    cleaned = ''
+                if cleaned and ('�' in cleaned or '??' in cleaned):
+                    cleaned = ''
+                final_title = cleaned if cleaned else fallback_title
+                final_title = _sanitize_utf8_text(final_title)
+                payload.update({
+                    'title': final_title if final_title else empty_title,
+                    'source': 'model' if cleaned else 'fallback',
+                    'engine': engine,
+                })
+                send_message(payload)
+            except Exception as exc:
+                log_message('error', f'Conversation title generation failed: {exc}')
+                safe_fallback = _sanitize_utf8_text(fallback_title) or empty_title
+                payload.update({'title': safe_fallback, 'source': 'error', 'engine': engine})
+                send_message(payload)
+            return
         elif msg_type == "shutdown":
             # Graceful exit: if recording, stop first; then stop translation thread and exit
             log_message("info", "Received service shutdown command, preparing graceful exit")
@@ -1195,6 +1360,13 @@ def handle_message(message):
             old_config = config.copy() if isinstance(config, dict) else {}
             config = new_config
             initial_config_applied = True
+            try:
+                if not isinstance(config, dict):
+                    config = {}
+                if 'conversation_title_system_prompt' not in config or not isinstance(config.get('conversation_title_system_prompt'), str) or not config.get('conversation_title_system_prompt').strip():
+                    config['conversation_title_system_prompt'] = DEFAULT_CONVERSATION_TITLE_PROMPT
+            except Exception:
+                config['conversation_title_system_prompt'] = DEFAULT_CONVERSATION_TITLE_PROMPT
             try:
                 src = config.get('transcribe_source', 'openai')
                 oai_set = bool(config.get('openai_api_key') or os.environ.get('OPENAI_API_KEY'))

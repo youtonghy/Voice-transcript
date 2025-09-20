@@ -13,11 +13,42 @@ let currentConfig = {}; // Store current configuration
 let configCheckInterval = null; // Timer for periodic configuration checks
 
 const CONVERSATION_STORAGE_KEY = 'voice_transcript_conversations_v1';
+const ACTIVE_CONVERSATION_STORAGE_KEY = 'voice_transcript_active_conversation_v1';
 let conversations = [];
 let activeConversationId = null;
 const resultConversationMap = new Map();
 const HISTORY_COLLAPSED_STORAGE_KEY = 'voice_transcript_history_collapsed';
 let historyCollapsed = false;
+const CONVERSATION_TITLE_DEBOUNCE_MS = 800;
+const MAX_TITLE_SEGMENTS = 12;
+const MAX_TITLE_FIELD_LENGTH = 400;
+const conversationTitleTimers = new Map();
+const conversationTitleRequests = new Map();
+const conversationTitleRescheduleSet = new Set();
+
+function removeInvalidSurrogates(text) {
+    if (typeof text !== 'string') {
+        return '';
+    }
+    let result = '';
+    for (let i = 0; i < text.length; i += 1) {
+        const code = text.charCodeAt(i);
+        if (code >= 0xD800 && code <= 0xDBFF) {
+            const next = text.charCodeAt(i + 1);
+            if (next >= 0xDC00 && next <= 0xDFFF) {
+                result += text[i] + text[i + 1];
+                i += 1;
+                continue;
+            }
+            continue;
+        }
+        if (code >= 0xDC00 && code <= 0xDFFF) {
+            continue;
+        }
+        result += text[i];
+    }
+    return result;
+}
 
 // DOM elements
 const recordButton = document.getElementById('recordButton');
@@ -45,6 +76,8 @@ const SILENCE_PLACEHOLDER_DB = (VOLUME_MIN_DB + VOLUME_MAX_DB) / 2;
 let silenceMarkerDb = null;
 
 const DEFAULT_LANGUAGE = 'en';
+const RECORD_ICON_MIC = String.fromCodePoint(0x1F3A4);
+const RECORD_ICON_STOP = String.fromCodePoint(0x23F9, 0xFE0F);
 
 function formatSilenceLabel(db) {
     const template = t('index.volume.silenceRangeLabel');
@@ -65,6 +98,13 @@ function setDocumentLanguage(lang) {
     if (document && document.documentElement) {
         document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
     }
+}
+
+function setRecordButtonIcon(icon) {
+    if (!recordButton) {
+        return;
+    }
+    recordButton.textContent = icon;
 }
 
 function getCurrentLanguage() {
@@ -303,6 +343,236 @@ function initializeHistoryCollapsedState() {
 }
 
 // Conversation history management
+function truncateText(value, maxLength, { addEllipsis = true } = {}) {
+    if (typeof value !== 'string') {
+        return '';
+    }
+    const cleaned = removeInvalidSurrogates(value);
+    const chars = Array.from(cleaned);
+    if (chars.length <= maxLength) {
+        return cleaned;
+    }
+    const sliced = chars.slice(0, Math.max(0, maxLength)).join('');
+    return addEllipsis ? `${sliced}...` : sliced;
+}
+
+function getEmptyConversationTitle() {
+    const text = t('index.history.emptyConversationTitle');
+    if (typeof text === 'string' && text && text !== 'index.history.emptyConversationTitle') {
+        return text;
+    }
+    return '空对话';
+}
+
+function getConversationTitleTargetLanguage() {
+    const lang = (currentConfig && currentConfig.app_language) || DEFAULT_LANGUAGE;
+    if (lang === 'en') {
+        return 'English';
+    }
+    return 'Chinese';
+}
+
+function normalizeSummaryText(value) {
+    if (typeof value !== 'string') {
+        return '';
+    }
+    const trimmed = value.trim();
+    if (!trimmed) {
+        return '';
+    }
+    const collapsed = removeInvalidSurrogates(trimmed.replace(/\s+/g, ' '));
+    return truncateText(collapsed, MAX_TITLE_FIELD_LENGTH, { addEllipsis: false });
+}
+
+function collectSummarySegments(conversation) {
+    if (!conversation || !Array.isArray(conversation.entries)) {
+        return [];
+    }
+    const segments = [];
+    for (let i = 0; i < conversation.entries.length && segments.length < MAX_TITLE_SEGMENTS; i += 1) {
+        const entry = conversation.entries[i];
+        if (!entry || entry.type !== 'result') {
+            continue;
+        }
+        const transcription = normalizeSummaryText(entry.transcription && !entry.transcriptionPending ? entry.transcription : '');
+        const translation = normalizeSummaryText(entry.translation && !entry.translationPending ? entry.translation : '');
+        if (!transcription && !translation) {
+            continue;
+        }
+        segments.push({
+            transcription,
+            translation,
+            createdAt: entry.createdAt || null
+        });
+    }
+    return segments;
+}
+
+function buildFallbackConversationTitle(segments) {
+    if (!Array.isArray(segments) || !segments.length) {
+        return getEmptyConversationTitle();
+    }
+    const candidate = segments.find((item) => item && item.transcription) || segments[0];
+    const base = candidate && candidate.transcription ? candidate.transcription : candidate.translation;
+    if (!base) {
+        return getEmptyConversationTitle();
+    }
+    return truncateText(removeInvalidSurrogates(base), 36);
+}
+
+function applyConversationTitle(conversation, title, { save = true } = {}) {
+    if (!conversation || typeof title !== 'string') {
+        return;
+    }
+    const normalized = removeInvalidSurrogates(title).trim() || getEmptyConversationTitle();
+    if (conversation.name === normalized) {
+        return;
+    }
+    conversation.name = normalized;
+    conversation.titleGeneratedAt = new Date().toISOString();
+    conversation.needsTitleRefresh = false;
+    if (save) {
+        saveConversationsToStorage();
+    }
+    renderHistoryList();
+    if (conversation.id === activeConversationId) {
+        updateActiveConversationLabel(conversation);
+    }
+}
+
+function markConversationTitleDirty(conversation) {
+    if (!conversation) {
+        return;
+    }
+    conversation.titleGeneratedAt = null;
+    conversation.needsTitleRefresh = true;
+}
+
+function scheduleConversationTitleUpdate(conversationId, options = {}) {
+    if (!conversationId) {
+        return;
+    }
+    const conversation = getConversationById(conversationId);
+    if (!conversation) {
+        return;
+    }
+    const force = options.force === true;
+    const delay = typeof options.delay === 'number' ? options.delay : CONVERSATION_TITLE_DEBOUNCE_MS;
+    const needsRefresh = conversation.needsTitleRefresh === true;
+    if (!force && !needsRefresh) {
+        return;
+    }
+    const hasReadyResult = conversation.entries && conversation.entries.some((entry) => {
+        if (!entry || entry.type !== 'result') {
+            return false;
+        }
+        const hasTranscription = typeof entry.transcription === 'string' && entry.transcription.trim() && entry.transcriptionPending !== true;
+        const hasTranslation = typeof entry.translation === 'string' && entry.translation.trim() && entry.translationPending !== true;
+        return hasTranscription || hasTranslation;
+    });
+    if (!hasReadyResult) {
+        return;
+    }
+    if (!force && conversation.titleGeneratedAt && !needsRefresh) {
+        return;
+    }
+    if (conversationTitleRequests.has(conversationId)) {
+        return;
+    }
+    if (conversationTitleTimers.has(conversationId)) {
+        clearTimeout(conversationTitleTimers.get(conversationId));
+    }
+    const pendingResults = conversation.entries && conversation.entries.some((entry) => entry && entry.type === 'result' && (entry.transcriptionPending || entry.translationPending));
+    if (pendingResults && !force) {
+        const retryTimer = setTimeout(() => {
+            conversationTitleTimers.delete(conversationId);
+            scheduleConversationTitleUpdate(conversationId, options);
+        }, Math.max(delay, 500));
+        conversationTitleTimers.set(conversationId, retryTimer);
+        return;
+    }
+    const timer = setTimeout(() => {
+        conversationTitleTimers.delete(conversationId);
+        requestConversationTitle(conversationId);
+    }, delay);
+    conversationTitleTimers.set(conversationId, timer);
+}
+
+async function requestConversationTitle(conversationId) {
+    const conversation = getConversationById(conversationId);
+    if (!conversation) {
+        return;
+    }
+    const segments = collectSummarySegments(conversation);
+    const emptyTitle = getEmptyConversationTitle();
+    if (!segments.length) {
+        applyConversationTitle(conversation, emptyTitle);
+        conversationTitleRequests.delete(conversationId);
+        conversationTitleRescheduleSet.delete(conversationId);
+        return;
+    }
+    const fallbackTitle = buildFallbackConversationTitle(segments);
+    const targetLanguage = getConversationTitleTargetLanguage();
+    const updatedAt = conversation.updatedAt || conversation.createdAt || new Date().toISOString();
+    conversationTitleRequests.set(conversationId, { updatedAt });
+    if (!window.electronAPI || typeof window.electronAPI.summarizeConversationTitle !== 'function') {
+        conversationTitleRequests.delete(conversationId);
+        applyConversationTitle(conversation, fallbackTitle);
+        conversationTitleRescheduleSet.delete(conversationId);
+        return;
+    }
+    try {
+        const response = await window.electronAPI.summarizeConversationTitle({
+            conversationId,
+            segments,
+            targetLanguage,
+            emptyTitle,
+            fallbackTitle,
+            updatedAt
+        });
+        const current = conversationTitleRequests.get(conversationId);
+        const currentUpdatedAt = conversation.updatedAt || conversation.createdAt;
+        if (!current || current.updatedAt !== updatedAt || (currentUpdatedAt && currentUpdatedAt !== updatedAt)) {
+            return;
+        }
+        if (response && response.title && typeof response.title === 'string') {
+            applyConversationTitle(conversation, response.title, { save: true });
+        } else {
+            applyConversationTitle(conversation, fallbackTitle, { save: true });
+        }
+    } catch (error) {
+        applyConversationTitle(conversation, fallbackTitle, { save: true });
+        conversationTitleRescheduleSet.delete(conversationId);
+    } finally {
+        conversationTitleRequests.delete(conversationId);
+    }
+}
+
+function handleConversationSummaryMessage(message) {
+    if (!message || !message.conversation_id) {
+        return;
+    }
+    const conversation = getConversationById(message.conversation_id);
+    if (!conversation) {
+        conversationTitleRequests.delete(message.conversation_id);
+        return;
+    }
+    const currentContext = conversationTitleRequests.get(conversation.id);
+    if (currentContext && message.context_updated_at && currentContext.updatedAt && currentContext.updatedAt !== message.context_updated_at) {
+        return;
+    }
+    if (message.title && typeof message.title === 'string') {
+        applyConversationTitle(conversation, message.title, { save: true });
+    }
+    conversationTitleRequests.delete(conversation.id);
+    if (conversationTitleRescheduleSet.has(conversation.id)) {
+        conversationTitleRescheduleSet.delete(conversation.id);
+        markConversationTitleDirty(conversation);
+        saveConversationsToStorage();
+        scheduleConversationTitleUpdate(conversation.id, { delay: 200 });
+    }
+}
+
 function generateConversationName(date = new Date()) {
     if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
         date = new Date();
@@ -321,6 +591,7 @@ function normalizeEntry(entry) {
         return null;
     }
     if (entry.type === 'result') {
+        const createdAt = typeof entry.createdAt === 'string' ? entry.createdAt : new Date().toISOString();
         const normalized = {
             id: typeof entry.id === 'string' ? entry.id : `result-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
             type: 'result',
@@ -330,8 +601,8 @@ function normalizeEntry(entry) {
             translationPending: entry.translationPending === true,
             transcriptionPending: entry.transcriptionPending === true,
             meta: entry.meta && typeof entry.meta === 'object' ? { ...entry.meta } : {},
-            createdAt: typeof entry.createdAt === 'string' ? entry.createdAt : new Date().toISOString(),
-            updatedAt: typeof entry.updatedAt === 'string' ? entry.updatedAt : null
+            createdAt,
+            updatedAt: typeof entry.updatedAt === 'string' ? entry.updatedAt : createdAt
         };
         return normalized;
     }
@@ -353,10 +624,14 @@ function normalizeConversation(conversation) {
         return null;
     }
     const createdAt = typeof conversation.createdAt === 'string' ? conversation.createdAt : new Date().toISOString();
+    const updatedAt = typeof conversation.updatedAt === 'string' ? conversation.updatedAt : createdAt;
     const normalized = {
         id: typeof conversation.id === 'string' ? conversation.id : `conv-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
         name: typeof conversation.name === 'string' && conversation.name ? conversation.name : generateConversationName(new Date(createdAt)),
         createdAt,
+        updatedAt,
+        titleGeneratedAt: typeof conversation.titleGeneratedAt === 'string' ? conversation.titleGeneratedAt : null,
+        needsTitleRefresh: conversation.needsTitleRefresh === true,
         entries: Array.isArray(conversation.entries) ? conversation.entries.map(normalizeEntry).filter(Boolean) : []
     };
     return normalized;
@@ -393,6 +668,37 @@ function saveConversationsToStorage() {
     }
 }
 
+function loadActiveConversationId() {
+    if (typeof localStorage === 'undefined') {
+        return null;
+    }
+    try {
+        const stored = localStorage.getItem(ACTIVE_CONVERSATION_STORAGE_KEY);
+        if (typeof stored === 'string' && stored) {
+            return stored;
+        }
+        return null;
+    } catch (error) {
+        console.warn('Failed to load active conversation id from storage:', error);
+        return null;
+    }
+}
+
+function saveActiveConversationId(conversationId) {
+    if (typeof localStorage === 'undefined') {
+        return;
+    }
+    try {
+        if (conversationId) {
+            localStorage.setItem(ACTIVE_CONVERSATION_STORAGE_KEY, conversationId);
+        } else {
+            localStorage.removeItem(ACTIVE_CONVERSATION_STORAGE_KEY);
+        }
+    } catch (error) {
+        console.warn('Failed to save active conversation id to storage:', error);
+    }
+}
+
 function registerConversationEntries(conversation) {
     if (!conversation || !Array.isArray(conversation.entries)) {
         return;
@@ -426,8 +732,29 @@ function setActiveConversation(conversationId) {
         return;
     }
     activeConversationId = conversationId;
+    saveActiveConversationId(conversationId);
     renderHistoryList();
     renderConversationLogs();
+}
+
+function getMostRecentConversationId() {
+    if (!Array.isArray(conversations) || !conversations.length) {
+        return null;
+    }
+    const sorted = [...conversations].sort((a, b) => {
+        const timeA = new Date(a.updatedAt || a.createdAt || 0).getTime();
+        const timeB = new Date(b.updatedAt || b.createdAt || 0).getTime();
+        const normalizedA = Number.isFinite(timeA) ? timeA : 0;
+        const normalizedB = Number.isFinite(timeB) ? timeB : 0;
+        if (normalizedA === normalizedB) {
+            return (b.name || '').localeCompare(a.name || '');
+        }
+        return normalizedB - normalizedA;
+    });
+    if (!sorted.length) {
+        return null;
+    }
+    return sorted[0].id;
 }
 
 function updateActiveConversationLabel(conversation) {
@@ -673,11 +1000,20 @@ function updateResultEntryDom(entry) {
 
 function createConversation(config = {}, options = {}) {
     const createdAt = config.createdAt || new Date().toISOString();
+    const normalizedEntries = Array.isArray(config.entries) ? config.entries.map(normalizeEntry).filter(Boolean) : [];
+    const hasEntries = normalizedEntries.length > 0;
+    let name = (typeof config.name === 'string' && config.name) ? config.name : generateConversationName(new Date(createdAt));
+    if (!hasEntries && options.forceEmptyName) {
+        name = getEmptyConversationTitle();
+    }
     const conversation = {
         id: config.id || `conv-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
-        name: config.name || generateConversationName(new Date(createdAt)),
+        name,
         createdAt,
-        entries: Array.isArray(config.entries) ? config.entries.map(normalizeEntry).filter(Boolean) : []
+        updatedAt: typeof config.updatedAt === 'string' ? config.updatedAt : createdAt,
+        titleGeneratedAt: typeof config.titleGeneratedAt === 'string' ? config.titleGeneratedAt : null,
+        needsTitleRefresh: Boolean(config.needsTitleRefresh),
+        entries: normalizedEntries
     };
     conversations.push(conversation);
     registerConversationEntries(conversation);
@@ -693,7 +1029,7 @@ function createConversation(config = {}, options = {}) {
 }
 
 function handleNewConversationClick() {
-    createConversation({ name: generateConversationName() });
+    createConversation({}, { forceEmptyName: true });
 }
 
 function handleHistoryListClick(event) {
@@ -710,7 +1046,55 @@ function handleHistoryListClick(event) {
 function initializeConversationHistory() {
     conversations = loadConversationsFromStorage();
     rebuildResultConversationMap();
-    createConversation({ name: generateConversationName() });
+    let mutated = false;
+    conversations.forEach((conversation) => {
+        if (!conversation || !conversation.id) {
+            return;
+        }
+        if (!conversation.entries || !conversation.entries.length) {
+            const emptyTitle = getEmptyConversationTitle();
+            if (conversation.name !== emptyTitle) {
+                conversation.name = emptyTitle;
+                mutated = true;
+            }
+            conversation.needsTitleRefresh = false;
+            if (conversation.titleGeneratedAt !== null) {
+                conversation.titleGeneratedAt = null;
+                mutated = true;
+            }
+        } else {
+            const desiredNeeds = Boolean(conversation.needsTitleRefresh && !conversation.titleGeneratedAt);
+            if (conversation.needsTitleRefresh !== desiredNeeds) {
+                conversation.needsTitleRefresh = desiredNeeds;
+                mutated = true;
+            }
+            if (conversation.needsTitleRefresh) {
+                scheduleConversationTitleUpdate(conversation.id, { delay: 500 });
+            }
+        }
+    });
+    if (mutated) {
+        saveConversationsToStorage();
+    }
+    if (!conversations.length) {
+        createConversation({}, { forceEmptyName: true });
+        return;
+    }
+
+    const storedActiveId = loadActiveConversationId();
+    const storedConversation = storedActiveId ? getConversationById(storedActiveId) : null;
+    if (storedConversation) {
+        setActiveConversation(storedConversation.id);
+        return;
+    }
+
+    const fallbackId = getMostRecentConversationId();
+    if (fallbackId) {
+        setActiveConversation(fallbackId);
+    } else {
+        renderHistoryList();
+        renderConversationLogs();
+    }
 }
 
 function handleResultMessage(message) {
@@ -719,7 +1103,7 @@ function handleResultMessage(message) {
     const context = resultId ? getResultEntryContext(resultId) : null;
     let conversation = context ? context.conversation : getActiveConversation();
     if (!conversation) {
-        conversation = createConversation({ name: generateConversationName() });
+        conversation = createConversation({}, { forceEmptyName: true });
     }
     let entry = context ? context.entry : null;
     let isNewEntry = false;
@@ -759,12 +1143,25 @@ function handleResultMessage(message) {
     }
     entry.meta = Object.assign({}, entry.meta, meta);
     entry.updatedAt = new Date().toISOString();
+    conversation.updatedAt = entry.updatedAt;
+    const hasReadyContent = (typeof entry.transcription === 'string' && entry.transcription.trim() && entry.transcriptionPending !== true)
+        || (typeof entry.translation === 'string' && entry.translation.trim() && entry.translationPending !== true);
+    if (hasReadyContent) {
+        markConversationTitleDirty(conversation);
+    }
     saveConversationsToStorage();
     if (activeConversationId === conversation.id) {
         if (isNewEntry) {
             appendEntryDom(entry);
         }
         updateResultEntryDom(entry);
+    }
+    if (!isRecording) {
+        if (conversationTitleRequests.has(conversation.id)) {
+            conversationTitleRescheduleSet.add(conversation.id);
+        } else {
+            scheduleConversationTitleUpdate(conversation.id, { delay: 0 });
+        }
     }
 }
 
@@ -788,9 +1185,22 @@ function handleTranscriptionUpdateMessage(message) {
     }
     entry.meta = Object.assign({}, entry.meta, extractRecordingMeta(message));
     entry.updatedAt = new Date().toISOString();
+    conversation.updatedAt = entry.updatedAt;
+    const hasReadyContent = (typeof entry.transcription === 'string' && entry.transcription.trim() && entry.transcriptionPending !== true)
+        || (typeof entry.translation === 'string' && entry.translation.trim() && entry.translationPending !== true);
+    if (hasReadyContent) {
+        markConversationTitleDirty(conversation);
+    }
     saveConversationsToStorage();
     if (activeConversationId === conversation.id) {
         updateResultEntryDom(entry);
+    }
+    if (!isRecording) {
+        if (conversationTitleRequests.has(conversation.id)) {
+            conversationTitleRescheduleSet.add(conversation.id);
+        } else {
+            scheduleConversationTitleUpdate(conversation.id, { delay: 0 });
+        }
     }
 }
 
@@ -813,9 +1223,22 @@ function handleTranslationUpdateMessage(message) {
         entry.translationPending = true;
     }
     entry.updatedAt = new Date().toISOString();
+    conversation.updatedAt = entry.updatedAt;
+    const hasReadyContent = (typeof entry.transcription === 'string' && entry.transcription.trim() && entry.transcriptionPending !== true)
+        || (typeof entry.translation === 'string' && entry.translation.trim() && entry.translationPending !== true);
+    if (hasReadyContent) {
+        markConversationTitleDirty(conversation);
+    }
     saveConversationsToStorage();
     if (activeConversationId === conversation.id) {
         updateResultEntryDom(entry);
+    }
+    if (!isRecording) {
+        if (conversationTitleRequests.has(conversation.id)) {
+            conversationTitleRescheduleSet.add(conversation.id);
+        } else {
+            scheduleConversationTitleUpdate(conversation.id, { delay: 0 });
+        }
     }
 }
 
@@ -1039,7 +1462,7 @@ function updateServiceStatus(status) {
 
     if (status !== 'running') {
         recordButton.disabled = true;
-        recordButton.textContent = '馃敡';
+        setRecordButtonIcon(RECORD_ICON_MIC);
         recordButton.title = t('index.recordButton.starting');
         recordButton.className = 'control-bar-btn record-btn start disabled';
         setVolumeRecordingState(false);
@@ -1100,7 +1523,7 @@ async function stopRecording() {
 
 function updateUI() {
     if (isRecording) {
-        recordButton.textContent = '鈴癸笍';
+        setRecordButtonIcon(RECORD_ICON_STOP);
         recordButton.title = t('index.tooltips.recordStop');
         if (isVoiceActive) {
             recordButton.className = 'control-bar-btn record-btn stop recording-active';
@@ -1114,7 +1537,7 @@ function updateUI() {
             statusText.textContent = t('index.statusText.recording');
         }
     } else {
-        recordButton.textContent = '馃帳';
+        setRecordButtonIcon(RECORD_ICON_MIC);
         recordButton.title = t('index.tooltips.recordStart');
         recordButton.className = 'control-bar-btn record-btn start';
         if (typeof statusDot !== 'undefined' && statusDot) {
@@ -1338,6 +1761,9 @@ function handlePythonMessage(message) {
         case 'translation_update':
             handleTranslationUpdateMessage(message);
             break;
+        case 'conversation_summary':
+            handleConversationSummaryMessage(message);
+            break;
         case 'volume_level':
             updateVolumeMeter(message);
             break;
@@ -1368,6 +1794,11 @@ function handlePythonMessage(message) {
             if (silenceMarkerDb !== null) {
                 updateSilenceMarker(silenceMarkerDb);
             }
+            conversations.forEach((conversation) => {
+                if (conversation && conversation.needsTitleRefresh) {
+                    scheduleConversationTitleUpdate(conversation.id, { delay: 0 });
+                }
+            });
             break;
         case 'error':
             addLogEntry('error', message.message);
