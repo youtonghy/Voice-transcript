@@ -19,6 +19,8 @@ let activeConversationId = null;
 const resultConversationMap = new Map();
 const HISTORY_COLLAPSED_STORAGE_KEY = 'voice_transcript_history_collapsed';
 let historyCollapsed = false;
+let historySearchQuery = '';
+let historySearchQueryNormalized = '';
 const CONVERSATION_TITLE_DEBOUNCE_MS = 800;
 const MAX_TITLE_SEGMENTS = 12;
 const MAX_TITLE_FIELD_LENGTH = 400;
@@ -67,6 +69,7 @@ const mainContent = document.querySelector('.main-content');
 const historyList = document.getElementById('historyList');
 const newConversationButton = document.getElementById('newConversationButton');
 const activeConversationNameEl = document.getElementById('activeConversationName');
+const historySearchInput = document.getElementById('historySearchInput');
 
 const toggleHistoryButton = document.getElementById('toggleHistoryButton');
 
@@ -703,6 +706,52 @@ function saveActiveConversationId(conversationId) {
     }
 }
 
+function conversationMatchesSearch(conversation, normalizedQuery) {
+    if (!conversation) {
+        return false;
+    }
+    if (!normalizedQuery) {
+        return true;
+    }
+    const name = typeof conversation.name === 'string' ? removeInvalidSurrogates(conversation.name).toLowerCase() : '';
+    if (name && name.includes(normalizedQuery)) {
+        return true;
+    }
+    if (!Array.isArray(conversation.entries) || !conversation.entries.length) {
+        return false;
+    }
+    for (let i = 0; i < conversation.entries.length; i += 1) {
+        const entry = conversation.entries[i];
+        if (!entry || entry.type !== 'result') {
+            continue;
+        }
+        if (typeof entry.transcription === 'string' && entry.transcription) {
+            const transcription = removeInvalidSurrogates(entry.transcription).toLowerCase();
+            if (transcription.includes(normalizedQuery)) {
+                return true;
+            }
+        }
+        if (typeof entry.translation === 'string' && entry.translation) {
+            const translation = removeInvalidSurrogates(entry.translation).toLowerCase();
+            if (translation.includes(normalizedQuery)) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+function applyHistorySearch(query) {
+    const safeInput = typeof query === 'string' ? removeInvalidSurrogates(query) : '';
+    const trimmed = safeInput.trim();
+    historySearchQuery = trimmed;
+    historySearchQueryNormalized = trimmed ? trimmed.toLowerCase() : '';
+    renderHistoryList();
+    if (historySearchInput && historySearchInput.value !== trimmed) {
+        historySearchInput.value = trimmed;
+    }
+}
+
 function registerConversationEntries(conversation) {
     if (!conversation || !Array.isArray(conversation.entries)) {
         return;
@@ -795,7 +844,19 @@ function renderHistoryList() {
         }
         return timeB - timeA;
     });
-    sorted.forEach((conversation) => {
+    const filtered = historySearchQueryNormalized
+        ? sorted.filter((conversation) => conversationMatchesSearch(conversation, historySearchQueryNormalized))
+        : sorted;
+
+    if (!filtered.length) {
+        const emptyDiv = document.createElement('div');
+        emptyDiv.className = 'history-empty';
+        emptyDiv.textContent = t('index.history.searchEmpty');
+        historyList.appendChild(emptyDiv);
+        return;
+    }
+
+    filtered.forEach((conversation) => {
         const button = document.createElement('button');
         button.type = 'button';
         button.className = 'history-item';
@@ -1167,6 +1228,9 @@ function handleResultMessage(message) {
             scheduleConversationTitleUpdate(conversation.id, { delay: 0 });
         }
     }
+    if (historySearchQueryNormalized) {
+        renderHistoryList();
+    }
 }
 
 function handleTranscriptionUpdateMessage(message) {
@@ -1206,6 +1270,9 @@ function handleTranscriptionUpdateMessage(message) {
             scheduleConversationTitleUpdate(conversation.id, { delay: 0 });
         }
     }
+    if (historySearchQueryNormalized) {
+        renderHistoryList();
+    }
 }
 
 function handleTranslationUpdateMessage(message) {
@@ -1244,6 +1311,9 @@ function handleTranslationUpdateMessage(message) {
             scheduleConversationTitleUpdate(conversation.id, { delay: 0 });
         }
     }
+    if (historySearchQueryNormalized) {
+        renderHistoryList();
+    }
 }
 
 
@@ -1274,6 +1344,7 @@ function initializeLanguage() {
             updateServiceStatus(pythonServiceStatus);
             updateUI();
             updateHistoryToggleUI();
+            renderHistoryList();
             if (silenceMarkerDb !== null) {
                 updateSilenceMarker(silenceMarkerDb);
             }
@@ -1407,6 +1478,21 @@ function setupEventListeners() {
     
     if (historyList) {
         historyList.addEventListener('click', handleHistoryListClick);
+    }
+
+    if (historySearchInput) {
+        historySearchInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                applyHistorySearch(event.target.value);
+            } else if (event.key === 'Escape') {
+                if (historySearchInput.value || historySearchQuery) {
+                    event.preventDefault();
+                    historySearchInput.value = '';
+                    applyHistorySearch('');
+                }
+            }
+        });
     }
 
     if (toggleHistoryButton) {

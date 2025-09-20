@@ -131,6 +131,25 @@
           gap: 8px;
         }
 
+        .history-search {
+          margin-top: 12px;
+        }
+
+        .history-search input {
+          width: 100%;
+          padding: 8px 12px;
+          border: 1px solid #e5e5e5;
+          border-radius: 6px;
+          font-size: 0.85rem;
+          transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .history-search input:focus {
+          outline: none;
+          border-color: #333;
+          box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.06);
+        }
+
         .history-create-btn {
           padding: 6px 12px;
           border-radius: 6px;
@@ -192,6 +211,7 @@
 
         .main-content.history-collapsed .history-header h2,
         .main-content.history-collapsed .history-actions .history-create-btn,
+        .main-content.history-collapsed .history-search,
         .main-content.history-collapsed .history-list {
           display: none;
         }
@@ -648,6 +668,9 @@
           <button type="button" class="history-create-btn" id="newConversationButton" data-i18n="index.history.newConversation">New Conversation</button>
           <button type="button" class="history-toggle-btn" id="toggleHistoryButton" aria-label="Hide History" title="Hide History">&#x2190;</button>
         </div>
+      </div>
+      <div class="history-search">
+        <input type="text" id="historySearchInput" placeholder="Search transcripts" data-i18n-placeholder="index.history.searchPlaceholder" />
       </div>
       <div class="history-list" id="historyList">
         <div class="history-empty" data-i18n="index.history.empty">No conversations yet</div>
