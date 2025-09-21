@@ -30,6 +30,7 @@ let lastVoiceTranscription = '';
 let lastVoiceResultId = null;
 const pendingConversationTitleRequests = new Map();
 const pendingSummaryRequests = new Map();
+const pendingOptimizationRequests = new Map();
 
 // Config
 const isPackaged = app.isPackaged;
@@ -60,6 +61,13 @@ const DEFAULT_SUMMARY_PROMPT = [
   'Do not include system messages or safety policies; respond with summary text only.'
 ].join('\n');
 
+const DEFAULT_OPTIMIZE_PROMPT = [
+  'You are a friendly conversation coach.',
+  'Rewrite the provided text so it sounds natural, fluent, and conversational while keeping the original meaning.',
+  'Preserve key information, remain concise, and respond in the same language as the input.',
+  'Return only the rewritten text without commentary.'
+].join('\n');
+
 let config = {
   openai_api_key: '',
   openai_base_url: '',
@@ -73,6 +81,10 @@ let config = {
   openai_summary_model: 'gpt-4o-mini',
   gemini_summary_model: 'gemini-2.0-flash',
   summary_system_prompt: DEFAULT_SUMMARY_PROMPT,
+  optimize_engine: 'openai',
+  openai_optimize_model: 'gpt-4o-mini',
+  gemini_optimize_model: 'gemini-2.0-flash',
+  optimize_system_prompt: DEFAULT_OPTIMIZE_PROMPT,
   // Engines
   // recognition_engine: 'openai' | 'soniox'
   recognition_engine: 'openai',
@@ -131,6 +143,18 @@ function loadConfig() {
       }
       if (!config.summary_system_prompt || !String(config.summary_system_prompt).trim()) {
         config.summary_system_prompt = DEFAULT_SUMMARY_PROMPT;
+      }
+      if (!config.optimize_engine) {
+        config.optimize_engine = config.summary_engine || config.translation_engine || 'openai';
+      }
+      if (!config.openai_optimize_model) {
+        config.openai_optimize_model = config.openai_summary_model || config.openai_translate_model || 'gpt-4o-mini';
+      }
+      if (!config.gemini_optimize_model) {
+        config.gemini_optimize_model = config.gemini_summary_model || config.gemini_translate_model || 'gemini-2.0-flash';
+      }
+      if (!config.optimize_system_prompt || !String(config.optimize_system_prompt).trim()) {
+        config.optimize_system_prompt = DEFAULT_OPTIMIZE_PROMPT;
       }
       // Backfill legacy -> new keys if needed
       if (!config.app_language) {
@@ -473,6 +497,20 @@ function processPythonStdout(data) {
         }
       }
 
+      if (obj && obj.type === 'optimization_result') {
+        const reqId = obj.request_id;
+        if (reqId && pendingOptimizationRequests.has(reqId)) {
+          const pending = pendingOptimizationRequests.get(reqId);
+          try {
+            if (pending && pending.timeout) clearTimeout(pending.timeout);
+          } catch (_) {}
+          if (pending && typeof pending.resolve === 'function') {
+            try { pending.resolve(obj); } catch (_) {}
+          }
+          pendingOptimizationRequests.delete(reqId);
+        }
+      }
+
       // Mirror important logs to terminal for easier debugging
       if (obj && obj.type === 'log') {
         const lvl = String(obj.level || '').toLowerCase();
@@ -741,6 +779,141 @@ ipcMain.handle('start-voice-input', async () => {
 ipcMain.handle('stop-voice-input', async () => {
   handleVoiceHotkeyUp();
   return true;
+});
+
+ipcMain.handle('write-clipboard', async (_event, text) => {
+  try {
+    const normalized = typeof text === 'string' ? text : String(text || '');
+    clipboard.writeText(normalized);
+    return { success: true };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+});
+
+ipcMain.handle('request-translation', async (_event, payload = {}) => {
+  const transcriptionRaw = typeof payload.transcription === 'string'
+    ? payload.transcription
+    : typeof payload.text === 'string'
+      ? payload.text
+      : '';
+  const transcription = transcriptionRaw ? transcriptionRaw.trim() : '';
+  if (!transcription) {
+    return { success: false, error: 'No text to translate' };
+  }
+
+  if (!pythonProcess) {
+    const started = startPythonService();
+    if (!started) {
+      return { success: false, error: 'Service unavailable' };
+    }
+  }
+
+  const resultId = payload.resultId || payload.result_id || randomUUID();
+  const conversationId = typeof payload.conversationId === 'string' ? payload.conversationId : null;
+  const entryId = typeof payload.entryId === 'string' ? payload.entryId : null;
+  const targetLanguage = (typeof payload.targetLanguage === 'string' && payload.targetLanguage.trim())
+    ? payload.targetLanguage.trim()
+    : (config.translate_language || 'Chinese');
+  const message = {
+    type: 'translate_single',
+    result_id: resultId,
+    transcription,
+    target_language: targetLanguage,
+    conversation_id: conversationId,
+    entry_id: entryId,
+    context: payload.context || 'manual'
+  };
+
+  const sent = sendToPython(message);
+  if (!sent) {
+    return { success: false, error: 'Service unavailable' };
+  }
+  return { success: true, resultId, targetLanguage };
+});
+
+ipcMain.handle('optimize-text', async (_event, payload = {}) => {
+  const textRaw = typeof payload.text === 'string' ? payload.text : '';
+  const text = textRaw ? textRaw.trim() : '';
+  if (!text) {
+    return {
+      type: 'optimization_result',
+      request_id: null,
+      success: false,
+      reason: 'empty',
+      error: 'No text to optimize'
+    };
+  }
+
+  if (!pythonProcess) {
+    const started = startPythonService();
+    if (!started) {
+      return {
+        type: 'optimization_result',
+        request_id: null,
+        success: false,
+        reason: 'unavailable',
+        error: 'Service unavailable'
+      };
+    }
+  }
+
+  const conversationId = typeof payload.conversationId === 'string' ? payload.conversationId : null;
+  const entryId = typeof payload.entryId === 'string' ? payload.entryId : null;
+  const requestId = payload.requestId || randomUUID();
+  const targetLanguage = (typeof payload.targetLanguage === 'string' && payload.targetLanguage.trim())
+    ? payload.targetLanguage.trim()
+    : null;
+  const maxTokens = typeof payload.maxTokens === 'number' && payload.maxTokens > 0 ? payload.maxTokens : 320;
+  const systemPrompt = typeof payload.systemPrompt === 'string' && payload.systemPrompt.trim()
+    ? payload.systemPrompt.trim()
+    : null;
+
+  const resultPromise = new Promise((resolve) => {
+    const timeout = setTimeout(() => {
+      pendingOptimizationRequests.delete(requestId);
+      resolve({
+        type: 'optimization_result',
+        request_id: requestId,
+        success: false,
+        reason: 'timeout',
+        conversation_id: conversationId,
+        entry_id: entryId
+      });
+    }, 20000);
+    pendingOptimizationRequests.set(requestId, { resolve, timeout });
+  });
+
+  const message = {
+    type: 'optimize_text',
+    request_id: requestId,
+    conversation_id: conversationId,
+    entry_id: entryId,
+    text,
+    target_language: targetLanguage,
+    system_prompt: systemPrompt,
+    context: payload.context || 'manual',
+    max_tokens: maxTokens
+  };
+
+  const sent = sendToPython(message);
+  if (!sent) {
+    const pending = pendingOptimizationRequests.get(requestId);
+    if (pending && pending.timeout) {
+      try { clearTimeout(pending.timeout); } catch (_) {}
+    }
+    pendingOptimizationRequests.delete(requestId);
+    return {
+      type: 'optimization_result',
+      request_id: requestId,
+      success: false,
+      reason: 'unavailable',
+      conversation_id: conversationId,
+      entry_id: entryId
+    };
+  }
+
+  return resultPromise;
 });
 
 // IPC Handlers - audio devices (stub)

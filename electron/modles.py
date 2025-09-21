@@ -76,6 +76,36 @@ def translate_openai(
     return resp.choices[0].message.content.strip()
 
 
+def optimize_openai(
+    text: str,
+    api_key: Optional[str],
+    base_url: Optional[str],
+    model: Optional[str] = None,
+    system_prompt: Optional[str] = None,
+) -> Optional[str]:
+    if not text or not text.strip():
+        return None
+    client = _create_openai_client(api_key, base_url)
+    prompt = (system_prompt or DEFAULT_OPTIMIZE_PROMPT).strip() or DEFAULT_OPTIMIZE_PROMPT
+    resp = client.chat.completions.create(
+        model=(model or 'gpt-4o-mini'),
+        messages=[
+            {'role': 'system', 'content': prompt},
+            {'role': 'user', 'content': text.strip()},
+        ],
+        max_tokens=800,
+        temperature=0.25,
+        top_p=0.9,
+    )
+    content = resp.choices[0].message.content if resp.choices else None
+    if isinstance(content, str):
+        try:
+            return content.encode('utf-8', 'ignore').decode('utf-8', 'ignore').strip()
+        except Exception:
+            return ''.join(ch for ch in content if 0xD800 > ord(ch) or ord(ch) > 0xDFFF).strip()
+    return None
+
+
 def summarize_openai(
     segments_text: str,
     target_language: Optional[str],
@@ -150,6 +180,12 @@ DEFAULT_GEMINI_SYSTEM_PROMPT = (
     '2) Ensure the translation is natural and fluent.\n'
     '3) If the input is already in {{TARGET_LANGUAGE}}, return it unchanged.\n'
     '4) Respond with the translation only without additional commentary.'
+)
+
+DEFAULT_OPTIMIZE_PROMPT = (
+    'You are a friendly conversation coach.\n'
+    'Rewrite the provided text so it sounds natural, fluent, and conversational while keeping the original meaning.\n'
+    'Return only the rewritten sentence without additional commentary.'
 )
 
 
@@ -330,6 +366,90 @@ def summarize_gemini(
     top_level_text = parsed.get('text') if isinstance(parsed, dict) else None
     if isinstance(top_level_text, str) and top_level_text.strip():
         return top_level_text.strip()
+    return None
+
+
+def optimize_gemini(
+    text: str,
+    api_key: Optional[str],
+    model: Optional[str] = None,
+    system_prompt: Optional[str] = None,
+) -> Optional[str]:
+    if not text or not text.strip():
+        return None
+    key = api_key or os.environ.get('GEMINI_API_KEY') or os.environ.get('GOOGLE_API_KEY')
+    if not key:
+        raise RuntimeError('Missing Gemini API key')
+    model_name = (model or DEFAULT_GEMINI_MODEL).strip() or DEFAULT_GEMINI_MODEL
+    prompt = (system_prompt or DEFAULT_OPTIMIZE_PROMPT).strip() or DEFAULT_OPTIMIZE_PROMPT
+    body = {
+        'systemInstruction': {
+            'parts': [{'text': prompt}]
+        },
+        'contents': [
+            {
+                'role': 'user',
+                'parts': [{'text': text.strip()}]
+            }
+        ],
+        'generationConfig': {
+            'temperature': 0.25,
+            'topP': 0.9,
+            'maxOutputTokens': 800,
+        }
+    }
+    data = json.dumps(body, ensure_ascii=False).encode('utf-8')
+    endpoint = (
+        f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent"
+        f"?key={urllib.parse.quote(key)}"
+    )
+    request = urllib.request.Request(
+        endpoint,
+        data=data,
+        headers={
+            'Content-Type': 'application/json; charset=utf-8'
+        }
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=60) as response:
+            payload = response.read().decode('utf-8')
+    except urllib.error.HTTPError as exc:
+        detail = ''
+        try:
+            detail = exc.read().decode('utf-8', 'ignore')
+        except Exception:
+            pass
+        message = detail or exc.reason or ''
+        raise RuntimeError(f'Gemini API error {exc.code}: {message}') from exc
+    except Exception as exc:
+        raise RuntimeError(f'Gemini API request failed: {exc}') from exc
+
+    try:
+        parsed = json.loads(payload) if isinstance(payload, str) else payload
+    except Exception as exc:
+        raise RuntimeError(f'Gemini API returned invalid JSON: {exc}') from exc
+
+    candidates = parsed.get('candidates') if isinstance(parsed, dict) else None
+    if isinstance(candidates, list):
+        for candidate in candidates:
+            content = candidate.get('content') if isinstance(candidate, dict) else None
+            if not isinstance(content, dict):
+                continue
+            parts = content.get('parts')
+            if isinstance(parts, list):
+                for part in parts:
+                    text_part = part.get('text') if isinstance(part, dict) else None
+                    if isinstance(text_part, str) and text_part.strip():
+                        try:
+                            return text_part.encode('utf-8', 'ignore').decode('utf-8', 'ignore').strip()
+                        except Exception:
+                            return ''.join(ch for ch in text_part if 0xD800 > ord(ch) or ord(ch) > 0xDFFF).strip()
+    top_level_text = parsed.get('text') if isinstance(parsed, dict) else None
+    if isinstance(top_level_text, str) and top_level_text.strip():
+        try:
+            return top_level_text.encode('utf-8', 'ignore').decode('utf-8', 'ignore').strip()
+        except Exception:
+            return ''.join(ch for ch in top_level_text if 0xD800 > ord(ch) or ord(ch) > 0xDFFF).strip()
     return None
 
 

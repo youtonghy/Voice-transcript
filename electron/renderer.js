@@ -12,6 +12,10 @@ let resultNodes = new Map(); // Result node mapping table, key is result_id, val
 let currentConfig = {}; // Store current configuration
 let configCheckInterval = null; // Timer for periodic configuration checks
 let summaryInProgress = false; // Guard against duplicate summary requests
+const pendingTranslationCopyRequests = new Map();
+let activeContextMenu = null;
+let contextMenuTargetEntry = null;
+let contextMenuTargetElement = null;
 
 const CONVERSATION_STORAGE_KEY = 'voice_transcript_conversations_v1';
 const ACTIVE_CONVERSATION_STORAGE_KEY = 'voice_transcript_active_conversation_v1';
@@ -29,6 +33,13 @@ const MAX_SUMMARY_SEGMENTS = 60;
 const conversationTitleTimers = new Map();
 const conversationTitleRequests = new Map();
 const conversationTitleRescheduleSet = new Set();
+const CONTEXT_MENU_ACTIONS = [
+    { action: 'copy', labelKey: 'index.context.copy' },
+    { action: 'copy-translation', labelKey: 'index.context.copyTranslation' },
+    { action: 'delete', labelKey: 'index.context.delete' },
+    { action: 'translate', labelKey: 'index.context.translate' },
+    { action: 'optimize', labelKey: 'index.context.optimize' }
+];
 
 function removeInvalidSurrogates(text) {
     if (typeof text !== 'string') {
@@ -650,6 +661,10 @@ function normalizeEntry(entry) {
             translationPending: entry.translationPending === true,
             transcriptionPending: entry.transcriptionPending === true,
             meta: entry.meta && typeof entry.meta === 'object' ? { ...entry.meta } : {},
+            optimized: typeof entry.optimized === 'string' ? entry.optimized : '',
+            optimizedPending: entry.optimizedPending === true,
+            optimizedError: typeof entry.optimizedError === 'string' ? entry.optimizedError : null,
+            optimizationMeta: entry.optimizationMeta && typeof entry.optimizationMeta === 'object' ? { ...entry.optimizationMeta } : null,
             createdAt,
             updatedAt: typeof entry.updatedAt === 'string' ? entry.updatedAt : createdAt
         };
@@ -936,6 +951,12 @@ function renderHistoryList() {
     });
 }
 
+function createResultSeparator() {
+    const separator = document.createElement('div');
+    separator.className = 'result-separator';
+    return separator;
+}
+
 function createResultEntryElement(entry) {
     const container = document.createElement('div');
     container.className = 'log-entry result-entry';
@@ -953,23 +974,38 @@ function createResultEntryElement(entry) {
     }
     container.appendChild(transcriptionDiv);
     if (entry.translation && !entry.translationPending) {
-        const separator = document.createElement('div');
-        separator.className = 'result-separator';
-        container.appendChild(separator);
+        container.appendChild(createResultSeparator());
         const translationDiv = document.createElement('div');
         translationDiv.className = 'result-part translation';
         translationDiv.textContent = entry.translation;
         container.appendChild(translationDiv);
     } else if (entry.translationPending) {
         if (entry.transcription && !entry.transcriptionPending) {
-            const separator = document.createElement('div');
-            separator.className = 'result-separator';
-            container.appendChild(separator);
+            container.appendChild(createResultSeparator());
         }
         const pendingDiv = document.createElement('div');
         pendingDiv.className = 'result-part translation pending';
         pendingDiv.textContent = t('index.translation.loading');
         container.appendChild(pendingDiv);
+    }
+    if (entry.optimized && !entry.optimizedPending && !entry.optimizedError) {
+        container.appendChild(createResultSeparator());
+        const optimizedDiv = document.createElement('div');
+        optimizedDiv.className = 'result-part optimized';
+        optimizedDiv.textContent = entry.optimized;
+        container.appendChild(optimizedDiv);
+    } else if (entry.optimizedPending) {
+        container.appendChild(createResultSeparator());
+        const pendingDiv = document.createElement('div');
+        pendingDiv.className = 'result-part optimized pending';
+        pendingDiv.textContent = t('index.optimized.pending');
+        container.appendChild(pendingDiv);
+    } else if (entry.optimizedError) {
+        container.appendChild(createResultSeparator());
+        const errorDiv = document.createElement('div');
+        errorDiv.className = 'result-part optimized error';
+        errorDiv.textContent = entry.optimizedError;
+        container.appendChild(errorDiv);
     }
     applyRecordingMeta(container, entry.meta || {});
     return container;
@@ -1099,6 +1135,7 @@ function renderConversationLogs() {
     if (!logContainer) {
         return;
     }
+    hideResultContextMenu();
     logContainer.innerHTML = '';
     resultNodes = new Map();
     const conversation = getActiveConversation();
@@ -1177,6 +1214,51 @@ function getResultEntryContext(resultId) {
     return { conversation, entry, mapping };
 }
 
+function resolveEntryContextByIdentifiers({ conversationId = null, entryId = null, resultId = null }) {
+    if (resultId) {
+        const context = getResultEntryContext(resultId);
+        if (context) {
+            return context;
+        }
+    }
+    let conversation = null;
+    if (conversationId) {
+        conversation = getConversationById(conversationId);
+    }
+    if (conversation && entryId) {
+        const entry = conversation.entries.find((item) => item && item.id === entryId);
+        if (entry) {
+            return { conversation, entry };
+        }
+    }
+    if (entryId) {
+        for (let i = 0; i < conversations.length; i += 1) {
+            const candidateConversation = conversations[i];
+            if (!candidateConversation || !Array.isArray(candidateConversation.entries)) {
+                continue;
+            }
+            const candidateEntry = candidateConversation.entries.find((item) => item && item.id === entryId);
+            if (candidateEntry) {
+                return { conversation: candidateConversation, entry: candidateEntry };
+            }
+        }
+    }
+    return conversation ? { conversation, entry: null } : null;
+}
+
+function getEntryContextForElement(element) {
+    if (!element) {
+        return null;
+    }
+    const entryId = element.dataset ? element.dataset.entryId : null;
+    const resultId = element.dataset ? element.dataset.resultId : null;
+    return resolveEntryContextByIdentifiers({
+        conversationId: activeConversationId,
+        entryId: entryId || null,
+        resultId: resultId || null
+    });
+}
+
 function updateResultEntryDom(entry) {
     if (!entry || !logContainer) {
         return;
@@ -1224,6 +1306,15 @@ function updateResultEntryDom(entry) {
                 separator.remove();
             }
         }
+    }
+    if (entry.optimized && !entry.optimizedPending && !entry.optimizedError) {
+        updateOptimizedInBubble(node, entry.optimized, entry.optimizationMeta || {});
+    } else if (entry.optimizedPending) {
+        setOptimizedPendingInBubble(node);
+    } else if (entry.optimizedError) {
+        setOptimizedErrorInBubble(node, entry.optimizedError);
+    } else {
+        removeOptimizedFromBubble(node);
     }
     applyRecordingMeta(node, entry.meta || {});
     logContainer.scrollTop = logContainer.scrollHeight;
@@ -1348,6 +1439,10 @@ function handleResultMessage(message) {
             translation: '',
             translationPending: false,
             transcriptionPending: false,
+            optimized: '',
+            optimizedPending: false,
+            optimizedError: null,
+            optimizationMeta: null,
             meta: {},
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
@@ -1452,10 +1547,31 @@ function handleTranslationUpdateMessage(message) {
         return;
     }
     const { conversation, entry } = context;
+    if (typeof message.error === 'string' && message.error) {
+        entry.translationPending = false;
+        const errorText = removeInvalidSurrogates(message.error);
+        saveConversationsToStorage();
+        if (activeConversationId === conversation.id) {
+            updateResultEntryDom(entry);
+        }
+        if (pendingTranslationCopyRequests.has(entry.id)) {
+            pendingTranslationCopyRequests.delete(entry.id);
+        }
+        addLogEntry('error', `${t('index.log.translationFailed')}: ${errorText}`);
+        return;
+    }
     if (typeof message.translation === 'string' && message.translation) {
         entry.translation = message.translation;
         entry.translationPending = false;
         lastTranslation = message.translation;
+        if (pendingTranslationCopyRequests.has(entry.id)) {
+            copyTextToClipboard(entry.translation).catch((error) => {
+                console.warn('Failed to copy translation:', error);
+                addLogEntry('error', `${t('index.log.copyFailed')}: ${error && error.message ? error.message : error}`);
+            }).finally(() => {
+                pendingTranslationCopyRequests.delete(entry.id);
+            });
+        }
     } else if (message.translation_pending) {
         entry.translationPending = true;
     }
@@ -1482,6 +1598,51 @@ function handleTranslationUpdateMessage(message) {
     }
 }
 
+function handleOptimizationResultMessage(message) {
+    if (!message) {
+        return;
+    }
+    const context = resolveEntryContextByIdentifiers({
+        conversationId: typeof message.conversation_id === 'string' ? message.conversation_id : null,
+        entryId: typeof message.entry_id === 'string' ? message.entry_id : null,
+        resultId: typeof message.result_id === 'string' ? message.result_id : null
+    });
+    if (!context || !context.conversation || !context.entry) {
+        console.warn('Optimization result received but entry not found:', message);
+        return;
+    }
+    const { conversation, entry } = context;
+    const success = message.success !== false && typeof message.optimized_text === 'string' && message.optimized_text.trim();
+    if (success) {
+        entry.optimized = removeInvalidSurrogates(message.optimized_text.trim());
+        entry.optimizedPending = false;
+        entry.optimizedError = null;
+        entry.optimizationMeta = {
+            engine: typeof message.engine === 'string' ? message.engine : null,
+            model: typeof message.model === 'string' ? message.model : null,
+            requestId: typeof message.request_id === 'string' ? message.request_id : null
+        };
+    } else {
+        entry.optimized = '';
+        entry.optimizedPending = false;
+        const errorText = typeof message.error === 'string' && message.error.trim()
+            ? removeInvalidSurrogates(message.error.trim())
+            : t('index.optimized.failed');
+        entry.optimizedError = errorText;
+        entry.optimizationMeta = {
+            engine: typeof message.engine === 'string' ? message.engine : null,
+            model: typeof message.model === 'string' ? message.model : null,
+            requestId: typeof message.request_id === 'string' ? message.request_id : null
+        };
+        addLogEntry('warning', `${t('index.optimized.logFailed')}: ${errorText}`);
+    }
+    entry.updatedAt = new Date().toISOString();
+    conversation.updatedAt = entry.updatedAt;
+    saveConversationsToStorage();
+    if (activeConversationId === conversation.id) {
+        updateResultEntryDom(entry);
+    }
+}
 
 function applyLanguageFromConfig(cfg) {
     const lang = (cfg && cfg.app_language) || DEFAULT_LANGUAGE;
@@ -1637,13 +1798,18 @@ function setupEventListeners() {
     if (volumeToggleBtn) {
         volumeToggleBtn.addEventListener('click', () => toggleVolumePanel());
     }
-    
+
     if (newConversationButton) {
         newConversationButton.addEventListener('click', handleNewConversationClick);
     }
-    
+
     if (historyList) {
         historyList.addEventListener('click', handleHistoryListClick);
+    }
+
+    initializeResultContextMenu();
+    if (logContainer) {
+        logContainer.addEventListener('contextmenu', handleResultEntryContextMenu);
     }
 
     if (historySearchInput) {
@@ -2017,6 +2183,9 @@ function handlePythonMessage(message) {
         case 'translation_update':
             handleTranslationUpdateMessage(message);
             break;
+        case 'optimization_result':
+            handleOptimizationResultMessage(message);
+            break;
         case 'conversation_summary':
             handleConversationSummaryMessage(message);
             break;
@@ -2086,6 +2255,92 @@ function updateTranslationInBubble(bubble, translation) {
         bubble.insertBefore(translationDiv, insertBeforeNode);
     }
     logContainer.scrollTop = logContainer.scrollHeight;
+}
+
+function ensureOptimizedBlock(bubble) {
+    if (!bubble) {
+        return null;
+    }
+    let optimizedDiv = bubble.querySelector('.result-part.optimized');
+    const metaDiv = bubble.querySelector('.recording-meta');
+    const insertBeforeNode = metaDiv || null;
+    if (!optimizedDiv) {
+        bubble.insertBefore(createResultSeparator(), insertBeforeNode);
+        optimizedDiv = document.createElement('div');
+        optimizedDiv.className = 'result-part optimized';
+        bubble.insertBefore(optimizedDiv, insertBeforeNode);
+    } else if (!optimizedDiv.previousElementSibling || !optimizedDiv.previousElementSibling.classList.contains('result-separator')) {
+        bubble.insertBefore(createResultSeparator(), optimizedDiv);
+    }
+    return optimizedDiv;
+}
+
+function updateOptimizedInBubble(bubble, optimizedText, meta = {}) {
+    const optimizedDiv = ensureOptimizedBlock(bubble);
+    if (!optimizedDiv) {
+        return;
+    }
+    optimizedDiv.className = 'result-part optimized';
+    optimizedDiv.textContent = optimizedText;
+    optimizedDiv.dataset.label = t('index.optimized.label');
+    const engine = meta && typeof meta.engine === 'string' ? meta.engine : '';
+    const model = meta && typeof meta.model === 'string' ? meta.model : '';
+    if (engine) {
+        optimizedDiv.dataset.engine = engine;
+    } else {
+        delete optimizedDiv.dataset.engine;
+    }
+    if (model) {
+        optimizedDiv.dataset.model = model;
+    } else {
+        delete optimizedDiv.dataset.model;
+    }
+    const tooltip = engine && model ? `${engine}/${model}` : engine || model || '';
+    optimizedDiv.title = tooltip;
+    logContainer.scrollTop = logContainer.scrollHeight;
+}
+
+function setOptimizedPendingInBubble(bubble) {
+    const optimizedDiv = ensureOptimizedBlock(bubble);
+    if (!optimizedDiv) {
+        return;
+    }
+    optimizedDiv.className = 'result-part optimized pending';
+    optimizedDiv.textContent = t('index.optimized.pending');
+    optimizedDiv.dataset.label = t('index.optimized.label');
+    optimizedDiv.title = '';
+    delete optimizedDiv.dataset.engine;
+    delete optimizedDiv.dataset.model;
+    logContainer.scrollTop = logContainer.scrollHeight;
+}
+
+function setOptimizedErrorInBubble(bubble, errorText) {
+    const optimizedDiv = ensureOptimizedBlock(bubble);
+    if (!optimizedDiv) {
+        return;
+    }
+    optimizedDiv.className = 'result-part optimized error';
+    optimizedDiv.textContent = errorText || t('index.optimized.failed');
+    optimizedDiv.dataset.label = t('index.optimized.label');
+    optimizedDiv.title = '';
+    delete optimizedDiv.dataset.engine;
+    delete optimizedDiv.dataset.model;
+    logContainer.scrollTop = logContainer.scrollHeight;
+}
+
+function removeOptimizedFromBubble(bubble) {
+    if (!bubble) {
+        return;
+    }
+    const optimizedDiv = bubble.querySelector('.result-part.optimized');
+    if (!optimizedDiv) {
+        return;
+    }
+    const separator = optimizedDiv.previousElementSibling;
+    optimizedDiv.remove();
+    if (separator && separator.classList.contains('result-separator')) {
+        separator.remove();
+    }
 }
 
 function updateTranscriptionInBubble(bubble, transcription) {
@@ -2373,6 +2628,407 @@ function clearResults() {
 }
 
 
+async function copyTextToClipboard(text, { silent = false } = {}) {
+    const normalized = typeof text === 'string' ? text : '';
+    if (!normalized) {
+        if (!silent) {
+            addLogEntry('warning', t('index.log.copyEmpty'));
+        }
+        return false;
+    }
+    try {
+        if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+            await navigator.clipboard.writeText(normalized);
+        } else if (window.electronAPI && typeof window.electronAPI.writeClipboard === 'function') {
+            const result = await window.electronAPI.writeClipboard(normalized);
+            if (!result || result.success === false) {
+                const message = result && result.error ? result.error : 'Clipboard write failed';
+                throw new Error(message);
+            }
+        } else {
+            const textarea = document.createElement('textarea');
+            textarea.value = normalized;
+            textarea.style.position = 'fixed';
+            textarea.style.opacity = '0';
+            textarea.style.pointerEvents = 'none';
+            document.body.appendChild(textarea);
+            textarea.focus();
+            textarea.select();
+            const successful = document.execCommand('copy');
+            textarea.remove();
+            if (!successful) {
+                throw new Error('Copy command rejected');
+            }
+        }
+        if (!silent) {
+            addLogEntry('info', t('index.log.copySuccess'));
+        }
+        return true;
+    } catch (error) {
+        if (!silent) {
+            addLogEntry('error', `${t('index.log.copyFailed')}: ${error && error.message ? error.message : error}`);
+        }
+        throw error;
+    }
+}
+
+function getManualTranslationTargetLanguage() {
+    if (currentConfig && typeof currentConfig.translate_language === 'string' && currentConfig.translate_language.trim()) {
+        return currentConfig.translate_language.trim();
+    }
+    if (currentConfig && currentConfig.translation_mode === 'smart') {
+        const candidate = typeof currentConfig.smart_language2 === 'string' && currentConfig.smart_language2.trim()
+            ? currentConfig.smart_language2.trim()
+            : null;
+        if (candidate) {
+            return candidate;
+        }
+    }
+    return 'Chinese';
+}
+
+async function requestTranslationForEntry(entry, conversation, { autoCopy = false } = {}) {
+    if (!entry || !conversation) {
+        return;
+    }
+    if (!entry.transcription || entry.transcriptionPending) {
+        addLogEntry('warning', t('index.log.translationNoText'));
+        return;
+    }
+    if (entry.translationPending) {
+        if (autoCopy) {
+            pendingTranslationCopyRequests.set(entry.id, true);
+        }
+        addLogEntry('info', t('index.log.translationInProgress'));
+        return;
+    }
+    if (autoCopy) {
+        pendingTranslationCopyRequests.set(entry.id, true);
+    }
+    entry.translationPending = true;
+    entry.optimizedError = entry.optimizedError; // keep existing value
+    entry.updatedAt = new Date().toISOString();
+    conversation.updatedAt = entry.updatedAt;
+    saveConversationsToStorage();
+    if (activeConversationId === conversation.id) {
+        updateResultEntryDom(entry);
+    }
+    addLogEntry('info', t('index.log.translationQueued'));
+    try {
+        const payload = await window.electronAPI.requestTranslation({
+            transcription: entry.transcription,
+            resultId: entry.resultId || entry.id,
+            conversationId: conversation.id,
+            entryId: entry.id,
+            targetLanguage: getManualTranslationTargetLanguage(),
+            context: 'manual'
+        });
+        if (!payload || payload.success === false) {
+            if (autoCopy) {
+                pendingTranslationCopyRequests.delete(entry.id);
+            }
+            entry.translationPending = false;
+            saveConversationsToStorage();
+            if (activeConversationId === conversation.id) {
+                updateResultEntryDom(entry);
+            }
+            const reason = payload && payload.error ? payload.error : t('index.log.translationFailed');
+            addLogEntry('error', `${t('index.log.translationFailed')}: ${reason}`);
+        }
+    } catch (error) {
+        if (autoCopy) {
+            pendingTranslationCopyRequests.delete(entry.id);
+        }
+        entry.translationPending = false;
+        saveConversationsToStorage();
+        if (activeConversationId === conversation.id) {
+            updateResultEntryDom(entry);
+        }
+        addLogEntry('error', `${t('index.log.translationFailed')}: ${error && error.message ? error.message : error}`);
+    }
+}
+
+async function requestOptimizationForEntry(entry, conversation) {
+    if (!entry || !conversation) {
+        return;
+    }
+    if (!entry.transcription || entry.transcriptionPending) {
+        addLogEntry('warning', t('index.optimized.noText'));
+        return;
+    }
+    entry.optimizedPending = true;
+    entry.optimized = '';
+    entry.optimizedError = null;
+    entry.optimizationMeta = null;
+    entry.updatedAt = new Date().toISOString();
+    conversation.updatedAt = entry.updatedAt;
+    saveConversationsToStorage();
+    if (activeConversationId === conversation.id) {
+        updateResultEntryDom(entry);
+    }
+    addLogEntry('info', t('index.optimized.logQueued'));
+    try {
+        const response = await window.electronAPI.optimizeText({
+            text: entry.transcription,
+            conversationId: conversation.id,
+            entryId: entry.id,
+            resultId: entry.resultId || null,
+            context: 'manual'
+        });
+        if (response && response.success === false) {
+            entry.optimizedPending = false;
+            let messageText = null;
+            if (response.error && typeof response.error === 'string') {
+                messageText = removeInvalidSurrogates(response.error);
+            } else if (response.reason === 'timeout') {
+                messageText = t('index.optimized.timeout');
+            }
+            entry.optimizedError = messageText || t('index.optimized.failed');
+            saveConversationsToStorage();
+            if (activeConversationId === conversation.id) {
+                updateResultEntryDom(entry);
+            }
+            addLogEntry('error', `${t('index.optimized.logFailed')}: ${entry.optimizedError}`);
+        }
+    } catch (error) {
+        entry.optimizedPending = false;
+        entry.optimizedError = error && error.message ? error.message : t('index.optimized.failed');
+        saveConversationsToStorage();
+        if (activeConversationId === conversation.id) {
+            updateResultEntryDom(entry);
+        }
+        addLogEntry('error', `${t('index.optimized.logFailed')}: ${entry.optimizedError}`);
+    }
+}
+
+function deleteResultEntry(entry, conversation) {
+    if (!entry || !conversation) {
+        return;
+    }
+    const index = conversation.entries.findIndex((item) => item && item.id === entry.id);
+    if (index === -1) {
+        return;
+    }
+    conversation.entries.splice(index, 1);
+    const key = entry.resultId || entry.id;
+    if (key) {
+        resultConversationMap.delete(key);
+        resultNodes.delete(key);
+    }
+    pendingTranslationCopyRequests.delete(entry.id);
+    if (logContainer) {
+        const node = logContainer.querySelector(`[data-entry-id="${entry.id}"]`);
+        if (node) {
+            node.remove();
+        }
+    }
+    if (conversation.entries.length === 0) {
+        conversation.name = getEmptyConversationTitle();
+        conversation.titleGeneratedAt = null;
+        conversation.needsTitleRefresh = false;
+    } else {
+        markConversationTitleDirty(conversation);
+    }
+    conversation.updatedAt = new Date().toISOString();
+    saveConversationsToStorage();
+    renderHistoryList();
+    addLogEntry('info', t('index.log.entryDeleted'));
+}
+
+async function copyLastResult() {
+    const conversation = getActiveConversation();
+    if (!conversation || !Array.isArray(conversation.entries) || !conversation.entries.length) {
+        addLogEntry('warning', t('index.log.copyEmpty'));
+        return;
+    }
+    for (let i = conversation.entries.length - 1; i >= 0; i -= 1) {
+        const entry = conversation.entries[i];
+        if (!entry || entry.type !== 'result') {
+            continue;
+        }
+        if (!entry.transcription || entry.transcriptionPending) {
+            continue;
+        }
+        const parts = [entry.transcription];
+        if (entry.translation && !entry.translationPending) {
+            parts.push(entry.translation);
+        }
+        await copyTextToClipboard(parts.join('\n'));
+        return;
+    }
+    addLogEntry('warning', t('index.log.copyEmpty'));
+}
+
+
+function initializeResultContextMenu() {
+    if (activeContextMenu) {
+        return;
+    }
+    const menu = document.createElement('div');
+    menu.className = 'result-context-menu hidden';
+    CONTEXT_MENU_ACTIONS.forEach((item) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'result-context-menu-item';
+        button.dataset.action = item.action;
+        button.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            handleContextMenuAction(item.action);
+        });
+        menu.appendChild(button);
+    });
+    document.body.appendChild(menu);
+    activeContextMenu = menu;
+    document.addEventListener('click', (event) => {
+        if (!activeContextMenu || activeContextMenu.classList.contains('hidden')) {
+            return;
+        }
+        if (activeContextMenu.contains(event.target)) {
+            return;
+        }
+        hideResultContextMenu();
+    });
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+            hideResultContextMenu();
+        }
+    });
+    window.addEventListener('resize', hideResultContextMenu);
+    window.addEventListener('blur', hideResultContextMenu);
+    if (logContainer) {
+        logContainer.addEventListener('scroll', hideResultContextMenu);
+    }
+}
+
+function updateContextMenuLabels() {
+    if (!activeContextMenu) {
+        return;
+    }
+    CONTEXT_MENU_ACTIONS.forEach((item) => {
+        const button = activeContextMenu.querySelector(`[data-action="${item.action}"]`);
+        if (button) {
+            button.textContent = t(item.labelKey);
+        }
+    });
+}
+
+function setContextMenuItemState(action, disabled) {
+    if (!activeContextMenu) {
+        return;
+    }
+    const button = activeContextMenu.querySelector(`[data-action="${action}"]`);
+    if (!button) {
+        return;
+    }
+    if (disabled) {
+        button.classList.add('disabled');
+        button.setAttribute('aria-disabled', 'true');
+    } else {
+        button.classList.remove('disabled');
+        button.removeAttribute('aria-disabled');
+    }
+}
+
+function handleResultEntryContextMenu(event) {
+    const entryEl = event.target.closest('.result-entry');
+    if (!entryEl) {
+        hideResultContextMenu();
+        return;
+    }
+    const context = getEntryContextForElement(entryEl);
+    if (!context || !context.entry || !context.conversation) {
+        hideResultContextMenu();
+        return;
+    }
+    event.preventDefault();
+    initializeResultContextMenu();
+    contextMenuTargetEntry = context;
+    contextMenuTargetElement = entryEl;
+    showResultContextMenu(event.clientX, event.clientY, context.entry);
+}
+
+function showResultContextMenu(clientX, clientY, entry) {
+    if (!activeContextMenu || !entry) {
+        return;
+    }
+    updateContextMenuLabels();
+    const hasTranscription = typeof entry.transcription === 'string' && entry.transcription.trim() && entry.transcriptionPending !== true;
+    const canTranslate = hasTranscription;
+    const canOptimize = hasTranscription;
+    setContextMenuItemState('copy', !hasTranscription);
+    setContextMenuItemState('copy-translation', !canTranslate);
+    setContextMenuItemState('translate', !canTranslate);
+    setContextMenuItemState('optimize', !canOptimize);
+    setContextMenuItemState('delete', false);
+
+    activeContextMenu.classList.remove('hidden');
+    activeContextMenu.style.visibility = 'hidden';
+    activeContextMenu.style.display = 'block';
+
+    const { innerWidth, innerHeight } = window;
+    const menuRect = activeContextMenu.getBoundingClientRect();
+    let left = clientX;
+    let top = clientY;
+    if (left + menuRect.width > innerWidth) {
+        left = Math.max(0, innerWidth - menuRect.width - 8);
+    }
+    if (top + menuRect.height > innerHeight) {
+        top = Math.max(0, innerHeight - menuRect.height - 8);
+    }
+    activeContextMenu.style.left = `${left}px`;
+    activeContextMenu.style.top = `${top}px`;
+    activeContextMenu.style.visibility = 'visible';
+}
+
+function hideResultContextMenu() {
+    if (!activeContextMenu) {
+        return;
+    }
+    activeContextMenu.classList.add('hidden');
+    activeContextMenu.style.display = 'none';
+    contextMenuTargetEntry = null;
+    contextMenuTargetElement = null;
+}
+
+async function handleContextMenuAction(action) {
+    if (!contextMenuTargetEntry || !contextMenuTargetEntry.entry || !contextMenuTargetEntry.conversation) {
+        hideResultContextMenu();
+        return;
+    }
+    const { entry, conversation } = contextMenuTargetEntry;
+    hideResultContextMenu();
+    try {
+        switch (action) {
+            case 'copy':
+                await copyTextToClipboard(entry.transcription || '');
+                break;
+            case 'copy-translation':
+                if (entry.translation && !entry.translationPending) {
+                    await copyTextToClipboard(entry.translation);
+                } else {
+                    addLogEntry('info', t('index.log.translationRequestedCopy'));
+                    await requestTranslationForEntry(entry, conversation, { autoCopy: true });
+                }
+                break;
+            case 'translate':
+                await requestTranslationForEntry(entry, conversation, { autoCopy: false });
+                break;
+            case 'optimize':
+                await requestOptimizationForEntry(entry, conversation);
+                break;
+            case 'delete':
+                deleteResultEntry(entry, conversation);
+                break;
+            default:
+                break;
+        }
+    } catch (error) {
+        console.error('Context menu action failed:', action, error);
+    }
+}
+
+
 function clearLogs() {
     const conversation = getActiveConversation();
     if (!conversation) {
@@ -2431,6 +3087,8 @@ function openKeyboardSettings() {
     console.error('Failed to open keyboard/voice settings:', error);
   }
 }
+
+window.copyLastResult = copyLastResult;
 
 
 

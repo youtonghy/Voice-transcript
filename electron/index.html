@@ -651,6 +651,32 @@
             animation: pulse-text 1.5s ease-in-out infinite;
         }
 
+        .result-entry .result-part.optimized {
+            color: #0f172a;
+            font-size: 0.92rem;
+            line-height: 1.5;
+        }
+
+        .result-entry .result-part.optimized::before {
+            content: attr(data-label);
+            display: block;
+            font-size: 0.72rem;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            color: #64748b;
+            margin-bottom: 4px;
+        }
+
+        .result-entry .result-part.optimized.pending {
+            color: #9ca3af;
+            font-style: italic;
+            animation: pulse-text 1.5s ease-in-out infinite;
+        }
+
+        .result-entry .result-part.optimized.error {
+            color: #b91c1c;
+        }
+
         @keyframes pulse-text {
             0%, 100% { opacity: 1; }
             50% { opacity: 0.6; }
@@ -682,6 +708,50 @@
             cursor: pointer;
             font-size: 0.8rem;
             transition: all 0.2s ease;
+        }
+
+        .result-context-menu {
+            position: fixed;
+            z-index: 2000;
+            background: #ffffff;
+            border: 1px solid rgba(226, 232, 240, 0.9);
+            border-radius: 10px;
+            box-shadow: 0 16px 40px rgba(15, 23, 42, 0.18);
+            padding: 6px 0;
+            min-width: 180px;
+            backdrop-filter: blur(6px);
+        }
+
+        .result-context-menu.hidden {
+            display: none;
+        }
+
+        .result-context-menu-item {
+            display: block;
+            width: 100%;
+            padding: 9px 18px;
+            background: transparent;
+            border: none;
+            text-align: left;
+            font-size: 0.92rem;
+            color: #0f172a;
+            cursor: pointer;
+            transition: background 0.15s ease, color 0.15s ease;
+        }
+
+        .result-context-menu-item:hover {
+            background: rgba(59, 130, 246, 0.08);
+            color: #1d4ed8;
+        }
+
+        .result-context-menu-item.disabled {
+            color: #94a3b8;
+            cursor: not-allowed;
+        }
+
+        .result-context-menu-item.disabled:hover {
+            background: transparent;
+            color: #94a3b8;
         }
 
         .summary-btn {

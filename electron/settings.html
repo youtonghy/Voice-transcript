@@ -604,6 +604,28 @@
                 </div>
 
                 <div class="section-group">
+                    <div class="section-title" data-section-key="optimizeEngine">Optimize Engine</div>
+                    <div class="form-group">
+                        <label for="optimizeEngine" data-i18n="settings.labels.optimizeEngine">Optimize Engine</label>
+                        <select id="optimizeEngine" name="optimize_engine">
+                            <option value="openai" selected>OpenAI</option>
+                            <option value="gemini">Gemini</option>
+                        </select>
+                        <div class="form-note" data-i18n="settings.notes.optimizeEngine">Choose the provider that rewrites sentences to sound natural</div>
+                    </div>
+                    <div class="form-group provider-openai-optimize">
+                        <label for="openaiOptimizeModel" data-i18n="settings.labels.openaiOptimizeModel">Optimize Model</label>
+                        <input type="text" id="openaiOptimizeModel" name="openai_optimize_model" placeholder="gpt-4o-mini">
+                        <div class="form-note" data-i18n="settings.notes.openaiOptimizeModel">Model used when OpenAI optimizes wording</div>
+                    </div>
+                    <div class="form-group provider-gemini-optimize" style="display:none;">
+                        <label for="geminiOptimizeModel" data-i18n="settings.labels.geminiOptimizeModel">Gemini Optimize Model</label>
+                        <input type="text" id="geminiOptimizeModel" name="gemini_optimize_model" placeholder="gemini-2.0-flash">
+                        <div class="form-note" data-i18n="settings.notes.geminiOptimizeModel">Model used when Gemini optimizes wording</div>
+                    </div>
+                </div>
+
+                <div class="section-group">
                     <div class="section-title" data-section-key="openaiCommon">OpenAI Common Settings</div>
                     <div class="form-group provider-openai-common">
                         <label for="apiKey">OpenAI API Key</label>

@@ -24,6 +24,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   exportLogs: (params) => ipcRenderer.invoke('export-logs', params),
   summarizeConversationTitle: (params) => ipcRenderer.invoke('summarize-conversation-title', params),
   generateSummary: (params) => ipcRenderer.invoke('generate-summary', params),
+  requestTranslation: (params) => ipcRenderer.invoke('request-translation', params),
+  optimizeText: (params) => ipcRenderer.invoke('optimize-text', params),
+  writeClipboard: (text) => ipcRenderer.invoke('write-clipboard', text),
 
   onPythonMessage: (callback) => {
     ipcRenderer.on('python-message', (event, message) => callback(message));

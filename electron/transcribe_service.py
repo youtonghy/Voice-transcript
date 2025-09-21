@@ -77,6 +77,12 @@ DEFAULT_SUMMARY_PROMPT = (
     "Avoid mentioning system or policy details. Respond only with the summary text."
 )
 
+DEFAULT_OPTIMIZE_PROMPT = (
+    "You are a friendly conversation coach.\n"
+    "Rewrite the provided text so it sounds natural, fluent, and conversational while keeping the original meaning.\n"
+    "Return only the rewritten text without any additional commentary."
+)
+
 DEFAULT_EMPTY_CONVERSATION_TITLE = '空对话'
 MAX_SUMMARY_SEGMENTS = 12
 MAX_SUMMARY_TOTAL_CHARS = 4000
@@ -370,6 +376,7 @@ def _translate_text_gemini(text, target_language):
 
 SUPPORTED_TRANSLATION_ENGINES = {'openai', 'gemini'}
 SUPPORTED_SUMMARY_ENGINES = {'openai', 'gemini'}
+SUPPORTED_OPTIMIZE_ENGINES = {'openai', 'gemini'}
 
 
 def _get_translation_engine():
@@ -438,9 +445,108 @@ def _summary_credentials_available(engine=None):
     return _translation_credentials_available(engine or _get_summary_engine())
 
 
+def _get_optimize_engine():
+    try:
+        if isinstance(config, dict):
+            candidate = config.get('optimize_engine') or config.get('summary_engine') or config.get('translation_engine')
+            if isinstance(candidate, str):
+                candidate = candidate.strip().lower()
+                if candidate in SUPPORTED_OPTIMIZE_ENGINES:
+                    return candidate
+    except Exception:
+        pass
+    return _get_summary_engine()
+
+
+def _resolve_openai_optimize_model():
+    try:
+        if isinstance(config, dict):
+            candidate = config.get('openai_optimize_model') or config.get('openai_summary_model') or config.get('openai_translate_model')
+            if isinstance(candidate, str) and candidate.strip():
+                return candidate.strip()
+    except Exception:
+        pass
+    return OPENAI_TRANSLATE_MODEL
+
+
+def _resolve_gemini_optimize_model():
+    default_model = getattr(modles, 'DEFAULT_GEMINI_MODEL', 'gemini-2.0-flash')
+    try:
+        if isinstance(config, dict):
+            candidate = config.get('gemini_optimize_model') or config.get('gemini_summary_model') or config.get('gemini_translate_model')
+            if isinstance(candidate, str) and candidate.strip():
+                return candidate.strip()
+    except Exception:
+        pass
+    return default_model
+
+
+def _optimize_credentials_available(engine=None):
+    engine = engine or _get_optimize_engine()
+    if engine == 'gemini':
+        key = None
+        try:
+            if isinstance(config, dict):
+                key = config.get('gemini_api_key')
+        except Exception:
+            key = None
+        if key and isinstance(key, str) and key.strip():
+            return True
+        return bool(os.environ.get('GEMINI_API_KEY') or os.environ.get('GOOGLE_API_KEY'))
+    key = None
+    try:
+        if isinstance(config, dict):
+            key = config.get('openai_api_key')
+    except Exception:
+        key = None
+    if key and isinstance(key, str) and key.strip():
+        return True
+    return bool(os.environ.get('OPENAI_API_KEY'))
+
+
 def translate_text(text, target_language='Chinese'):
     """Translate text using the configured translation engine."""
     return _translate_text_dispatch(text, target_language)
+
+
+def _optimize_text_openai(text, system_prompt=None, override_model=None):
+    try:
+        clean_text = _sanitize_utf8_text(text)
+        if not clean_text:
+            return None
+        api_key = None
+        base_url = None
+        model = override_model or _resolve_openai_optimize_model()
+        if isinstance(config, dict):
+            api_key = config.get('openai_api_key') or os.environ.get('OPENAI_API_KEY')
+            base_url = config.get('openai_base_url') or os.environ.get('OPENAI_BASE_URL')
+        prompt = system_prompt or (config.get('optimize_system_prompt') if isinstance(config, dict) else None) or DEFAULT_OPTIMIZE_PROMPT
+        return modles.optimize_openai(clean_text, api_key, base_url, model=model, system_prompt=prompt)
+    except Exception as exc:
+        log_message('error', f'OpenAI optimize error: {exc}')
+        return None
+
+
+def _optimize_text_gemini(text, system_prompt=None, override_model=None):
+    try:
+        clean_text = _sanitize_utf8_text(text)
+        if not clean_text:
+            return None
+        api_key = None
+        if isinstance(config, dict):
+            api_key = config.get('gemini_api_key') or os.environ.get('GEMINI_API_KEY') or os.environ.get('GOOGLE_API_KEY')
+        prompt = system_prompt or (config.get('optimize_system_prompt') if isinstance(config, dict) else None) or DEFAULT_OPTIMIZE_PROMPT
+        return modles.optimize_gemini(clean_text, api_key, model=override_model or _resolve_gemini_optimize_model(), system_prompt=prompt)
+    except Exception as exc:
+        log_message('error', f'Gemini optimize error: {exc}')
+        return None
+
+
+def _optimize_text_dispatch(text, system_prompt=None, *, engine=None):
+    chosen_engine = engine or _get_optimize_engine()
+    if chosen_engine == 'gemini':
+        return _optimize_text_gemini(text, system_prompt)
+    return _optimize_text_openai(text, system_prompt)
 
 
 def _build_summary_text(segments):
@@ -1312,6 +1418,122 @@ def handle_message(message):
             override_transcribe_language = None
             override_translate = False
             override_translate_language = None
+        elif msg_type == "translate_single":
+            result_id = message.get('result_id') or str(uuid.uuid4())
+            transcription = message.get('transcription') if isinstance(message.get('transcription'), str) else ''
+            conversation_id = message.get('conversation_id') if isinstance(message.get('conversation_id'), str) else None
+            entry_id = message.get('entry_id') if isinstance(message.get('entry_id'), str) else None
+            context_label = message.get('context') if isinstance(message.get('context'), str) else None
+            target_language = message.get('target_language') if isinstance(message.get('target_language'), str) and message.get('target_language').strip() else None
+            if not transcription or not transcription.strip():
+                send_message({
+                    "type": "translation_update",
+                    "result_id": result_id,
+                    "translation": '',
+                    "translation_pending": False,
+                    "error": 'empty_text',
+                    "conversation_id": conversation_id,
+                    "entry_id": entry_id,
+                    "context": context_label
+                })
+                return
+            engine = _get_translation_engine()
+            if not _translation_credentials_available(engine):
+                send_message({
+                    "type": "translation_update",
+                    "result_id": result_id,
+                    "translation": '',
+                    "translation_pending": False,
+                    "error": f'{engine} credentials missing',
+                    "conversation_id": conversation_id,
+                    "entry_id": entry_id,
+                    "context": context_label
+                })
+                return
+            if not target_language or not target_language.strip():
+                try:
+                    target_language = config.get('translate_language', 'Chinese') if isinstance(config, dict) else 'Chinese'
+                except Exception:
+                    target_language = 'Chinese'
+            if not target_language or not target_language.strip():
+                target_language = 'Chinese'
+            if not translation_worker_running:
+                start_translation_worker()
+            queue_success, _ = queue_translation(result_id, transcription, target_language, context=context_label or 'manual')
+            if not queue_success:
+                send_message({
+                    "type": "translation_update",
+                    "result_id": result_id,
+                    "translation": '',
+                    "translation_pending": False,
+                    "error": 'queue_failed',
+                    "conversation_id": conversation_id,
+                    "entry_id": entry_id,
+                    "context": context_label
+                })
+            return
+        elif msg_type == "optimize_text":
+            request_id = message.get('request_id') or str(uuid.uuid4())
+            conversation_id = message.get('conversation_id') if isinstance(message.get('conversation_id'), str) else None
+            entry_id = message.get('entry_id') if isinstance(message.get('entry_id'), str) else None
+            result_id = message.get('result_id') if isinstance(message.get('result_id'), str) else None
+            text_value = message.get('text') if isinstance(message.get('text'), str) else ''
+            system_prompt = message.get('system_prompt') if isinstance(message.get('system_prompt'), str) else None
+            context_label = message.get('context') if isinstance(message.get('context'), str) else None
+            if not text_value or not text_value.strip():
+                send_message({
+                    "type": "optimization_result",
+                    "request_id": request_id,
+                    "conversation_id": conversation_id,
+                    "entry_id": entry_id,
+                    "result_id": result_id,
+                    "success": False,
+                    "reason": 'empty'
+                })
+                return
+            engine = _get_optimize_engine()
+            if not _optimize_credentials_available(engine):
+                send_message({
+                    "type": "optimization_result",
+                    "request_id": request_id,
+                    "conversation_id": conversation_id,
+                    "entry_id": entry_id,
+                    "result_id": result_id,
+                    "success": False,
+                    "reason": 'credentials_missing',
+                    "engine": engine
+                })
+                return
+            model_used = _resolve_gemini_optimize_model() if engine == 'gemini' else _resolve_openai_optimize_model()
+            optimized = _optimize_text_dispatch(text_value, system_prompt, engine=engine)
+            if optimized:
+                send_message({
+                    "type": "optimization_result",
+                    "request_id": request_id,
+                    "conversation_id": conversation_id,
+                    "entry_id": entry_id,
+                    "result_id": result_id,
+                    "success": True,
+                    "optimized_text": optimized,
+                    "engine": engine,
+                    "model": model_used,
+                    "context": context_label
+                })
+            else:
+                send_message({
+                    "type": "optimization_result",
+                    "request_id": request_id,
+                    "conversation_id": conversation_id,
+                    "entry_id": entry_id,
+                    "result_id": result_id,
+                    "success": False,
+                    "reason": 'error',
+                    "engine": engine,
+                    "model": model_used,
+                    "context": context_label
+                })
+            return
+        
         elif msg_type == "summarize_conversation":
             request_id = message.get('request_id') or str(uuid.uuid4())
             conversation_id = message.get('conversation_id')
@@ -1475,9 +1697,18 @@ def handle_message(message):
                     config['openai_summary_model'] = config.get('openai_translate_model') or OPENAI_TRANSLATE_MODEL
                 if not config.get('gemini_summary_model'):
                     config['gemini_summary_model'] = config.get('gemini_translate_model') or getattr(modles, 'DEFAULT_GEMINI_MODEL', 'gemini-2.0-flash')
+                if not config.get('optimize_engine'):
+                    config['optimize_engine'] = config.get('summary_engine') or config.get('translation_engine') or 'openai'
+                if not config.get('openai_optimize_model'):
+                    config['openai_optimize_model'] = config.get('openai_summary_model') or config.get('openai_translate_model') or OPENAI_TRANSLATE_MODEL
+                if not config.get('gemini_optimize_model'):
+                    config['gemini_optimize_model'] = config.get('gemini_summary_model') or config.get('gemini_translate_model') or getattr(modles, 'DEFAULT_GEMINI_MODEL', 'gemini-2.0-flash')
+                if not config.get('optimize_system_prompt') or not isinstance(config.get('optimize_system_prompt'), str) or not config.get('optimize_system_prompt').strip():
+                    config['optimize_system_prompt'] = DEFAULT_OPTIMIZE_PROMPT
             except Exception:
                 config['conversation_title_system_prompt'] = DEFAULT_CONVERSATION_TITLE_PROMPT
                 config['summary_system_prompt'] = DEFAULT_SUMMARY_PROMPT
+                config['optimize_system_prompt'] = DEFAULT_OPTIMIZE_PROMPT
             try:
                 src = config.get('transcribe_source', 'openai')
                 oai_set = bool(config.get('openai_api_key') or os.environ.get('OPENAI_API_KEY'))
@@ -1504,7 +1735,6 @@ def handle_message(message):
 
             # Manage translation worker based on config (initial)
             enable_tr = config.get('enable_translation', True)
-            global translation_worker_running
             engine = _get_translation_engine()
             credentials_ok = _translation_credentials_available(engine)
             translation_ready = bool(enable_tr) and credentials_ok
