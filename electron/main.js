@@ -263,8 +263,8 @@ function createSettingsWindow(section) {
     return;
   }
   settingsWindow = new BrowserWindow({
-    width: 860,
-    height: 720,
+    width: 1024,
+    height: 760,
     parent: mainWindow || undefined,
     modal: false,
     webPreferences: {

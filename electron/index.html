@@ -151,13 +151,20 @@
         }
 
         .history-create-btn {
-          padding: 6px 12px;
+          width: 32px;
+          height: 32px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          padding: 0;
           border-radius: 6px;
           border: 1px solid #e5e5e5;
           background: #ffffff;
           color: #333;
           cursor: pointer;
-          font-size: 0.85rem;
+          font-size: 1.25rem;
+          font-weight: 600;
+          line-height: 1;
           transition: all 0.2s ease;
         }
 
@@ -665,7 +672,9 @@
       <div class="history-header">
         <h2 data-i18n="index.history.title">History</h2>
         <div class="history-actions">
-          <button type="button" class="history-create-btn" id="newConversationButton" data-i18n="index.history.newConversation">New Conversation</button>
+          <button type="button" class="history-create-btn" id="newConversationButton" aria-label="New Conversation" title="New Conversation" data-i18n-ariaLabel="index.history.newConversation" data-i18n-title="index.history.newConversation">
+            <span aria-hidden="true">+</span>
+          </button>
           <button type="button" class="history-toggle-btn" id="toggleHistoryButton" aria-label="Hide History" title="Hide History">&#x2190;</button>
         </div>
       </div>
