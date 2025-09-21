@@ -582,6 +582,28 @@
                 </div>
 
                 <div class="section-group">
+                    <div class="section-title" data-section-key="summaryEngine">Summary Engine</div>
+                    <div class="form-group">
+                        <label for="summaryEngine">Summary Engine</label>
+                        <select id="summaryEngine" name="summary_engine">
+                            <option value="openai" selected>OpenAI</option>
+                            <option value="gemini">Gemini</option>
+                        </select>
+                        <div class="form-note">Choose the provider for generated conversation summaries</div>
+                    </div>
+                    <div class="form-group provider-openai-summary">
+                        <label for="openaiSummaryModel">Summary Model</label>
+                        <input type="text" id="openaiSummaryModel" name="openai_summary_model" placeholder="gpt-4o-mini">
+                        <div class="form-note">Model used when OpenAI handles summaries</div>
+                    </div>
+                    <div class="form-group provider-gemini-summary" style="display:none;">
+                        <label for="geminiSummaryModel">Gemini Summary Model</label>
+                        <input type="text" id="geminiSummaryModel" name="gemini_summary_model" placeholder="gemini-2.0-flash">
+                        <div class="form-note">Model used when Gemini handles summaries</div>
+                    </div>
+                </div>
+
+                <div class="section-group">
                     <div class="section-title" data-section-key="openaiCommon">OpenAI Common Settings</div>
                     <div class="form-group provider-openai-common">
                         <label for="apiKey">OpenAI API Key</label>

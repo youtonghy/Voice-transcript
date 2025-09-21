@@ -11,6 +11,7 @@ let translationEnabled = true; // Read from config, used to control combined dis
 let resultNodes = new Map(); // Result node mapping table, key is result_id, value is DOM element
 let currentConfig = {}; // Store current configuration
 let configCheckInterval = null; // Timer for periodic configuration checks
+let summaryInProgress = false; // Guard against duplicate summary requests
 
 const CONVERSATION_STORAGE_KEY = 'voice_transcript_conversations_v1';
 const ACTIVE_CONVERSATION_STORAGE_KEY = 'voice_transcript_active_conversation_v1';
@@ -24,6 +25,7 @@ let historySearchQueryNormalized = '';
 const CONVERSATION_TITLE_DEBOUNCE_MS = 800;
 const MAX_TITLE_SEGMENTS = 12;
 const MAX_TITLE_FIELD_LENGTH = 400;
+const MAX_SUMMARY_SEGMENTS = 60;
 const conversationTitleTimers = new Map();
 const conversationTitleRequests = new Map();
 const conversationTitleRescheduleSet = new Set();
@@ -72,6 +74,7 @@ const activeConversationNameEl = document.getElementById('activeConversationName
 const historySearchInput = document.getElementById('historySearchInput');
 
 const toggleHistoryButton = document.getElementById('toggleHistoryButton');
+const summaryButton = document.getElementById('summaryButton');
 
 const VOLUME_MIN_DB = -60;
 const VOLUME_MAX_DB = 0;
@@ -379,6 +382,18 @@ function getConversationTitleTargetLanguage() {
     return 'Chinese';
 }
 
+function getSummaryTargetLanguage() {
+    if (currentConfig && currentConfig.enable_translation !== false) {
+        const target = typeof currentConfig.translate_language === 'string'
+            ? currentConfig.translate_language.trim()
+            : '';
+        if (target) {
+            return removeInvalidSurrogates(target);
+        }
+    }
+    return getConversationTitleTargetLanguage();
+}
+
 function normalizeSummaryText(value) {
     if (typeof value !== 'string') {
         return '';
@@ -411,6 +426,33 @@ function collectSummarySegments(conversation) {
             translation,
             createdAt: entry.createdAt || null
         });
+    }
+    return segments;
+}
+
+function collectSegmentsForConversationSummary(conversation) {
+    if (!conversation || !Array.isArray(conversation.entries)) {
+        return [];
+    }
+    const segments = [];
+    for (let i = 0; i < conversation.entries.length; i += 1) {
+        const entry = conversation.entries[i];
+        if (!entry || entry.type !== 'result') {
+            continue;
+        }
+        const transcription = normalizeSummaryText(entry.transcription && entry.transcriptionPending !== true ? entry.transcription : '');
+        const translation = normalizeSummaryText(entry.translation && entry.translationPending !== true ? entry.translation : '');
+        if (!transcription && !translation) {
+            continue;
+        }
+        segments.push({
+            transcription,
+            translation,
+            createdAt: entry.createdAt || null
+        });
+        if (segments.length >= MAX_SUMMARY_SEGMENTS) {
+            break;
+        }
     }
     return segments;
 }
@@ -612,6 +654,24 @@ function normalizeEntry(entry) {
             updatedAt: typeof entry.updatedAt === 'string' ? entry.updatedAt : createdAt
         };
         return normalized;
+    }
+    if (entry.type === 'summary') {
+        const createdAt = typeof entry.createdAt === 'string' ? entry.createdAt : new Date().toISOString();
+        const updatedAt = typeof entry.updatedAt === 'string' ? entry.updatedAt : createdAt;
+        const id = typeof entry.id === 'string' ? entry.id : `summary-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+        const status = entry.status === 'ready' ? 'ready' : (entry.status === 'error' ? 'error' : 'pending');
+        return {
+            id,
+            type: 'summary',
+            status,
+            content: typeof entry.content === 'string' ? entry.content : '',
+            engine: typeof entry.engine === 'string' ? entry.engine : null,
+            model: typeof entry.model === 'string' ? entry.model : null,
+            error: typeof entry.error === 'string' ? entry.error : null,
+            requestId: typeof entry.requestId === 'string' ? entry.requestId : null,
+            createdAt,
+            updatedAt
+        };
     }
     if (entry.type === 'log') {
         return {
@@ -915,6 +975,108 @@ function createResultEntryElement(entry) {
     return container;
 }
 
+function buildSummaryMeta(entry) {
+    const parts = [];
+    if (entry && entry.engine) {
+        const engine = String(entry.engine).trim();
+        if (engine) {
+            if (engine.toLowerCase() === 'openai') {
+                parts.push('OpenAI');
+            } else if (engine.toLowerCase() === 'gemini') {
+                parts.push('Gemini');
+            } else {
+                parts.push(engine);
+            }
+        }
+    }
+    if (entry && entry.model) {
+        const model = String(entry.model).trim();
+        if (model) {
+            parts.push(model);
+        }
+    }
+    return parts.join(' · ');
+}
+
+function applySummaryEntryState(node, entry) {
+    if (!node || !entry) {
+        return;
+    }
+    const status = entry.status === 'error' ? 'error' : (entry.status === 'ready' ? 'ready' : 'pending');
+    node.classList.toggle('pending', status === 'pending');
+    node.classList.toggle('error', status === 'error');
+
+    const contentNode = node.querySelector('.summary-content');
+    if (contentNode) {
+        if (status === 'pending') {
+            contentNode.textContent = t('index.summary.generating');
+        } else if (status === 'error') {
+            const fallback = entry.error || entry.content || '';
+            contentNode.textContent = fallback || t('index.summary.failed');
+        } else {
+            const text = typeof entry.content === 'string' && entry.content.trim()
+                ? entry.content.trim()
+                : t('index.summary.empty');
+            contentNode.textContent = text;
+        }
+    }
+
+    const metaNode = node.querySelector('.summary-meta');
+    if (metaNode) {
+        const metaText = buildSummaryMeta(entry);
+        metaNode.textContent = metaText;
+        metaNode.style.display = metaText ? '' : 'none';
+    }
+}
+
+function createSummaryEntryElement(entry) {
+    const container = document.createElement('div');
+    container.className = 'log-entry summary-entry';
+    container.dataset.entryId = entry.id;
+
+    const header = document.createElement('div');
+    header.className = 'summary-header';
+
+    const icon = document.createElement('span');
+    icon.className = 'summary-icon';
+    icon.textContent = String.fromCodePoint(0x1F4AB);
+    header.appendChild(icon);
+
+    const label = document.createElement('span');
+    label.className = 'summary-label';
+    label.textContent = t('index.summary.title');
+    header.appendChild(label);
+
+    const meta = document.createElement('span');
+    meta.className = 'summary-meta';
+    const metaText = buildSummaryMeta(entry);
+    meta.textContent = metaText;
+    if (!metaText) {
+        meta.style.display = 'none';
+    }
+    header.appendChild(meta);
+
+    container.appendChild(header);
+
+    const content = document.createElement('div');
+    content.className = 'summary-content';
+    container.appendChild(content);
+
+    applySummaryEntryState(container, entry);
+    return container;
+}
+
+function updateSummaryEntryDom(entry) {
+    if (!entry || !logContainer) {
+        return;
+    }
+    const node = logContainer.querySelector(`[data-entry-id="${entry.id}"]`);
+    if (!node) {
+        return;
+    }
+    applySummaryEntryState(node, entry);
+}
+
 function createLogEntryElement(entry) {
     const logEntry = document.createElement('div');
     logEntry.className = `log-entry log-${entry.level || 'info'}`;
@@ -951,6 +1113,8 @@ function renderConversationLogs() {
             node = createResultEntryElement(entry);
             const key = entry.resultId || entry.id;
             resultNodes.set(key, node);
+        } else if (entry.type === 'summary') {
+            node = createSummaryEntryElement(entry);
         } else if (entry.type === 'log') {
             node = createLogEntryElement(entry);
         }
@@ -972,6 +1136,8 @@ function appendEntryDom(entry) {
         node = createResultEntryElement(entry);
         const key = entry.resultId || entry.id;
         resultNodes.set(key, node);
+    } else if (entry.type === 'summary') {
+        node = createSummaryEntryElement(entry);
     } else if (entry.type === 'log') {
         node = createLogEntryElement(entry);
     }
@@ -1854,6 +2020,9 @@ function handlePythonMessage(message) {
         case 'conversation_summary':
             handleConversationSummaryMessage(message);
             break;
+        case 'summary_result':
+            // Handled via invoke response in summarizeConversation
+            break;
         case 'volume_level':
             updateVolumeMeter(message);
             break;
@@ -2002,6 +2171,127 @@ function addLogEntry(level, message) {
 }
 
 
+
+function setSummaryButtonLoading(isLoading) {
+    if (!summaryButton) {
+        return;
+    }
+    if (isLoading) {
+        summaryButton.classList.add('loading');
+        summaryButton.disabled = true;
+    } else {
+        summaryButton.classList.remove('loading');
+        summaryButton.disabled = false;
+    }
+}
+
+function applySummaryResult(conversation, entry, response) {
+    if (!conversation || !entry) {
+        return;
+    }
+    const normalizedResponse = response && typeof response === 'object' ? response : null;
+    const success = normalizedResponse && normalizedResponse.success !== false && typeof normalizedResponse.content === 'string' && normalizedResponse.content.trim();
+    entry.engine = normalizedResponse && normalizedResponse.engine ? normalizedResponse.engine : entry.engine;
+    entry.model = normalizedResponse && normalizedResponse.model ? normalizedResponse.model : entry.model;
+    entry.requestId = normalizedResponse && normalizedResponse.request_id ? normalizedResponse.request_id : entry.requestId;
+
+    if (success) {
+        entry.status = 'ready';
+        entry.content = removeInvalidSurrogates(normalizedResponse.content.trim());
+        entry.error = null;
+    } else {
+        entry.status = 'error';
+        const errorMessage = normalizedResponse && normalizedResponse.error
+            ? normalizedResponse.error
+            : normalizedResponse && normalizedResponse.reason === 'credentials_missing'
+                ? t('index.summary.missingCredentials')
+                : normalizedResponse && normalizedResponse.reason === 'empty'
+                    ? t('index.summary.empty')
+                    : t('index.summary.failed');
+        entry.content = errorMessage;
+        entry.error = errorMessage;
+    }
+
+    entry.updatedAt = new Date().toISOString();
+    conversation.updatedAt = entry.updatedAt;
+    updateSummaryEntryDom(entry);
+}
+
+function handleSummaryError(conversation, entry, error) {
+    if (!conversation || !entry) {
+        return;
+    }
+    const message = error && error.message ? error.message : String(error || '');
+    entry.status = 'error';
+    entry.error = message;
+    entry.content = t('index.summary.failed');
+    entry.updatedAt = new Date().toISOString();
+    conversation.updatedAt = entry.updatedAt;
+    updateSummaryEntryDom(entry);
+    addLogEntry('error', `${t('index.summary.errorLogPrefix')}: ${message}`);
+}
+
+async function summarizeConversation() {
+    if (summaryInProgress) {
+        return;
+    }
+    const conversation = getActiveConversation();
+    if (!conversation) {
+        addLogEntry('warning', t('index.summary.noConversation'));
+        return;
+    }
+    const segments = collectSegmentsForConversationSummary(conversation);
+    if (!segments.length) {
+        addLogEntry('warning', t('index.summary.noContent'));
+        return;
+    }
+    if (!window.electronAPI || typeof window.electronAPI.generateSummary !== 'function') {
+        addLogEntry('error', t('index.summary.apiUnavailable'));
+        return;
+    }
+
+    const requestId = `summary-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+    const now = new Date().toISOString();
+    const summaryEntry = {
+        id: requestId,
+        type: 'summary',
+        status: 'pending',
+        content: '',
+        engine: null,
+        model: null,
+        error: null,
+        requestId,
+        createdAt: now,
+        updatedAt: now
+    };
+
+    conversation.entries.push(summaryEntry);
+    conversation.updatedAt = now;
+    saveConversationsToStorage();
+    if (activeConversationId === conversation.id) {
+        appendEntryDom(summaryEntry);
+    }
+
+    summaryInProgress = true;
+    setSummaryButtonLoading(true);
+
+    try {
+        const targetLanguage = getSummaryTargetLanguage();
+        const response = await window.electronAPI.generateSummary({
+            conversationId: conversation.id,
+            requestId,
+            segments,
+            targetLanguage
+        });
+        applySummaryResult(conversation, summaryEntry, response);
+    } catch (error) {
+        handleSummaryError(conversation, summaryEntry, error);
+    } finally {
+        summaryInProgress = false;
+        setSummaryButtonLoading(false);
+        saveConversationsToStorage();
+    }
+}
 
 function collectExportEntries() {
     const conversation = getActiveConversation();

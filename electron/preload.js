@@ -23,6 +23,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   exportResults: (params) => ipcRenderer.invoke('export-results', params),
   exportLogs: (params) => ipcRenderer.invoke('export-logs', params),
   summarizeConversationTitle: (params) => ipcRenderer.invoke('summarize-conversation-title', params),
+  generateSummary: (params) => ipcRenderer.invoke('generate-summary', params),
 
   onPythonMessage: (callback) => {
     ipcRenderer.on('python-message', (event, message) => callback(message));

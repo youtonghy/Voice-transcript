@@ -71,6 +71,12 @@ DEFAULT_CONVERSATION_TITLE_PROMPT = (
     "Do not repeat explicit phrases; if a safe title is impossible, respond exactly with 'Sensitive conversation'."
 )
 
+DEFAULT_SUMMARY_PROMPT = (
+    "You are a helpful assistant who summarizes conversations in {{TARGET_LANGUAGE}}.\n"
+    "Review the conversation transcript segments and produce a concise, single-paragraph summary that covers key points.\n"
+    "Avoid mentioning system or policy details. Respond only with the summary text."
+)
+
 DEFAULT_EMPTY_CONVERSATION_TITLE = '空对话'
 MAX_SUMMARY_SEGMENTS = 12
 MAX_SUMMARY_TOTAL_CHARS = 4000
@@ -363,6 +369,7 @@ def _translate_text_gemini(text, target_language):
 
 
 SUPPORTED_TRANSLATION_ENGINES = {'openai', 'gemini'}
+SUPPORTED_SUMMARY_ENGINES = {'openai', 'gemini'}
 
 
 def _get_translation_engine():
@@ -378,6 +385,20 @@ def _get_translation_engine():
     except Exception:
         pass
     return engine
+
+
+def _get_summary_engine():
+    """Get configured summary engine (defaults to translation engine)."""
+    try:
+        if isinstance(config, dict):
+            candidate = config.get('summary_engine') or ''
+            if isinstance(candidate, str):
+                candidate = candidate.strip().lower()
+                if candidate in SUPPORTED_SUMMARY_ENGINES:
+                    return candidate
+    except Exception:
+        pass
+    return _get_translation_engine()
 
 
 def _translation_credentials_available(engine=None):
@@ -412,6 +433,11 @@ def _translate_text_dispatch(text, target_language):
     return _translate_text_openai(text, target_language)
 
 
+def _summary_credentials_available(engine=None):
+    """Return True when credentials are available for the summary engine."""
+    return _translation_credentials_available(engine or _get_summary_engine())
+
+
 def translate_text(text, target_language='Chinese'):
     """Translate text using the configured translation engine."""
     return _translate_text_dispatch(text, target_language)
@@ -444,18 +470,42 @@ def _build_summary_text(segments):
     return summary_text
 
 
-def _summarize_text_openai(segments_text, target_language, system_prompt):
+def _resolve_openai_summary_model():
+    model = OPENAI_TRANSLATE_MODEL
+    try:
+        if isinstance(config, dict):
+            candidate = config.get('openai_summary_model') or config.get('openai_translate_model')
+            if isinstance(candidate, str) and candidate.strip():
+                model = candidate.strip()
+    except Exception:
+        pass
+    return model or OPENAI_TRANSLATE_MODEL
+
+
+def _resolve_gemini_summary_model():
+    default_model = getattr(modles, 'DEFAULT_GEMINI_MODEL', 'gemini-2.0-flash')
+    model = default_model
+    try:
+        if isinstance(config, dict):
+            candidate = config.get('gemini_summary_model') or config.get('gemini_translate_model')
+            if isinstance(candidate, str) and candidate.strip():
+                model = candidate.strip()
+    except Exception:
+        pass
+    return model or default_model
+
+
+def _summarize_text_openai(segments_text, target_language, system_prompt, max_tokens=CONVERSATION_TITLE_MAX_TOKENS, override_model=None):
     try:
         clean_text = _sanitize_utf8_text(segments_text)
         if not clean_text:
             return None
         api_key = None
         base_url = None
-        model = OPENAI_TRANSLATE_MODEL
+        model = override_model or _resolve_openai_summary_model()
         if isinstance(config, dict):
             api_key = config.get('openai_api_key') or os.environ.get('OPENAI_API_KEY')
             base_url = config.get('openai_base_url') or os.environ.get('OPENAI_BASE_URL')
-            model = config.get('openai_translate_model') or OPENAI_TRANSLATE_MODEL
         return modles.summarize_openai(
             clean_text,
             target_language,
@@ -463,41 +513,41 @@ def _summarize_text_openai(segments_text, target_language, system_prompt):
             base_url,
             model=model,
             system_prompt=system_prompt,
-            max_tokens=CONVERSATION_TITLE_MAX_TOKENS,
+            max_tokens=max_tokens or CONVERSATION_TITLE_MAX_TOKENS,
         )
     except Exception as exc:
-        log_message('error', f'OpenAI conversation title error: {exc}')
+        log_message('error', f'OpenAI summarize error: {exc}')
         return None
 
 
-def _summarize_text_gemini(segments_text, target_language, system_prompt):
+def _summarize_text_gemini(segments_text, target_language, system_prompt, max_tokens=CONVERSATION_TITLE_MAX_TOKENS, override_model=None):
     try:
         clean_text = _sanitize_utf8_text(segments_text)
         if not clean_text:
             return None
         api_key = None
-        model = None
         if isinstance(config, dict):
             api_key = config.get('gemini_api_key') or os.environ.get('GEMINI_API_KEY') or os.environ.get('GOOGLE_API_KEY')
-            model = config.get('gemini_translate_model')
+        model = override_model or _resolve_gemini_summary_model()
         return modles.summarize_gemini(
             clean_text,
             target_language,
             api_key,
             model=model,
             system_prompt=system_prompt,
-            max_tokens=CONVERSATION_TITLE_MAX_TOKENS,
+            max_tokens=max_tokens or CONVERSATION_TITLE_MAX_TOKENS,
         )
     except Exception as exc:
-        log_message('error', f'Gemini conversation title error: {exc}')
+        log_message('error', f'Gemini summarize error: {exc}')
         return None
 
 
-def _summarize_text_dispatch(segments_text, target_language, system_prompt):
-    engine = _get_translation_engine()
-    if engine == 'gemini':
-        return _summarize_text_gemini(segments_text, target_language, system_prompt)
-    return _summarize_text_openai(segments_text, target_language, system_prompt)
+def _summarize_text_dispatch(segments_text, target_language, system_prompt, *, engine=None, max_tokens=None):
+    chosen_engine = engine or _get_summary_engine()
+    tokens = max_tokens if isinstance(max_tokens, int) and max_tokens > 0 else CONVERSATION_TITLE_MAX_TOKENS
+    if chosen_engine == 'gemini':
+        return _summarize_text_gemini(segments_text, target_language, system_prompt, max_tokens=tokens)
+    return _summarize_text_openai(segments_text, target_language, system_prompt, max_tokens=tokens)
 
 
 def determine_smart_translation_target(text, language1, language2):
@@ -1299,7 +1349,7 @@ def handle_message(message):
                 send_message(payload)
                 return
             try:
-                title = _summarize_text_dispatch(summary_text, target_language, system_prompt)
+                title = _summarize_text_dispatch(summary_text, target_language, system_prompt, engine=engine, max_tokens=CONVERSATION_TITLE_MAX_TOKENS)
                 if isinstance(title, str) and title.strip():
                     cleaned = title.replace('\n', ' ').strip()
                 else:
@@ -1323,6 +1373,57 @@ def handle_message(message):
                 safe_fallback = _sanitize_utf8_text(fallback_title) or empty_title
                 payload.update({'title': safe_fallback, 'source': 'error', 'engine': engine})
                 send_message(payload)
+            return
+        elif msg_type == "generate_summary":
+            request_id = message.get('request_id') or str(uuid.uuid4())
+            conversation_id = message.get('conversation_id')
+            segments = message.get('segments') if isinstance(message.get('segments'), list) else []
+            target_language = _sanitize_utf8_text(message.get('target_language') if isinstance(message.get('target_language'), str) and message.get('target_language').strip() else '')
+            if not target_language:
+                target_language = 'Chinese'
+            system_prompt = message.get('system_prompt') if isinstance(message.get('system_prompt'), str) and message.get('system_prompt').strip() else None
+            if not system_prompt:
+                candidate_prompt = None
+                if isinstance(config, dict):
+                    candidate_prompt = config.get('summary_system_prompt') or config.get('conversation_title_system_prompt')
+                if isinstance(candidate_prompt, str) and candidate_prompt.strip():
+                    system_prompt = _sanitize_utf8_text(candidate_prompt.strip())
+                else:
+                    system_prompt = DEFAULT_SUMMARY_PROMPT
+            else:
+                system_prompt = _sanitize_utf8_text(system_prompt) or DEFAULT_SUMMARY_PROMPT
+
+            summary_text = _build_summary_text(segments)
+            engine = _get_summary_engine()
+            payload = {
+                'type': 'summary_result',
+                'request_id': request_id,
+                'conversation_id': conversation_id,
+                'engine': engine,
+            }
+            if not summary_text:
+                payload.update({'content': '', 'success': False, 'reason': 'empty'})
+                send_message(payload)
+                return
+
+            if not _summary_credentials_available(engine):
+                payload.update({'content': '', 'success': False, 'reason': 'credentials_missing', 'engine': engine})
+                send_message(payload)
+                return
+
+            max_tokens = message.get('max_tokens') if isinstance(message.get('max_tokens'), int) and message.get('max_tokens') > 0 else 320
+            model_used = _resolve_gemini_summary_model() if engine == 'gemini' else _resolve_openai_summary_model()
+            try:
+                summary = _summarize_text_dispatch(summary_text, target_language, system_prompt, engine=engine, max_tokens=max_tokens)
+                if isinstance(summary, str) and summary.strip():
+                    cleaned = _sanitize_utf8_text(summary.strip())
+                    payload.update({'content': cleaned, 'success': True, 'engine': engine, 'model': model_used})
+                else:
+                    payload.update({'content': '', 'success': False, 'reason': 'empty_response', 'engine': engine, 'model': model_used})
+            except Exception as exc:
+                log_message('error', f'Summary generation failed: {exc}')
+                payload.update({'content': '', 'success': False, 'reason': 'error', 'error': str(exc), 'engine': engine, 'model': model_used})
+            send_message(payload)
             return
         elif msg_type == "shutdown":
             # Graceful exit: if recording, stop first; then stop translation thread and exit
@@ -1365,8 +1466,18 @@ def handle_message(message):
                     config = {}
                 if 'conversation_title_system_prompt' not in config or not isinstance(config.get('conversation_title_system_prompt'), str) or not config.get('conversation_title_system_prompt').strip():
                     config['conversation_title_system_prompt'] = DEFAULT_CONVERSATION_TITLE_PROMPT
+                if 'summary_system_prompt' not in config or not isinstance(config.get('summary_system_prompt'), str) or not config.get('summary_system_prompt').strip():
+                    config['summary_system_prompt'] = DEFAULT_SUMMARY_PROMPT
+                if not config.get('summary_engine'):
+                    candidate_engine = config.get('translation_engine') or 'openai'
+                    config['summary_engine'] = candidate_engine
+                if not config.get('openai_summary_model'):
+                    config['openai_summary_model'] = config.get('openai_translate_model') or OPENAI_TRANSLATE_MODEL
+                if not config.get('gemini_summary_model'):
+                    config['gemini_summary_model'] = config.get('gemini_translate_model') or getattr(modles, 'DEFAULT_GEMINI_MODEL', 'gemini-2.0-flash')
             except Exception:
                 config['conversation_title_system_prompt'] = DEFAULT_CONVERSATION_TITLE_PROMPT
+                config['summary_system_prompt'] = DEFAULT_SUMMARY_PROMPT
             try:
                 src = config.get('transcribe_source', 'openai')
                 oai_set = bool(config.get('openai_api_key') or os.environ.get('OPENAI_API_KEY'))

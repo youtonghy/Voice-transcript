@@ -557,6 +557,82 @@
             box-shadow: 0 1px 2px rgba(0,0,0,0.04);
         }
 
+        .summary-entry {
+            position: relative;
+            border-radius: 14px;
+            padding: 16px 18px;
+            border: 1px solid rgba(148, 163, 184, 0.35);
+            background: linear-gradient(135deg, rgba(224, 242, 255, 0.92), rgba(252, 231, 243, 0.92));
+            box-shadow: 0 8px 26px rgba(59, 130, 246, 0.12);
+            color: #1f2937;
+            overflow: hidden;
+        }
+
+        .summary-entry::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            background: radial-gradient(circle at 15% 15%, rgba(236, 72, 153, 0.18), transparent 55%),
+                radial-gradient(circle at 85% 20%, rgba(59, 130, 246, 0.18), transparent 45%),
+                radial-gradient(circle at 30% 85%, rgba(16, 185, 129, 0.16), transparent 45%);
+        }
+
+        .summary-entry .summary-header {
+            position: relative;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+            font-weight: 600;
+            color: #0f172a;
+        }
+
+        .summary-entry .summary-icon {
+            font-size: 1.25rem;
+        }
+
+        .summary-entry .summary-label {
+            font-size: 1rem;
+        }
+
+        .summary-entry .summary-meta {
+            margin-left: auto;
+            font-size: 0.72rem;
+            color: #475569;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .summary-entry .summary-content {
+            position: relative;
+            font-size: 0.95rem;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            word-break: break-word;
+            color: #0f172a;
+        }
+
+        .summary-entry.pending .summary-content {
+            color: #475569;
+            font-style: italic;
+            animation: pulse-text 1.6s ease-in-out infinite;
+        }
+
+        .summary-entry.error {
+            border-color: rgba(248, 113, 113, 0.45);
+            background: linear-gradient(135deg, rgba(254, 226, 226, 0.94), rgba(255, 241, 242, 0.94));
+            box-shadow: 0 6px 20px rgba(248, 113, 113, 0.18);
+        }
+
+        .summary-entry.error .summary-meta {
+            color: #b91c1c;
+        }
+
+        .summary-entry.error .summary-content {
+            color: #991b1b;
+        }
+
         .result-entry .result-part {
             white-space: pre-wrap;
             word-break: break-word;
@@ -606,6 +682,53 @@
             cursor: pointer;
             font-size: 0.8rem;
             transition: all 0.2s ease;
+        }
+
+        .summary-btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 42px;
+            height: 36px;
+            border-radius: 10px;
+            border: 1px solid rgba(148, 163, 184, 0.4);
+            background: linear-gradient(135deg, rgba(224, 242, 255, 0.9), rgba(252, 231, 243, 0.9));
+            cursor: pointer;
+            transition: transform 0.15s ease, box-shadow 0.2s ease;
+            font-size: 1.35rem;
+            position: relative;
+            padding: 0;
+        }
+
+        .summary-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 18px rgba(59, 130, 246, 0.18);
+        }
+
+        .summary-btn:disabled {
+            cursor: not-allowed;
+            opacity: 0.65;
+            box-shadow: none;
+        }
+
+        .summary-btn.loading::after {
+            content: '';
+            position: absolute;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            border: 2px solid rgba(148, 163, 184, 0.8);
+            border-top-color: rgba(59, 130, 246, 0.9);
+            animation: summary-spin 0.9s linear infinite;
+        }
+
+        .summary-btn.loading span {
+            visibility: hidden;
+        }
+
+        @keyframes summary-spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
 
         .log-controls button:hover {
@@ -696,6 +819,7 @@
       <div class="log-controls">
         <button onclick="exportLogs()" data-i18n="index.buttons.exportLogs">Export Logs</button>
         <button onclick="copyLastResult()" data-i18n="index.buttons.copyLatest">Copy Latest Result</button>
+        <button id="summaryButton" class="summary-btn" onclick="summarizeConversation()" title="Summarize" aria-label="Summarize" data-i18n-title="index.buttons.summaryTooltip" data-i18n-ariaLabel="index.buttons.summaryTooltip"><span aria-hidden="true">💫</span></button>
         <button class="clear-btn" onclick="clearLogs()" data-i18n="index.buttons.clearLogs">Clear Logs</button>
       </div>
     </div>

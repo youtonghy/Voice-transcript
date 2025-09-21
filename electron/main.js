@@ -29,6 +29,7 @@ let voiceInsertAwaiting = false; // set true after stop pressed; insert on next 
 let lastVoiceTranscription = '';
 let lastVoiceResultId = null;
 const pendingConversationTitleRequests = new Map();
+const pendingSummaryRequests = new Map();
 
 // Config
 const isPackaged = app.isPackaged;
@@ -53,6 +54,12 @@ const DEFAULT_CONVERSATION_TITLE_PROMPT = [
   'Only return the title without extra commentary.'
 ].join('\n');
 
+const DEFAULT_SUMMARY_PROMPT = [
+  'You are a helpful assistant who summarizes conversations in {{TARGET_LANGUAGE}}.',
+  'Review the provided transcript segments and produce a concise paragraph covering the important points.',
+  'Do not include system messages or safety policies; respond with summary text only.'
+].join('\n');
+
 let config = {
   openai_api_key: '',
   openai_base_url: '',
@@ -62,6 +69,10 @@ let config = {
   gemini_translate_model: 'gemini-2.0-flash',
   gemini_translate_system_prompt: DEFAULT_GEMINI_TRANSLATE_PROMPT,
   conversation_title_system_prompt: DEFAULT_CONVERSATION_TITLE_PROMPT,
+  summary_engine: 'openai',
+  openai_summary_model: 'gpt-4o-mini',
+  gemini_summary_model: 'gemini-2.0-flash',
+  summary_system_prompt: DEFAULT_SUMMARY_PROMPT,
   // Engines
   // recognition_engine: 'openai' | 'soniox'
   recognition_engine: 'openai',
@@ -108,6 +119,18 @@ function loadConfig() {
       }
       if (!config.conversation_title_system_prompt || !String(config.conversation_title_system_prompt).trim()) {
         config.conversation_title_system_prompt = DEFAULT_CONVERSATION_TITLE_PROMPT;
+      }
+      if (!config.summary_engine) {
+        config.summary_engine = config.translation_engine || 'openai';
+      }
+      if (!config.openai_summary_model) {
+        config.openai_summary_model = config.openai_translate_model || 'gpt-4o-mini';
+      }
+      if (!config.gemini_summary_model) {
+        config.gemini_summary_model = config.gemini_translate_model || 'gemini-2.0-flash';
+      }
+      if (!config.summary_system_prompt || !String(config.summary_system_prompt).trim()) {
+        config.summary_system_prompt = DEFAULT_SUMMARY_PROMPT;
       }
       // Backfill legacy -> new keys if needed
       if (!config.app_language) {
@@ -433,6 +456,20 @@ function processPythonStdout(data) {
             try { pending.resolve(obj); } catch (_) {}
           }
           pendingConversationTitleRequests.delete(reqId);
+        }
+      }
+
+      if (obj && obj.type === 'summary_result') {
+        const reqId = obj.request_id;
+        if (reqId && pendingSummaryRequests.has(reqId)) {
+          const pending = pendingSummaryRequests.get(reqId);
+          try {
+            if (pending && pending.timeout) clearTimeout(pending.timeout);
+          } catch (_) {}
+          if (pending && typeof pending.resolve === 'function') {
+            try { pending.resolve(obj); } catch (_) {}
+          }
+          pendingSummaryRequests.delete(reqId);
         }
       }
 
@@ -974,6 +1011,93 @@ ipcMain.handle('summarize-conversation-title', async (_event, payload = {}) => {
       conversation_id: payload && payload.conversationId ? payload.conversationId : null,
       title: (payload && typeof payload.fallbackTitle === 'string' && payload.fallbackTitle) || (payload && typeof payload.emptyTitle === 'string' ? payload.emptyTitle : ''),
       source: 'error',
+      error: error.message,
+    };
+  }
+});
+
+ipcMain.handle('generate-summary', async (_event, payload = {}) => {
+  try {
+    const conversationId = payload && payload.conversationId ? payload.conversationId : null;
+    const segments = Array.isArray(payload.segments) ? payload.segments : [];
+    const baseEngine = (config.summary_engine || config.translation_engine || 'openai');
+    if (!segments.length) {
+      return {
+        type: 'summary_result',
+        request_id: null,
+        conversation_id: conversationId,
+        content: '',
+        success: false,
+        reason: 'empty',
+        engine: baseEngine,
+      };
+    }
+
+    const requestId = payload.requestId || randomUUID();
+    const targetLanguage = typeof payload.targetLanguage === 'string' && payload.targetLanguage.trim()
+      ? payload.targetLanguage.trim()
+      : (config.translate_language || 'Chinese');
+    const maxTokens = typeof payload.maxTokens === 'number' && payload.maxTokens > 0 ? payload.maxTokens : 320;
+    const systemPrompt = (typeof config.summary_system_prompt === 'string' && config.summary_system_prompt.trim())
+      ? config.summary_system_prompt.trim()
+      : DEFAULT_SUMMARY_PROMPT;
+
+    const message = {
+      type: 'generate_summary',
+      request_id: requestId,
+      conversation_id: conversationId,
+      segments,
+      target_language: targetLanguage,
+      system_prompt: systemPrompt,
+      max_tokens: maxTokens,
+    };
+
+    const resultPromise = new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        pendingSummaryRequests.delete(requestId);
+        resolve({
+          type: 'summary_result',
+          request_id: requestId,
+          conversation_id: conversationId,
+          content: '',
+          success: false,
+          reason: 'timeout',
+          engine: baseEngine,
+        });
+      }, 20000);
+      pendingSummaryRequests.set(requestId, { resolve, timeout });
+    });
+
+    const sent = sendToPython(message);
+    if (!sent) {
+      if (pendingSummaryRequests.has(requestId)) {
+        const pending = pendingSummaryRequests.get(requestId);
+        try {
+          if (pending && pending.timeout) clearTimeout(pending.timeout);
+        } catch (_) {}
+        pendingSummaryRequests.delete(requestId);
+      }
+      return {
+        type: 'summary_result',
+        request_id: requestId,
+        conversation_id: conversationId,
+        content: '',
+        success: false,
+        reason: 'unavailable',
+        engine: baseEngine,
+      };
+    }
+
+    return resultPromise;
+  } catch (error) {
+    return {
+      type: 'summary_result',
+      request_id: null,
+      conversation_id: payload && payload.conversationId ? payload.conversationId : null,
+      content: '',
+      success: false,
+      reason: 'error',
+      engine: config.summary_engine || config.translation_engine || 'openai',
       error: error.message,
     };
   }

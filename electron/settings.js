@@ -89,6 +89,7 @@
     const sectionTitleMap = {
       recognition: 'settings.section.recognitionEngine',
       translationEngine: 'settings.section.translationEngine',
+      summaryEngine: 'settings.section.summaryEngine',
       openaiCommon: 'settings.section.openaiCommon',
       translation: 'settings.section.translation',
       transcription: 'settings.section.transcription',
@@ -112,6 +113,9 @@
       geminiApiKey: 'settings.labels.geminiApiKey',
       geminiTranslateModel: 'settings.labels.geminiTranslateModel',
       openaiTranslateModel: 'settings.labels.openaiTranslateModel',
+      summaryEngine: 'settings.labels.summaryEngine',
+      openaiSummaryModel: 'settings.labels.openaiSummaryModel',
+      geminiSummaryModel: 'settings.labels.geminiSummaryModel',
       apiKey: 'settings.labels.apiKey',
       apiUrl: 'settings.labels.apiUrl',
       enableTranslation: 'settings.labels.enableTranslation',
@@ -152,6 +156,9 @@
       { selector: '#geminiApiKey + .form-note', key: 'settings.notes.geminiApiKey' },
       { selector: '#geminiTranslateModel + .form-note', key: 'settings.notes.geminiTranslateModel' },
       { selector: '#openaiTranslateModel + .form-note', key: 'settings.notes.openaiTranslateModel' },
+      { selector: '#summaryEngine + .form-note', key: 'settings.notes.summaryEngine' },
+      { selector: '#openaiSummaryModel + .form-note', key: 'settings.notes.openaiSummaryModel' },
+      { selector: '#geminiSummaryModel + .form-note', key: 'settings.notes.geminiSummaryModel' },
       { selector: '#apiKey + .form-note', key: 'settings.notes.apiKey' },
       { selector: '#apiUrl + .form-note', key: 'settings.notes.apiUrl' },
       { selector: '#translationMode + .form-note', key: 'settings.notes.translationMode' },
@@ -328,6 +335,14 @@
       });
     }
 
+    const summaryEngine = document.getElementById('summaryEngine');
+    if (summaryEngine) {
+      summaryEngine.addEventListener('change', () => {
+        updateProviderVisibility();
+        autoSave();
+      });
+    }
+
     const apiKey = document.getElementById('apiKey');
     if (apiKey) {
       apiKey.addEventListener('input', () => {
@@ -341,7 +356,7 @@
       apiUrl.addEventListener('input', autoSave);
     }
 
-    ['geminiApiKey', 'geminiTranslateModel', 'openaiTranscribeModel', 'openaiTranslateModel', 'sonioxApiKey', 'dashscopeApiKey', 'qwen3AsrModel', 'language1', 'language2', 'transcribeLanguage', 'silenceThreshold', 'silenceDuration']
+    ['geminiApiKey', 'geminiTranslateModel', 'openaiTranscribeModel', 'openaiTranslateModel', 'openaiSummaryModel', 'geminiSummaryModel', 'sonioxApiKey', 'dashscopeApiKey', 'qwen3AsrModel', 'language1', 'language2', 'transcribeLanguage', 'silenceThreshold', 'silenceDuration']
       .forEach((id) => {
         const el = document.getElementById(id);
         if (el) {
@@ -394,18 +409,23 @@
 
     const rec = config.recognition_engine || config.transcribe_source || 'openai';
     const tl = config.translation_engine || 'openai';
+    const summary = config.summary_engine || tl || 'openai';
     const recEl = document.getElementById('recognitionEngine');
     const tlEl = document.getElementById('translationEngine');
+    const summaryEl = document.getElementById('summaryEngine');
     if (recEl) recEl.value = rec;
     if (tlEl) tlEl.value = tl;
+    if (summaryEl) summaryEl.value = summary;
 
     const fieldMap = {
       apiKey: config.openai_api_key || '',
       apiUrl: config.openai_base_url || '',
       openaiTranscribeModel: config.openai_transcribe_model || 'gpt-4o-transcribe',
       openaiTranslateModel: config.openai_translate_model || 'gpt-4o-mini',
+      openaiSummaryModel: config.openai_summary_model || config.openai_translate_model || 'gpt-4o-mini',
       geminiApiKey: config.gemini_api_key || '',
       geminiTranslateModel: config.gemini_translate_model || 'gemini-2.0-flash',
+      geminiSummaryModel: config.gemini_summary_model || config.gemini_translate_model || 'gemini-2.0-flash',
       sonioxApiKey: config.soniox_api_key || '',
       dashscopeApiKey: config.dashscope_api_key || '',
       qwen3AsrModel: config.qwen3_asr_model || 'qwen3-asr-flash',
@@ -540,6 +560,7 @@
   function updateProviderVisibility() {
     const rec = (document.getElementById('recognitionEngine') || {}).value || 'openai';
     const tl = (document.getElementById('translationEngine') || {}).value || 'openai';
+    const summary = (document.getElementById('summaryEngine') || {}).value || 'openai';
 
     const toggleGroup = (selector, visible) => {
       document.querySelectorAll(selector).forEach((el) => {
@@ -547,10 +568,12 @@
       });
     };
 
-    toggleGroup('.provider-openai-common', rec === 'openai' || tl === 'openai');
+    toggleGroup('.provider-openai-common', rec === 'openai' || tl === 'openai' || summary === 'openai');
     toggleGroup('.provider-openai-rec', rec === 'openai');
     toggleGroup('.provider-openai-trans', tl === 'openai');
+    toggleGroup('.provider-openai-summary', summary === 'openai');
     toggleGroup('.provider-gemini-trans', tl === 'gemini');
+    toggleGroup('.provider-gemini-summary', summary === 'gemini');
     toggleGroup('.provider-soniox', rec === 'soniox');
     toggleGroup('.provider-qwen3-asr', rec === 'qwen3-asr');
   }
@@ -629,11 +652,14 @@
 
     const recEl = document.getElementById('recognitionEngine');
     const tlEl = document.getElementById('translationEngine');
+    const summaryEl = document.getElementById('summaryEngine');
     const rec = recEl ? recEl.value : 'openai';
     const tl = tlEl ? tlEl.value : 'openai';
+    const summary = summaryEl ? summaryEl.value : 'openai';
     config.recognition_engine = rec;
     config.transcribe_source = rec;
     config.translation_engine = tl;
+    config.summary_engine = summary;
 
     const readValue = (id, fallback = '') => {
       const el = document.getElementById(id);
@@ -644,8 +670,10 @@
     config.openai_base_url = readValue('apiUrl');
     config.openai_transcribe_model = readValue('openaiTranscribeModel', 'gpt-4o-transcribe');
     config.openai_translate_model = readValue('openaiTranslateModel', 'gpt-4o-mini');
+    config.openai_summary_model = readValue('openaiSummaryModel', 'gpt-4o-mini');
     config.gemini_api_key = readValue('geminiApiKey');
     config.gemini_translate_model = readValue('geminiTranslateModel', 'gemini-2.0-flash');
+    config.gemini_summary_model = readValue('geminiSummaryModel', 'gemini-2.0-flash');
     config.gemini_translate_system_prompt = config.gemini_translate_system_prompt || DEFAULT_GEMINI_PROMPT;
     config.soniox_api_key = readValue('sonioxApiKey');
     config.dashscope_api_key = readValue('dashscopeApiKey');
