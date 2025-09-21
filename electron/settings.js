@@ -66,6 +66,26 @@
       headerSubtitle.dataset.i18n = 'settings.header.subtitle';
     }
 
+    const sidebarTitle = document.querySelector('.sidebar-title');
+    if (sidebarTitle) {
+      sidebarTitle.dataset.i18n = 'settings.sidebar.title';
+    }
+
+    const sidebarItemMap = {
+      engine: 'settings.sidebar.engine',
+      transcription: 'settings.sidebar.transcription',
+      translation: 'settings.sidebar.translation',
+      recording: 'settings.sidebar.recording',
+      interface: 'settings.sidebar.interface'
+    };
+    document.querySelectorAll('.sidebar-item').forEach((item) => {
+      const section = item.dataset.section;
+      const key = sidebarItemMap[section];
+      if (key) {
+        item.dataset.i18n = key;
+      }
+    });
+
     const sectionTitleMap = {
       recognition: 'settings.section.recognitionEngine',
       translationEngine: 'settings.section.translationEngine',
