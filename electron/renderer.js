@@ -33,6 +33,13 @@ const MAX_SUMMARY_SEGMENTS = 60;
 const conversationTitleTimers = new Map();
 const conversationTitleRequests = new Map();
 const conversationTitleRescheduleSet = new Set();
+const SUPPRESSED_LOG_KEYS = [ // Hide routine status notifications from the log view
+    'index.log.translationQueued',
+    'index.log.translationRequestedCopy',
+    'index.optimized.logQueued',
+    'index.log.copySuccess'
+];
+const SUPPRESSED_LOG_FALLBACKS = new Set(['Copied to clipboard', '已复制到剪贴板']);
 const CONTEXT_MENU_ACTIONS = [
     { action: 'copy', labelKey: 'index.context.copy' },
     { action: 'copy-translation', labelKey: 'index.context.copyTranslation' },
@@ -294,6 +301,17 @@ function messageMatchesKey(text, key) {
     }
     const candidates = getLocalizedList(key);
     return candidates.some((fragment) => fragment && text.includes(fragment));
+}
+
+function shouldSuppressLogMessage(text) {
+    if (typeof text !== 'string' || !text) {
+        return false;
+    }
+    const trimmed = text.trim();
+    if (SUPPRESSED_LOG_FALLBACKS.has(trimmed)) {
+        return true;
+    }
+    return SUPPRESSED_LOG_KEYS.some((key) => messageMatchesKey(trimmed, key));
 }
 
 function t(key) {
@@ -2402,11 +2420,15 @@ function renderResultEntry(transcription, translation = null, translationPending
 
 function addLogEntry(level, message) {
     const timestamp = new Date().toLocaleTimeString();
+    const normalizedMessage = typeof message === 'string' ? message : String(message);
+    if (shouldSuppressLogMessage(normalizedMessage)) {
+        return;
+    }
     const entry = {
         id: `log-$${Date.now()}-$${Math.random().toString(16).slice(2, 8)}`,
         type: 'log',
         level: typeof level === 'string' ? level : 'info',
-        message: typeof message === 'string' ? message : String(message),
+        message: normalizedMessage,
         timestamp,
         createdAt: new Date().toISOString()
     };
@@ -2660,9 +2682,6 @@ async function copyTextToClipboard(text, { silent = false } = {}) {
                 throw new Error('Copy command rejected');
             }
         }
-        if (!silent) {
-            addLogEntry('info', t('index.log.copySuccess'));
-        }
         return true;
     } catch (error) {
         if (!silent) {
@@ -2713,7 +2732,6 @@ async function requestTranslationForEntry(entry, conversation, { autoCopy = fals
     if (activeConversationId === conversation.id) {
         updateResultEntryDom(entry);
     }
-    addLogEntry('info', t('index.log.translationQueued'));
     try {
         const payload = await window.electronAPI.requestTranslation({
             transcription: entry.transcription,
@@ -2766,7 +2784,6 @@ async function requestOptimizationForEntry(entry, conversation) {
     if (activeConversationId === conversation.id) {
         updateResultEntryDom(entry);
     }
-    addLogEntry('info', t('index.optimized.logQueued'));
     try {
         const response = await window.electronAPI.optimizeText({
             text: entry.transcription,
@@ -3007,7 +3024,6 @@ async function handleContextMenuAction(action) {
                 if (entry.translation && !entry.translationPending) {
                     await copyTextToClipboard(entry.translation);
                 } else {
-                    addLogEntry('info', t('index.log.translationRequestedCopy'));
                     await requestTranslationForEntry(entry, conversation, { autoCopy: true });
                 }
                 break;
