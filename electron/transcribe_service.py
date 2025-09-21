@@ -25,15 +25,17 @@ def setup_console_encoding():
     try:
         # Set environment variable
         os.environ['PYTHONIOENCODING'] = 'utf-8'
+        os.environ.setdefault('PYTHONUTF8', '1')
         
-        # Reconfigure standard output streams
+        # Reconfigure standard IO streams
         if hasattr(sys.stdout, 'reconfigure'):
             sys.stdout.reconfigure(encoding='utf-8', errors='replace')
         if hasattr(sys.stderr, 'reconfigure'):
             sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+        if hasattr(sys.stdin, 'reconfigure'):
+            sys.stdin.reconfigure(encoding='utf-8', errors='replace')
         
         # Rely on environment variables set during Electron startup; no longer call external chcp to speed up startup
-                
     except Exception as e:
         # If encoding setup fails, at least log the error
         try:
@@ -78,8 +80,8 @@ DEFAULT_SUMMARY_PROMPT = (
 )
 
 DEFAULT_OPTIMIZE_PROMPT = (
-    "You are a friendly conversation coach.\n"
-    "Rewrite the provided text so it sounds natural, fluent, and conversational while keeping the original meaning.\n"
+    "You are a meticulous language editor.\n"
+    "Rewrite the provided text so that every sentence adopts a more formal register while preserving its original sentence structure and meaning.\n"
     "Return only the rewritten text without any additional commentary."
 )
 
