@@ -43,7 +43,9 @@
       "voice-input.html",
       "voice-input.js",
       "package.json",
-      "assets/**/*"
+      "assets/**/*",
+      "i18n.js",
+      "locales/**/*"
     ],
     "extraResources": [
       {
