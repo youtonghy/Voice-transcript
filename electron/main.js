@@ -1391,10 +1391,18 @@ app.whenReady().then(() => {
 });
 
 app.on('second-instance', () => {
-  if (mainWindow) {
-    if (mainWindow.isMinimized()) mainWindow.restore();
-    mainWindow.focus();
+  const hasMain = mainWindow && !mainWindow.isDestroyed();
+  if (!hasMain) {
+    createMainWindow();
+    return;
   }
+  if (mainWindow.isMinimized()) {
+    mainWindow.restore();
+  }
+  if (!mainWindow.isVisible()) {
+    mainWindow.show();
+  }
+  mainWindow.focus();
 });
 
 // 保持后台驻留：不因窗口全关而退出
