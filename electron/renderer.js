@@ -16,6 +16,8 @@ const pendingTranslationCopyRequests = new Map();
 let activeContextMenu = null;
 let contextMenuTargetEntry = null;
 let contextMenuTargetElement = null;
+let historyContextMenu = null;
+let historyContextMenuTargetId = null;
 
 const CONVERSATION_STORAGE_KEY = 'voice_transcript_conversations_v1';
 const ACTIVE_CONVERSATION_STORAGE_KEY = 'voice_transcript_active_conversation_v1';
@@ -47,6 +49,12 @@ const CONTEXT_MENU_ACTIONS = [
     { action: 'translate', labelKey: 'index.context.translate' },
     { action: 'optimize', labelKey: 'index.context.optimize' }
 ];
+const HISTORY_CONTEXT_MENU_ACTIONS = [
+    { action: 'move-top', labelKey: 'index.history.context.moveToTop' },
+    { action: 'toggle-pin', labelKey: 'index.history.context.pin' },
+    { action: 'delete', labelKey: 'index.history.context.delete' }
+];
+let lastConversationOrderRank = Date.now();
 
 function removeInvalidSurrogates(text) {
     if (typeof text !== 'string') {
@@ -382,6 +390,46 @@ function initializeHistoryCollapsedState() {
 }
 
 // Conversation history management
+function updateLastConversationOrderRank(value) {
+    const numeric = typeof value === 'number' ? value : Number.NaN;
+    if (!Number.isFinite(numeric)) {
+        return;
+    }
+    if (!Number.isFinite(lastConversationOrderRank) || numeric > lastConversationOrderRank) {
+        lastConversationOrderRank = numeric;
+    }
+}
+
+function getNextConversationOrderRank() {
+    const now = Date.now();
+    if (!Number.isFinite(lastConversationOrderRank) || now > lastConversationOrderRank) {
+        lastConversationOrderRank = now;
+    } else {
+        lastConversationOrderRank += 1;
+    }
+    return lastConversationOrderRank;
+}
+
+function bumpConversationOrder(conversation) {
+    if (!conversation) {
+        return;
+    }
+    conversation.orderRank = getNextConversationOrderRank();
+}
+
+function markConversationUpdated(conversation, timestamp = null, { bumpOrder = true } = {}) {
+    const normalizedTimestamp = typeof timestamp === 'string' && timestamp
+        ? timestamp
+        : new Date().toISOString();
+    if (conversation) {
+        conversation.updatedAt = normalizedTimestamp;
+        if (bumpOrder) {
+            bumpConversationOrder(conversation);
+        }
+    }
+    return normalizedTimestamp;
+}
+
 function truncateText(value, maxLength, { addEllipsis = true } = {}) {
     if (typeof value !== 'string') {
         return '';
@@ -725,6 +773,16 @@ function normalizeConversation(conversation) {
     }
     const createdAt = typeof conversation.createdAt === 'string' ? conversation.createdAt : new Date().toISOString();
     const updatedAt = typeof conversation.updatedAt === 'string' ? conversation.updatedAt : createdAt;
+    const pinned = conversation.pinned === true;
+    const pinnedAt = pinned
+        ? (typeof conversation.pinnedAt === 'string' && conversation.pinnedAt ? conversation.pinnedAt : updatedAt)
+        : null;
+    const rawOrderRank = typeof conversation.orderRank === 'number'
+        ? conversation.orderRank
+        : Number(conversation.orderRank);
+    const fallbackRank = Number.isFinite(Date.parse(updatedAt)) ? Date.parse(updatedAt) : Date.now();
+    const orderRank = Number.isFinite(rawOrderRank) ? rawOrderRank : fallbackRank;
+    updateLastConversationOrderRank(orderRank);
     const normalized = {
         id: typeof conversation.id === 'string' ? conversation.id : `conv-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
         name: typeof conversation.name === 'string' && conversation.name ? conversation.name : generateConversationName(new Date(createdAt)),
@@ -732,6 +790,9 @@ function normalizeConversation(conversation) {
         updatedAt,
         titleGeneratedAt: typeof conversation.titleGeneratedAt === 'string' ? conversation.titleGeneratedAt : null,
         needsTitleRefresh: conversation.needsTitleRefresh === true,
+        pinned,
+        pinnedAt,
+        orderRank,
         entries: Array.isArray(conversation.entries) ? conversation.entries.map(normalizeEntry).filter(Boolean) : []
     };
     return normalized;
@@ -887,16 +948,7 @@ function getMostRecentConversationId() {
     if (!Array.isArray(conversations) || !conversations.length) {
         return null;
     }
-    const sorted = [...conversations].sort((a, b) => {
-        const timeA = new Date(a.updatedAt || a.createdAt || 0).getTime();
-        const timeB = new Date(b.updatedAt || b.createdAt || 0).getTime();
-        const normalizedA = Number.isFinite(timeA) ? timeA : 0;
-        const normalizedB = Number.isFinite(timeB) ? timeB : 0;
-        if (normalizedA === normalizedB) {
-            return (b.name || '').localeCompare(a.name || '');
-        }
-        return normalizedB - normalizedA;
-    });
+    const sorted = getSortedConversations();
     if (!sorted.length) {
         return null;
     }
@@ -917,10 +969,67 @@ function updateActiveConversationLabel(conversation) {
     }
 }
 
+function getConversationPinnedTimestamp(conversation) {
+    if (!conversation || !conversation.pinned) {
+        return 0;
+    }
+    const value = Date.parse(conversation.pinnedAt || conversation.updatedAt || conversation.createdAt || '') || 0;
+    return Number.isFinite(value) ? value : 0;
+}
+
+function getConversationOrderRank(conversation) {
+    if (!conversation) {
+        return 0;
+    }
+    const raw = typeof conversation.orderRank === 'number' ? conversation.orderRank : Number(conversation.orderRank);
+    if (Number.isFinite(raw)) {
+        return raw;
+    }
+    const fallback = Date.parse(conversation.updatedAt || conversation.createdAt || '') || 0;
+    return Number.isFinite(fallback) ? fallback : 0;
+}
+
+function getSortedConversations() {
+    if (!Array.isArray(conversations)) {
+        return [];
+    }
+    return [...conversations].sort((a, b) => {
+        const pinnedA = Boolean(a && a.pinned);
+        const pinnedB = Boolean(b && b.pinned);
+        if (pinnedA && !pinnedB) {
+            return -1;
+        }
+        if (!pinnedA && pinnedB) {
+            return 1;
+        }
+        if (pinnedA && pinnedB) {
+            const pinnedTimeA = getConversationPinnedTimestamp(a);
+            const pinnedTimeB = getConversationPinnedTimestamp(b);
+            if (pinnedTimeA !== pinnedTimeB) {
+                return pinnedTimeB - pinnedTimeA;
+            }
+        }
+        const rankA = getConversationOrderRank(a);
+        const rankB = getConversationOrderRank(b);
+        if (rankA !== rankB) {
+            return rankB - rankA;
+        }
+        const updatedA = Date.parse(a && (a.updatedAt || a.createdAt) || '') || 0;
+        const updatedB = Date.parse(b && (b.updatedAt || b.createdAt) || '') || 0;
+        if (updatedA !== updatedB) {
+            return updatedB - updatedA;
+        }
+        const nameA = removeInvalidSurrogates((a && a.name) || '');
+        const nameB = removeInvalidSurrogates((b && b.name) || '');
+        return nameA.localeCompare(nameB);
+    });
+}
+
 function renderHistoryList() {
     if (!historyList) {
         return;
     }
+    hideHistoryContextMenu();
     historyList.innerHTML = '';
     if (!conversations.length) {
         const emptyDiv = document.createElement('div');
@@ -929,14 +1038,7 @@ function renderHistoryList() {
         historyList.appendChild(emptyDiv);
         return;
     }
-    const sorted = [...conversations].sort((a, b) => {
-        const timeA = new Date(a.createdAt || 0).getTime();
-        const timeB = new Date(b.createdAt || 0).getTime();
-        if (timeA === timeB) {
-            return (b.name || '').localeCompare(a.name || '');
-        }
-        return timeB - timeA;
-    });
+    const sorted = getSortedConversations();
     const filtered = historySearchQueryNormalized
         ? sorted.filter((conversation) => conversationMatchesSearch(conversation, historySearchQueryNormalized))
         : sorted;
@@ -956,11 +1058,29 @@ function renderHistoryList() {
         if (conversation.id === activeConversationId) {
             button.classList.add('active');
         }
+        if (conversation.pinned) {
+            button.classList.add('pinned');
+            button.dataset.pinned = 'true';
+        } else {
+            button.dataset.pinned = 'false';
+        }
         button.dataset.conversationId = conversation.id;
+        const header = document.createElement('div');
+        header.className = 'history-item-header';
         const nameSpan = document.createElement('span');
         nameSpan.className = 'history-name';
         nameSpan.textContent = conversation.name;
-        button.appendChild(nameSpan);
+        header.appendChild(nameSpan);
+        if (conversation.pinned) {
+            const pinSpan = document.createElement('span');
+            pinSpan.className = 'history-pin';
+            pinSpan.textContent = '📌';
+            const tooltip = t('index.history.tooltipPinned');
+            pinSpan.title = tooltip && tooltip !== 'index.history.tooltipPinned' ? tooltip : 'Pinned';
+            pinSpan.setAttribute('aria-hidden', 'true');
+            header.appendChild(pinSpan);
+        }
+        button.appendChild(header);
         const detailSpan = document.createElement('span');
         detailSpan.className = 'history-detail';
         detailSpan.textContent = formatRecordedAtText(conversation.createdAt) || '';
@@ -1346,6 +1466,13 @@ function createConversation(config = {}, options = {}) {
     if (!hasEntries && options.forceEmptyName) {
         name = getEmptyConversationTitle();
     }
+    const pinned = config.pinned === true;
+    const pinnedAt = pinned
+        ? (typeof config.pinnedAt === 'string' && config.pinnedAt ? config.pinnedAt : createdAt)
+        : null;
+    const rawOrderRank = typeof config.orderRank === 'number' ? config.orderRank : Number(config.orderRank);
+    const orderRank = Number.isFinite(rawOrderRank) ? rawOrderRank : getNextConversationOrderRank();
+    updateLastConversationOrderRank(orderRank);
     const conversation = {
         id: config.id || `conv-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`,
         name,
@@ -1353,6 +1480,9 @@ function createConversation(config = {}, options = {}) {
         updatedAt: typeof config.updatedAt === 'string' ? config.updatedAt : createdAt,
         titleGeneratedAt: typeof config.titleGeneratedAt === 'string' ? config.titleGeneratedAt : null,
         needsTitleRefresh: Boolean(config.needsTitleRefresh),
+        pinned,
+        pinnedAt,
+        orderRank,
         entries: normalizedEntries
     };
     conversations.push(conversation);
@@ -1373,6 +1503,7 @@ function handleNewConversationClick() {
 }
 
 function handleHistoryListClick(event) {
+    hideHistoryContextMenu();
     const target = event.target.closest('.history-item');
     if (!target || !target.dataset || !target.dataset.conversationId) {
         return;
@@ -1381,6 +1512,217 @@ function handleHistoryListClick(event) {
         return;
     }
     setActiveConversation(target.dataset.conversationId);
+}
+
+function deleteConversation(conversationId) {
+    if (!conversationId) {
+        return;
+    }
+    const index = conversations.findIndex((item) => item && item.id === conversationId);
+    if (index === -1) {
+        return;
+    }
+    const [removed] = conversations.splice(index, 1);
+    if (removed) {
+        removeResultMappingsForConversation(removed.id);
+    }
+    if (activeConversationId === conversationId) {
+        activeConversationId = null;
+        saveActiveConversationId(null);
+        renderConversationLogs();
+    }
+    saveConversationsToStorage();
+    if (!conversations.length) {
+        createConversation({}, { forceEmptyName: true });
+        return;
+    }
+    const nextActiveId = activeConversationId && getConversationById(activeConversationId)
+        ? activeConversationId
+        : getMostRecentConversationId();
+    if (nextActiveId) {
+        if (nextActiveId === activeConversationId && nextActiveId !== null) {
+            renderHistoryList();
+        } else {
+            setActiveConversation(nextActiveId);
+        }
+    } else {
+        renderHistoryList();
+    }
+}
+
+function moveConversationToTop(conversationId) {
+    const conversation = getConversationById(conversationId);
+    if (!conversation) {
+        return;
+    }
+    bumpConversationOrder(conversation);
+    if (conversation.pinned) {
+        conversation.pinnedAt = new Date().toISOString();
+    }
+    saveConversationsToStorage();
+    renderHistoryList();
+}
+
+function toggleConversationPin(conversationId) {
+    const conversation = getConversationById(conversationId);
+    if (!conversation) {
+        return;
+    }
+    const now = new Date().toISOString();
+    if (conversation.pinned) {
+        conversation.pinned = false;
+        conversation.pinnedAt = null;
+        bumpConversationOrder(conversation);
+    } else {
+        conversation.pinned = true;
+        conversation.pinnedAt = now;
+        bumpConversationOrder(conversation);
+    }
+    saveConversationsToStorage();
+    renderHistoryList();
+}
+
+function initializeHistoryContextMenu() {
+    if (historyContextMenu) {
+        return;
+    }
+    const menu = document.createElement('div');
+    menu.className = 'history-context-menu hidden';
+    HISTORY_CONTEXT_MENU_ACTIONS.forEach((item) => {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'history-context-menu-item';
+        button.dataset.action = item.action;
+        button.addEventListener('click', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            handleHistoryContextMenuAction(item.action);
+        });
+        menu.appendChild(button);
+    });
+    document.body.appendChild(menu);
+    historyContextMenu = menu;
+    document.addEventListener('click', (event) => {
+        if (!historyContextMenu || historyContextMenu.classList.contains('hidden')) {
+            return;
+        }
+        if (historyContextMenu.contains(event.target)) {
+            return;
+        }
+        hideHistoryContextMenu();
+    });
+    document.addEventListener('contextmenu', (event) => {
+        if (!historyContextMenu || historyContextMenu.classList.contains('hidden')) {
+            return;
+        }
+        if (historyContextMenu.contains(event.target)) {
+            event.preventDefault();
+            return;
+        }
+        hideHistoryContextMenu();
+    });
+    document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+            hideHistoryContextMenu();
+        }
+    });
+    window.addEventListener('resize', hideHistoryContextMenu);
+    window.addEventListener('blur', hideHistoryContextMenu);
+    if (historyList) {
+        historyList.addEventListener('scroll', hideHistoryContextMenu);
+    }
+}
+
+function updateHistoryContextMenuLabels(conversation) {
+    if (!historyContextMenu) {
+        return;
+    }
+    HISTORY_CONTEXT_MENU_ACTIONS.forEach((item) => {
+        const button = historyContextMenu.querySelector(`[data-action="${item.action}"]`);
+        if (!button) {
+            return;
+        }
+        if (item.action === 'toggle-pin') {
+            const key = conversation && conversation.pinned
+                ? 'index.history.context.unpin'
+                : 'index.history.context.pin';
+            button.textContent = t(key);
+        } else {
+            button.textContent = t(item.labelKey);
+        }
+    });
+}
+
+function showHistoryContextMenu(clientX, clientY, conversation) {
+    if (!historyContextMenu || !conversation) {
+        return;
+    }
+    updateHistoryContextMenuLabels(conversation);
+    historyContextMenu.classList.remove('hidden');
+    historyContextMenu.style.visibility = 'hidden';
+    historyContextMenu.style.display = 'block';
+    const { innerWidth, innerHeight } = window;
+    const rect = historyContextMenu.getBoundingClientRect();
+    let left = clientX;
+    let top = clientY;
+    if (left + rect.width > innerWidth) {
+        left = Math.max(0, innerWidth - rect.width - 8);
+    }
+    if (top + rect.height > innerHeight) {
+        top = Math.max(0, innerHeight - rect.height - 8);
+    }
+    historyContextMenu.style.left = `${left}px`;
+    historyContextMenu.style.top = `${top}px`;
+    historyContextMenu.style.visibility = 'visible';
+}
+
+function hideHistoryContextMenu() {
+    if (!historyContextMenu) {
+        return;
+    }
+    historyContextMenu.classList.add('hidden');
+    historyContextMenu.style.display = 'none';
+    historyContextMenu.style.visibility = 'hidden';
+    historyContextMenuTargetId = null;
+}
+
+function handleHistoryListContextMenu(event) {
+    const target = event.target.closest('.history-item');
+    if (!target || !target.dataset || !target.dataset.conversationId) {
+        hideHistoryContextMenu();
+        return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    initializeHistoryContextMenu();
+    const conversation = getConversationById(target.dataset.conversationId);
+    if (!conversation) {
+        hideHistoryContextMenu();
+        return;
+    }
+    historyContextMenuTargetId = conversation.id;
+    showHistoryContextMenu(event.clientX, event.clientY, conversation);
+}
+
+function handleHistoryContextMenuAction(action) {
+    const conversation = historyContextMenuTargetId ? getConversationById(historyContextMenuTargetId) : null;
+    hideHistoryContextMenu();
+    if (!conversation) {
+        return;
+    }
+    switch (action) {
+        case 'move-top':
+            moveConversationToTop(conversation.id);
+            break;
+        case 'toggle-pin':
+            toggleConversationPin(conversation.id);
+            break;
+        case 'delete':
+            deleteConversation(conversation.id);
+            break;
+        default:
+            break;
+    }
 }
 
 function initializeConversationHistory() {
@@ -1486,8 +1828,8 @@ function handleResultMessage(message) {
         entry.translationPending = true;
     }
     entry.meta = Object.assign({}, entry.meta, meta);
-    entry.updatedAt = new Date().toISOString();
-    conversation.updatedAt = entry.updatedAt;
+    const entryTimestamp = markConversationUpdated(conversation);
+    entry.updatedAt = entryTimestamp;
     const hasReadyContent = (typeof entry.transcription === 'string' && entry.transcription.trim() && entry.transcriptionPending !== true)
         || (typeof entry.translation === 'string' && entry.translation.trim() && entry.translationPending !== true);
     if (hasReadyContent) {
@@ -1531,8 +1873,8 @@ function handleTranscriptionUpdateMessage(message) {
         entry.transcriptionPending = true;
     }
     entry.meta = Object.assign({}, entry.meta, extractRecordingMeta(message));
-    entry.updatedAt = new Date().toISOString();
-    conversation.updatedAt = entry.updatedAt;
+    const entryTimestamp = markConversationUpdated(conversation);
+    entry.updatedAt = entryTimestamp;
     const hasReadyContent = (typeof entry.transcription === 'string' && entry.transcription.trim() && entry.transcriptionPending !== true)
         || (typeof entry.translation === 'string' && entry.translation.trim() && entry.translationPending !== true);
     if (hasReadyContent) {
@@ -1593,8 +1935,8 @@ function handleTranslationUpdateMessage(message) {
     } else if (message.translation_pending) {
         entry.translationPending = true;
     }
-    entry.updatedAt = new Date().toISOString();
-    conversation.updatedAt = entry.updatedAt;
+    const entryTimestamp = markConversationUpdated(conversation);
+    entry.updatedAt = entryTimestamp;
     const hasReadyContent = (typeof entry.transcription === 'string' && entry.transcription.trim() && entry.transcriptionPending !== true)
         || (typeof entry.translation === 'string' && entry.translation.trim() && entry.translationPending !== true);
     if (hasReadyContent) {
@@ -1654,8 +1996,8 @@ function handleOptimizationResultMessage(message) {
         };
         addLogEntry('warning', `${t('index.optimized.logFailed')}: ${errorText}`);
     }
-    entry.updatedAt = new Date().toISOString();
-    conversation.updatedAt = entry.updatedAt;
+    const entryTimestamp = markConversationUpdated(conversation);
+    entry.updatedAt = entryTimestamp;
     saveConversationsToStorage();
     if (activeConversationId === conversation.id) {
         updateResultEntryDom(entry);
@@ -1823,6 +2165,7 @@ function setupEventListeners() {
 
     if (historyList) {
         historyList.addEventListener('click', handleHistoryListClick);
+        historyList.addEventListener('contextmenu', handleHistoryListContextMenu);
     }
 
     initializeResultContextMenu();
@@ -2488,9 +2831,8 @@ function applySummaryResult(conversation, entry, response) {
         entry.content = errorMessage;
         entry.error = errorMessage;
     }
-
-    entry.updatedAt = new Date().toISOString();
-    conversation.updatedAt = entry.updatedAt;
+    const entryTimestamp = markConversationUpdated(conversation);
+    entry.updatedAt = entryTimestamp;
     updateSummaryEntryDom(entry);
 }
 
@@ -2502,8 +2844,8 @@ function handleSummaryError(conversation, entry, error) {
     entry.status = 'error';
     entry.error = message;
     entry.content = t('index.summary.failed');
-    entry.updatedAt = new Date().toISOString();
-    conversation.updatedAt = entry.updatedAt;
+    const entryTimestamp = markConversationUpdated(conversation);
+    entry.updatedAt = entryTimestamp;
     updateSummaryEntryDom(entry);
     addLogEntry('error', `${t('index.summary.errorLogPrefix')}: ${message}`);
 }
@@ -2543,7 +2885,9 @@ async function summarizeConversation() {
     };
 
     conversation.entries.push(summaryEntry);
-    conversation.updatedAt = now;
+    const entryTimestamp = markConversationUpdated(conversation, now);
+    summaryEntry.createdAt = entryTimestamp;
+    summaryEntry.updatedAt = entryTimestamp;
     saveConversationsToStorage();
     if (activeConversationId === conversation.id) {
         appendEntryDom(summaryEntry);
@@ -2726,8 +3070,8 @@ async function requestTranslationForEntry(entry, conversation, { autoCopy = fals
     }
     entry.translationPending = true;
     entry.optimizedError = entry.optimizedError; // keep existing value
-    entry.updatedAt = new Date().toISOString();
-    conversation.updatedAt = entry.updatedAt;
+    const entryTimestamp = markConversationUpdated(conversation);
+    entry.updatedAt = entryTimestamp;
     saveConversationsToStorage();
     if (activeConversationId === conversation.id) {
         updateResultEntryDom(entry);
@@ -2778,8 +3122,8 @@ async function requestOptimizationForEntry(entry, conversation) {
     entry.optimized = '';
     entry.optimizedError = null;
     entry.optimizationMeta = null;
-    entry.updatedAt = new Date().toISOString();
-    conversation.updatedAt = entry.updatedAt;
+    const entryTimestamp = markConversationUpdated(conversation);
+    entry.updatedAt = entryTimestamp;
     saveConversationsToStorage();
     if (activeConversationId === conversation.id) {
         updateResultEntryDom(entry);
@@ -2846,7 +3190,7 @@ function deleteResultEntry(entry, conversation) {
     } else {
         markConversationTitleDirty(conversation);
     }
-    conversation.updatedAt = new Date().toISOString();
+    markConversationUpdated(conversation);
     saveConversationsToStorage();
     renderHistoryList();
     addLogEntry('info', t('index.log.entryDeleted'));

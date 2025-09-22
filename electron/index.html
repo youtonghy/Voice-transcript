@@ -258,14 +258,38 @@
           background: #f0f1f5;
         }
 
+        .history-item.pinned {
+          border-color: #d97706;
+          background: #fff7ed;
+        }
+
+        .history-item-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 6px;
+          width: 100%;
+        }
+
         .history-name {
           font-weight: 600;
           color: #333;
+          flex: 1;
+          min-width: 0;
         }
 
         .history-detail {
           font-size: 0.75rem;
           color: #888;
+        }
+
+        .history-item.pinned .history-name {
+          color: #b45309;
+        }
+
+        .history-pin {
+          font-size: 0.9rem;
+          color: #b45309;
         }
 
         .history-empty {
@@ -752,6 +776,39 @@
         .result-context-menu-item.disabled:hover {
             background: transparent;
             color: #94a3b8;
+        }
+
+        .history-context-menu {
+            position: fixed;
+            z-index: 2100;
+            min-width: 180px;
+            padding: 6px 0;
+            background: #ffffff;
+            border: 1px solid rgba(226, 232, 240, 0.9);
+            border-radius: 10px;
+            box-shadow: 0 16px 40px rgba(15, 23, 42, 0.18);
+        }
+
+        .history-context-menu.hidden {
+            display: none;
+        }
+
+        .history-context-menu-item {
+            display: block;
+            width: 100%;
+            padding: 9px 18px;
+            background: transparent;
+            border: none;
+            text-align: left;
+            font-size: 0.92rem;
+            color: #0f172a;
+            cursor: pointer;
+            transition: background 0.15s ease, color 0.15s ease;
+        }
+
+        .history-context-menu-item:hover {
+            background: rgba(249, 115, 22, 0.12);
+            color: #b45309;
         }
 
         .summary-btn {
