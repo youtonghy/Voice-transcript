@@ -48,6 +48,148 @@ setup_console_encoding()
 
 import modles
 
+# Script classification for smart translation
+LANGUAGE_SCRIPT_MAP = {
+    'arabic': {'arabic'},
+    'bengali': {'bengali'},
+    'chinese': {'han'},
+    'czech': {'latin'},
+    'danish': {'latin'},
+    'dutch': {'latin'},
+    'english': {'latin'},
+    'finnish': {'latin'},
+    'french': {'latin'},
+    'german': {'latin'},
+    'greek': {'greek'},
+    'gujarati': {'gujarati'},
+    'hebrew': {'hebrew'},
+    'hindi': {'devanagari'},
+    'hungarian': {'latin'},
+    'icelandic': {'latin'},
+    'indonesian': {'latin'},
+    'italian': {'latin'},
+    'japanese': {'han', 'hiragana', 'katakana'},
+    'kannada': {'kannada'},
+    'korean': {'hangul'},
+    'malay': {'latin'},
+    'malayalam': {'malayalam'},
+    'norwegian': {'latin'},
+    'persian': {'arabic'},
+    'polish': {'latin'},
+    'portuguese': {'latin'},
+    'punjabi': {'gurmukhi'},
+    'romanian': {'latin'},
+    'russian': {'cyrillic'},
+    'simplified chinese': {'han'},
+    'spanish': {'latin'},
+    'swedish': {'latin'},
+    'tamil': {'tamil'},
+    'telugu': {'telugu'},
+    'thai': {'thai'},
+    'traditional chinese': {'han'},
+    'turkish': {'latin'},
+    'ukrainian': {'cyrillic'},
+    'urdu': {'arabic'},
+    'vietnamese': {'latin'},
+    'zh': {'han'}
+}
+
+def normalize_language_name(name):
+    if not isinstance(name, str):
+        return ''
+    return name.strip().lower()
+
+def language_scripts(name):
+    normalized = normalize_language_name(name)
+    if not normalized:
+        return {'latin'}
+    if normalized in LANGUAGE_SCRIPT_MAP:
+        return LANGUAGE_SCRIPT_MAP[normalized]
+    return {'latin'}
+
+def classify_script(char):
+    codepoint = ord(char)
+    if 0x3400 <= codepoint <= 0x4DBF or 0x4E00 <= codepoint <= 0x9FFF or 0xF900 <= codepoint <= 0xFAFF or 0x20000 <= codepoint <= 0x2CEAF:
+        return 'han'
+    if 0x3040 <= codepoint <= 0x309F:
+        return 'hiragana'
+    if 0x30A0 <= codepoint <= 0x30FF or 0xFF66 <= codepoint <= 0xFF9D:
+        return 'katakana'
+    if 0xAC00 <= codepoint <= 0xD7AF or 0x1100 <= codepoint <= 0x11FF or 0x3130 <= codepoint <= 0x318F:
+        return 'hangul'
+    if 0x0400 <= codepoint <= 0x052F or 0x2DE0 <= codepoint <= 0x2DFF or 0xA640 <= codepoint <= 0xA69F:
+        return 'cyrillic'
+    if 0x0370 <= codepoint <= 0x03FF or 0x1F00 <= codepoint <= 0x1FFF:
+        return 'greek'
+    if 0x0590 <= codepoint <= 0x05FF or 0xFB1D <= codepoint <= 0xFB4F:
+        return 'hebrew'
+    if 0x0600 <= codepoint <= 0x06FF or 0x0750 <= codepoint <= 0x077F or 0x08A0 <= codepoint <= 0x08FF or 0xFB50 <= codepoint <= 0xFDFF or 0xFE70 <= codepoint <= 0xFEFF:
+        return 'arabic'
+    if 0x0900 <= codepoint <= 0x097F:
+        return 'devanagari'
+    if 0x0980 <= codepoint <= 0x09FF:
+        return 'bengali'
+    if 0x0A00 <= codepoint <= 0x0A7F:
+        return 'gurmukhi'
+    if 0x0A80 <= codepoint <= 0x0AFF:
+        return 'gujarati'
+    if 0x0B80 <= codepoint <= 0x0BFF:
+        return 'tamil'
+    if 0x0C00 <= codepoint <= 0x0C7F:
+        return 'telugu'
+    if 0x0C80 <= codepoint <= 0x0CFF:
+        return 'kannada'
+    if 0x0D00 <= codepoint <= 0x0D7F:
+        return 'malayalam'
+    if 0x0E00 <= codepoint <= 0x0E7F:
+        return 'thai'
+    if 0x1780 <= codepoint <= 0x17FF:
+        return 'khmer'
+    if 0x0100 <= codepoint <= 0x024F or 0x00C0 <= codepoint <= 0x00FF or 0x0000 <= codepoint <= 0x007F:
+        return 'latin'
+    return 'other'
+
+def detect_language_by_charset(text, language1, language2):
+    if not text or not text.strip():
+        return None
+
+    lang1_scripts = language_scripts(language1)
+    lang2_scripts = language_scripts(language2)
+
+    score1 = 0
+    score2 = 0
+    ascii_letters = 0
+
+    for char in text:
+        if not char or char.isspace():
+            continue
+
+        script = classify_script(char)
+        if script in lang1_scripts and script not in lang2_scripts:
+            score1 += 1
+            continue
+        if script in lang2_scripts and script not in lang1_scripts:
+            score2 += 1
+            continue
+        if script in lang1_scripts and script in lang2_scripts:
+            score1 += 1
+            score2 += 1
+            continue
+        if script == 'latin' and char.isalpha():
+            ascii_letters += 1
+
+    if score1 == 0 and score2 == 0 and ascii_letters:
+        if 'latin' in lang1_scripts and 'latin' not in lang2_scripts:
+            score1 = ascii_letters
+        elif 'latin' in lang2_scripts and 'latin' not in lang1_scripts:
+            score2 = ascii_letters
+
+    if score1 > score2:
+        return normalize_language_name(language1)
+    if score2 > score1:
+        return normalize_language_name(language2)
+
+    return None
 # Configuration constants
 SAMPLE_RATE = 44100  # Fixed: use standard sampling rate
 CHANNELS = 1
@@ -658,27 +800,7 @@ def _summarize_text_dispatch(segments_text, target_language, system_prompt, *, e
     return _summarize_text_openai(segments_text, target_language, system_prompt, max_tokens=tokens)
 
 
-def determine_smart_translation_target(text, language1, language2):
-    """Wrapper to select target language for smart translation using models (OpenAI)."""
-    api_key = (config.get('openai_api_key') if isinstance(config, dict) else None) or os.environ.get('OPENAI_API_KEY')
-    base_url = (config.get('openai_base_url') if isinstance(config, dict) else None) or os.environ.get('OPENAI_BASE_URL')
-    try:
-        target = modles.detect_language_openai(text, language1, language2, api_key, base_url)
-        return target
-    except Exception as e:
-        log_message("error", f"Language detection error: {e}")
-        return language2
 
-# Ensure this function definition appears after any legacy variants in the file
-def determine_smart_translation_target(text, language1, language2):
-    """Determine target language using OpenAI models helper (override)."""
-    api_key = (config.get('openai_api_key') if isinstance(config, dict) else None) or os.environ.get('OPENAI_API_KEY')
-    base_url = (config.get('openai_base_url') if isinstance(config, dict) else None) or os.environ.get('OPENAI_BASE_URL')
-    try:
-        return modles.detect_language_openai(text, language1, language2, api_key, base_url)
-    except Exception as e:
-        log_message("error", f"Language detection error: {e}")
-        return language2
 
 
 def start_translation_worker():
@@ -1343,14 +1465,17 @@ def process_combined_audio(
         log_message("error", f"Error saving/transcribing audio file: {e}")
 
 def determine_smart_translation_target(text, language1, language2):
-    """Determine target language for smart translation using models helper (OpenAI)."""
-    api_key = (config.get('openai_api_key') if isinstance(config, dict) else None) or os.environ.get('OPENAI_API_KEY')
-    base_url = (config.get('openai_base_url') if isinstance(config, dict) else None) or os.environ.get('OPENAI_BASE_URL')
-    try:
-        return modles.detect_language_openai(text, language1, language2, api_key, base_url)
-    except Exception as e:
-        log_message("error", f"Language detection failed: {e}")
-        return language2
+    """Return translation target using character encoding heuristics."""
+    lang1 = language1 or 'Chinese'
+    lang2 = language2 or 'English'
+
+    detected = detect_language_by_charset(text, lang1, lang2)
+    if detected == normalize_language_name(lang1):
+        return lang2
+    if detected == normalize_language_name(lang2):
+        return lang1
+
+    return lang2
 
 def translate_text(text, target_language="Chinese"):
     """Translate text via configured translation engine (override)."""
