@@ -16,6 +16,9 @@ let mediaTranscribeWindow = null;
 let voiceInputWindow = null;
 let tray = null;
 let isQuitting = false;
+let defaultTaskbarIcon = null;
+let recordingTaskbarIcon = null;
+let isTaskbarRecordingIconActive = false;
 
 // Python service state
 let pythonProcess = null;
@@ -218,6 +221,7 @@ function handleVoiceHotkeyDown() {
     return;
   }
   isVoiceInputRecording = true;
+  updateTaskbarRecordingIcon(true);
   // Clear any pending insertion state from previous session
   try { pendingVoiceInsert.clear(); } catch {}
   voiceInsertAwaiting = false;
@@ -251,6 +255,7 @@ function handleVoiceHotkeyDown() {
 function handleVoiceHotkeyUp() {
   if (!isVoiceInputRecording) return;
   isVoiceInputRecording = false;
+  updateTaskbarRecordingIcon(false);
   lastVoiceStopAt = Date.now();
   voiceInsertAwaiting = true;
   console.log('[VoiceInsert] stop pressed; will insert after final result. bufferedTranscriptionLen=', (lastVoiceTranscription||'').length);
@@ -272,14 +277,21 @@ function insertTextAtCursor(text) {
 
 // Window creators
 function createMainWindow() {
-  mainWindow = new BrowserWindow({
+  ensureTaskbarIconsLoaded();
+  const defaultIconPath = resolveIconAsset('icon');
+  const windowOptions = {
     width: 1000,
     height: 720,
     webPreferences: {
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js')
     }
-  });
+  };
+  if (defaultIconPath) windowOptions.icon = defaultIconPath;
+
+  mainWindow = new BrowserWindow(windowOptions);
+
+  updateTaskbarRecordingIcon(isVoiceInputRecording);
 
   mainWindow.loadFile(path.join(__dirname, 'index.html'));
 
@@ -531,7 +543,18 @@ function processPythonStdout(data) {
           if (obj.type === 'log') console.log('[VoiceInput][PY-LOG]', obj.level, obj.message);
           if (obj.type === 'transcription_update') console.log('[VoiceInput] transcription:', (obj.transcription||'').slice(0,80));
           if (obj.type === 'translation_update') console.log('[VoiceInput] translation:', (obj.translation||'').slice(0,80));
-          if (obj.type === 'recording_error') console.error('[VoiceInput] recording_error:', obj.message);
+          if (obj.type === 'recording_error') {
+            console.error('[VoiceInput] recording_error:', obj.message);
+            if (isVoiceInputRecording) {
+              isVoiceInputRecording = false;
+              voiceInsertAwaiting = false;
+            }
+            updateTaskbarRecordingIcon(false);
+            try { updateTrayMenu(); } catch {}
+          }
+          if (obj.type === 'recording_stopped') {
+            updateTaskbarRecordingIcon(false);
+          }
         }
       } catch {}
     } catch (e) {
@@ -600,6 +623,12 @@ function startPythonService() {
     });
     pythonProcess.on('error', (err) => {
       pythonReady = false;
+      if (isVoiceInputRecording) {
+        isVoiceInputRecording = false;
+        voiceInsertAwaiting = false;
+      }
+      updateTaskbarRecordingIcon(false);
+      try { updateTrayMenu(); } catch {}
       if (mainWindow) {
         mainWindow.webContents.send('python-message', {
           type: 'log',
@@ -612,6 +641,12 @@ function startPythonService() {
     pythonProcess.on('close', (code, signal) => {
       pythonReady = false;
       pythonProcess = null;
+      if (isVoiceInputRecording) {
+        isVoiceInputRecording = false;
+        voiceInsertAwaiting = false;
+      }
+      updateTaskbarRecordingIcon(false);
+      try { updateTrayMenu(); } catch {}
       if (mainWindow) {
         mainWindow.webContents.send('python-message', {
           type: 'log',
@@ -1493,24 +1528,62 @@ function maybeHandleVoiceInputInsertion(obj) {
 }
 
 // 托盘与后台驻留
-function resolveTrayIconPath() {
-  // 优先使用 .ico（Windows），其他平台用 .png
-  const ico = path.join(__dirname, 'assets', 'icons', 'icon.ico');
-  const png = path.join(__dirname, 'assets', 'icons', 'icon.png');
+function resolveIconAsset(baseName) {
+  const ico = path.join(__dirname, 'assets', 'icons', `${baseName}.ico`);
+  const png = path.join(__dirname, 'assets', 'icons', `${baseName}.png`);
   try {
     if (process.platform === 'win32' && fs.existsSync(ico)) return ico;
     if (fs.existsSync(png)) return png;
     if (fs.existsSync(ico)) return ico;
   } catch {}
-  // 打包后可能位于 resourcesPath 下（需根据实际打包配置调整）
   try {
-    const pIco = path.join(process.resourcesPath || '', 'assets', 'icons', 'icon.ico');
-    const pPng = path.join(process.resourcesPath || '', 'assets', 'icons', 'icon.png');
+    const base = process.resourcesPath || '';
+    const pIco = path.join(base, 'assets', 'icons', `${baseName}.ico`);
+    const pPng = path.join(base, 'assets', 'icons', `${baseName}.png`);
     if (process.platform === 'win32' && fs.existsSync(pIco)) return pIco;
     if (fs.existsSync(pPng)) return pPng;
     if (fs.existsSync(pIco)) return pIco;
   } catch {}
   return null;
+}
+
+function resolveTrayIconPath() {
+  return resolveIconAsset('icon');
+}
+
+function resolveRecordingIconPath() {
+  return resolveIconAsset('icon-recording');
+}
+
+function ensureTaskbarIconsLoaded() {
+  if (process.platform !== 'win32') return;
+  if (!defaultTaskbarIcon) {
+    const defaultPath = resolveIconAsset('icon');
+    if (defaultPath) defaultTaskbarIcon = nativeImage.createFromPath(defaultPath);
+  }
+  if (!recordingTaskbarIcon) {
+    const recordingPath = resolveRecordingIconPath();
+    if (recordingPath) recordingTaskbarIcon = nativeImage.createFromPath(recordingPath);
+  }
+}
+
+function updateTaskbarRecordingIcon(active) {
+  if (process.platform !== 'win32') return;
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (typeof mainWindow.setIcon !== 'function') return;
+  ensureTaskbarIconsLoaded();
+  const targetIcon = active ? recordingTaskbarIcon : defaultTaskbarIcon;
+  if (!targetIcon) {
+    isTaskbarRecordingIconActive = active;
+    return;
+  }
+  if (isTaskbarRecordingIconActive === active) return;
+  try {
+    mainWindow.setIcon(targetIcon);
+    isTaskbarRecordingIconActive = active;
+  } catch (err) {
+    try { console.warn('[TaskbarIcon] update failed:', err && err.message); } catch {}
+  }
 }
 
 function getTrayMenuTemplate() {
