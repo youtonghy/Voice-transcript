@@ -19,6 +19,7 @@ let isQuitting = false;
 let defaultTaskbarIcon = null;
 let recordingTaskbarIcon = null;
 let isTaskbarRecordingIconActive = false;
+let isTrayRecordingIconActive = false;
 
 // Python service state
 let pythonProcess = null;
@@ -222,6 +223,7 @@ function handleVoiceHotkeyDown() {
   }
   isVoiceInputRecording = true;
   updateTaskbarRecordingIcon(true);
+  updateTrayRecordingIcon(true);
   // Clear any pending insertion state from previous session
   try { pendingVoiceInsert.clear(); } catch {}
   voiceInsertAwaiting = false;
@@ -256,6 +258,7 @@ function handleVoiceHotkeyUp() {
   if (!isVoiceInputRecording) return;
   isVoiceInputRecording = false;
   updateTaskbarRecordingIcon(false);
+  updateTrayRecordingIcon(false);
   lastVoiceStopAt = Date.now();
   voiceInsertAwaiting = true;
   console.log('[VoiceInsert] stop pressed; will insert after final result. bufferedTranscriptionLen=', (lastVoiceTranscription||'').length);
@@ -277,7 +280,7 @@ function insertTextAtCursor(text) {
 
 // Window creators
 function createMainWindow() {
-  ensureTaskbarIconsLoaded();
+  ensureAppIconsLoaded();
   const defaultIconPath = resolveIconAsset('icon');
   const windowOptions = {
     width: 1000,
@@ -292,6 +295,7 @@ function createMainWindow() {
   mainWindow = new BrowserWindow(windowOptions);
 
   updateTaskbarRecordingIcon(isVoiceInputRecording);
+  updateTrayRecordingIcon(isVoiceInputRecording);
 
   mainWindow.loadFile(path.join(__dirname, 'index.html'));
 
@@ -550,10 +554,12 @@ function processPythonStdout(data) {
               voiceInsertAwaiting = false;
             }
             updateTaskbarRecordingIcon(false);
+            updateTrayRecordingIcon(false);
             try { updateTrayMenu(); } catch {}
           }
           if (obj.type === 'recording_stopped') {
             updateTaskbarRecordingIcon(false);
+            updateTrayRecordingIcon(false);
           }
         }
       } catch {}
@@ -628,6 +634,7 @@ function startPythonService() {
         voiceInsertAwaiting = false;
       }
       updateTaskbarRecordingIcon(false);
+      updateTrayRecordingIcon(false);
       try { updateTrayMenu(); } catch {}
       if (mainWindow) {
         mainWindow.webContents.send('python-message', {
@@ -646,6 +653,7 @@ function startPythonService() {
         voiceInsertAwaiting = false;
       }
       updateTaskbarRecordingIcon(false);
+      updateTrayRecordingIcon(false);
       try { updateTrayMenu(); } catch {}
       if (mainWindow) {
         mainWindow.webContents.send('python-message', {
@@ -1555,8 +1563,7 @@ function resolveRecordingIconPath() {
   return resolveIconAsset('icon-recording');
 }
 
-function ensureTaskbarIconsLoaded() {
-  if (process.platform !== 'win32') return;
+function ensureAppIconsLoaded() {
   if (!defaultTaskbarIcon) {
     const defaultPath = resolveIconAsset('icon');
     if (defaultPath) defaultTaskbarIcon = nativeImage.createFromPath(defaultPath);
@@ -1571,7 +1578,7 @@ function updateTaskbarRecordingIcon(active) {
   if (process.platform !== 'win32') return;
   if (!mainWindow || mainWindow.isDestroyed()) return;
   if (typeof mainWindow.setIcon !== 'function') return;
-  ensureTaskbarIconsLoaded();
+  ensureAppIconsLoaded();
   const targetIcon = active ? recordingTaskbarIcon : defaultTaskbarIcon;
   if (!targetIcon) {
     isTaskbarRecordingIconActive = active;
@@ -1583,6 +1590,20 @@ function updateTaskbarRecordingIcon(active) {
     isTaskbarRecordingIconActive = active;
   } catch (err) {
     try { console.warn('[TaskbarIcon] update failed:', err && err.message); } catch {}
+  }
+}
+
+function updateTrayRecordingIcon(active) {
+  if (!tray) return;
+  ensureAppIconsLoaded();
+  const targetIcon = active ? recordingTaskbarIcon : defaultTaskbarIcon;
+  if (!targetIcon) return;
+  if (isTrayRecordingIconActive === active) return;
+  try {
+    tray.setImage(targetIcon);
+    isTrayRecordingIconActive = active;
+  } catch (err) {
+    try { console.warn('[TrayIcon] update failed:', err && err.message); } catch {}
   }
 }
 
@@ -1668,6 +1689,7 @@ function getTrayMenuTemplate() {
 function updateTrayMenu() {
   if (!tray) return;
   try {
+    updateTrayRecordingIcon(isVoiceInputRecording);
     const template = getTrayMenuTemplate();
     const menu = Menu.buildFromTemplate(template);
     tray.setContextMenu(menu);
@@ -1682,9 +1704,15 @@ function updateTrayMenu() {
 
 function createTray() {
   try {
-    const iconPath = resolveTrayIconPath();
-    const image = iconPath ? nativeImage.createFromPath(iconPath) : null;
-    tray = new Tray(image || undefined);
+    ensureAppIconsLoaded();
+    let trayImage = defaultTaskbarIcon;
+    if (!trayImage) {
+      const iconPath = resolveTrayIconPath();
+      trayImage = iconPath ? nativeImage.createFromPath(iconPath) : null;
+    }
+    tray = new Tray(trayImage || undefined);
+    isTrayRecordingIconActive = null;
+    updateTrayRecordingIcon(isVoiceInputRecording);
     tray.setToolTip('语音转写');
     tray.on('click', () => {
       // 单击切换显示/隐藏
