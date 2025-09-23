@@ -1178,16 +1178,16 @@ function applySummaryEntryState(node, entry) {
 
     const contentNode = node.querySelector('.summary-content');
     if (contentNode) {
-        if (status === 'pending') {
-            contentNode.textContent = t('index.summary.generating');
-        } else if (status === 'error') {
+        const hasContent = typeof entry.content === 'string' && entry.content.trim();
+        if (status === 'error') {
             const fallback = entry.error || entry.content || '';
             contentNode.textContent = fallback || t('index.summary.failed');
+        } else if (status === 'pending' && hasContent) {
+            contentNode.textContent = entry.content.trim();
+        } else if (status === 'pending') {
+            contentNode.textContent = t('index.summary.generating');
         } else {
-            const text = typeof entry.content === 'string' && entry.content.trim()
-                ? entry.content.trim()
-                : t('index.summary.empty');
-            contentNode.textContent = text;
+            contentNode.textContent = hasContent ? entry.content.trim() : t('index.summary.empty');
         }
     }
 
@@ -1861,12 +1861,22 @@ function handleTranscriptionUpdateMessage(message) {
         return;
     }
     const { conversation, entry } = context;
-    if (typeof message.transcription === 'string' && message.transcription) {
-        entry.transcription = message.transcription;
-        entry.transcriptionPending = false;
-        lastTranscription = message.transcription;
-    } else if (message.transcription_pending) {
+    if (typeof message.transcription === 'string') {
+        const sanitized = removeInvalidSurrogates(message.transcription);
+        entry.transcription = sanitized;
+        if (sanitized) {
+            lastTranscription = sanitized;
+        }
+    } else if (typeof message.transcription_partial === 'string') {
+        const partial = removeInvalidSurrogates(message.transcription_partial);
+        if (partial) {
+            entry.transcription = (entry.transcription || '') + partial;
+        }
+    }
+    if (message.transcription_pending === true) {
         entry.transcriptionPending = true;
+    } else if (message.transcription_pending === false || message.is_final === true) {
+        entry.transcriptionPending = false;
     }
     entry.meta = Object.assign({}, entry.meta, extractRecordingMeta(message));
     const entryTimestamp = markConversationUpdated(conversation);
@@ -1904,6 +1914,9 @@ function handleTranslationUpdateMessage(message) {
     }
     const { conversation, entry } = context;
     if (typeof message.error === 'string' && message.error) {
+        if (typeof message.translation === 'string') {
+            entry.translation = removeInvalidSurrogates(message.translation);
+        }
         entry.translationPending = false;
         const errorText = removeInvalidSurrogates(message.error);
         saveConversationsToStorage();
@@ -1916,20 +1929,31 @@ function handleTranslationUpdateMessage(message) {
         addLogEntry('error', `${t('index.log.translationFailed')}: ${errorText}`);
         return;
     }
-    if (typeof message.translation === 'string' && message.translation) {
-        entry.translation = message.translation;
-        entry.translationPending = false;
-        lastTranslation = message.translation;
-        if (pendingTranslationCopyRequests.has(entry.id)) {
-            copyTextToClipboard(entry.translation).catch((error) => {
-                console.warn('Failed to copy translation:', error);
-                addLogEntry('error', `${t('index.log.copyFailed')}: ${error && error.message ? error.message : error}`);
-            }).finally(() => {
-                pendingTranslationCopyRequests.delete(entry.id);
-            });
+    if (typeof message.translation === 'string') {
+        const sanitizedTranslation = removeInvalidSurrogates(message.translation);
+        entry.translation = sanitizedTranslation;
+        if (sanitizedTranslation) {
+            lastTranslation = sanitizedTranslation;
         }
-    } else if (message.translation_pending) {
+    } else if (typeof message.translation_partial === 'string') {
+        const partialTranslation = removeInvalidSurrogates(message.translation_partial);
+        if (partialTranslation) {
+            entry.translation = (entry.translation || '') + partialTranslation;
+        }
+    }
+    if (message.translation_pending === true) {
         entry.translationPending = true;
+    } else if (message.translation_pending === false || message.is_final === true) {
+        entry.translationPending = false;
+    }
+    const translationReady = typeof entry.translation === 'string' && entry.translation && entry.translationPending !== true;
+    if (translationReady && pendingTranslationCopyRequests.has(entry.id)) {
+        copyTextToClipboard(entry.translation).catch((error) => {
+            console.warn('Failed to copy translation:', error);
+            addLogEntry('error', `${t('index.log.copyFailed')}: ${error && error.message ? error.message : error}`);
+        }).finally(() => {
+            pendingTranslationCopyRequests.delete(entry.id);
+        });
     }
     const entryTimestamp = markConversationUpdated(conversation);
     entry.updatedAt = entryTimestamp;
@@ -1951,6 +1975,54 @@ function handleTranslationUpdateMessage(message) {
     }
     if (historySearchQueryNormalized) {
         renderHistoryList();
+    }
+}
+
+function handleSummaryUpdateMessage(message) {
+    if (!message || typeof message.request_id !== 'string') {
+        console.warn('Summary update received without request ID');
+        return;
+    }
+    const conversationId = typeof message.conversation_id === 'string' ? message.conversation_id : null;
+    const context = resolveEntryContextByIdentifiers({
+        conversationId,
+        entryId: message.request_id,
+        resultId: null,
+    });
+    if (!context || !context.conversation || !context.entry) {
+        console.warn('Summary update received but entry not found:', message.request_id);
+        return;
+    }
+    const { conversation, entry } = context;
+    if (!entry || entry.type !== 'summary') {
+        return;
+    }
+    if (typeof message.content === 'string') {
+        entry.content = removeInvalidSurrogates(message.content);
+    } else if (typeof message.content_partial === 'string') {
+        const partial = removeInvalidSurrogates(message.content_partial);
+        if (partial) {
+            entry.content = (entry.content || '') + partial;
+        }
+    }
+    if (typeof message.engine === 'string' && message.engine) {
+        entry.engine = message.engine;
+    }
+    if (typeof message.model === 'string' && message.model) {
+        entry.model = message.model;
+    }
+    if (message.summary_pending === true) {
+        entry.status = 'pending';
+    } else if (message.summary_pending === false || message.is_final === true) {
+        if (!entry.error) {
+            entry.status = 'ready';
+        }
+    }
+    const entryTimestamp = markConversationUpdated(conversation);
+    entry.updatedAt = entryTimestamp;
+    saveConversationsToStorage();
+    if (activeConversationId === conversation.id) {
+        updateSummaryEntryDom(entry);
     }
 }
 
@@ -2539,6 +2611,9 @@ function handlePythonMessage(message) {
             break;
         case 'translation_update':
             handleTranslationUpdateMessage(message);
+            break;
+        case 'summary_update':
+            handleSummaryUpdateMessage(message);
             break;
         case 'optimization_result':
             handleOptimizationResultMessage(message);

@@ -484,7 +484,7 @@ def transcribe_with_qwen3_asr(filepath):
         log_message("error", f"Qwen3-ASR transcription error: {e}")
         return None
 
-def _translate_text_openai(text, target_language):
+def _translate_text_openai(text, target_language, *, stream_callback=None):
     """Translate text via OpenAI using models module."""
     api_key = (config.get('openai_api_key') if isinstance(config, dict) else None) or os.environ.get('OPENAI_API_KEY')
     base_url = (config.get('openai_base_url') if isinstance(config, dict) else None) or os.environ.get('OPENAI_BASE_URL')
@@ -495,7 +495,14 @@ def _translate_text_openai(text, target_language):
                 model = config.get('openai_translate_model') or OPENAI_TRANSLATE_MODEL
         except Exception:
             model = OPENAI_TRANSLATE_MODEL
-        return modles.translate_openai(text, target_language, api_key, base_url, model=model)
+        return modles.translate_openai(
+            text,
+            target_language,
+            api_key,
+            base_url,
+            model=model,
+            stream_callback=stream_callback,
+        )
     except Exception as e:
         log_message('error', f'Translation error: {e}')
         return None
@@ -578,11 +585,11 @@ def _translation_credentials_available(engine=None):
     return bool(os.environ.get('OPENAI_API_KEY'))
 
 
-def _translate_text_dispatch(text, target_language):
+def _translate_text_dispatch(text, target_language, *, stream_callback=None):
     engine = _get_translation_engine()
     if engine == 'gemini':
         return _translate_text_gemini(text, target_language)
-    return _translate_text_openai(text, target_language)
+    return _translate_text_openai(text, target_language, stream_callback=stream_callback)
 
 
 def _summary_credentials_available(engine=None):
@@ -740,7 +747,15 @@ def _resolve_gemini_summary_model():
     return model or default_model
 
 
-def _summarize_text_openai(segments_text, target_language, system_prompt, max_tokens=CONVERSATION_TITLE_MAX_TOKENS, override_model=None):
+def _summarize_text_openai(
+    segments_text,
+    target_language,
+    system_prompt,
+    max_tokens=CONVERSATION_TITLE_MAX_TOKENS,
+    override_model=None,
+    *,
+    stream_callback=None,
+):
     try:
         clean_text = _sanitize_utf8_text(segments_text)
         if not clean_text:
@@ -759,6 +774,7 @@ def _summarize_text_openai(segments_text, target_language, system_prompt, max_to
             model=model,
             system_prompt=system_prompt,
             max_tokens=max_tokens or CONVERSATION_TITLE_MAX_TOKENS,
+            stream_callback=stream_callback,
         )
     except Exception as exc:
         log_message('error', f'OpenAI summarize error: {exc}')
@@ -787,12 +803,26 @@ def _summarize_text_gemini(segments_text, target_language, system_prompt, max_to
         return None
 
 
-def _summarize_text_dispatch(segments_text, target_language, system_prompt, *, engine=None, max_tokens=None):
+def _summarize_text_dispatch(
+    segments_text,
+    target_language,
+    system_prompt,
+    *,
+    engine=None,
+    max_tokens=None,
+    stream_callback=None,
+):
     chosen_engine = engine or _get_summary_engine()
     tokens = max_tokens if isinstance(max_tokens, int) and max_tokens > 0 else CONVERSATION_TITLE_MAX_TOKENS
     if chosen_engine == 'gemini':
         return _summarize_text_gemini(segments_text, target_language, system_prompt, max_tokens=tokens)
-    return _summarize_text_openai(segments_text, target_language, system_prompt, max_tokens=tokens)
+    return _summarize_text_openai(
+        segments_text,
+        target_language,
+        system_prompt,
+        max_tokens=tokens,
+        stream_callback=stream_callback,
+    )
 
 
 
@@ -854,14 +884,95 @@ def restart_translation_worker():
 def translation_worker():
     """Translation queue worker thread - process translations in order"""
     global translation_worker_running, translation_counter, translation_next_expected
-    
+
     log_message("info", "Translation worker thread started, will process translation tasks in order")
     try:
         next_expected_order = int(translation_next_expected) if translation_next_expected and translation_next_expected > 0 else 1
     except Exception:
         next_expected_order = 1  # Next expected order number
     log_message("info", f"Translation worker initial expected order: #{next_expected_order}")
-    
+
+    def perform_translation_task(order, result_id, transcription, target_language, context):
+        """Run translation with streaming callbacks and emit UI updates."""
+        if not transcription or not target_language:
+            return False, None
+
+        base_payload = {
+            "type": "translation_update",
+            "result_id": result_id,
+            "order": order,
+            "translation_pending": True,
+            "timestamp": datetime.now().isoformat()
+        }
+        if context:
+            base_payload["context"] = context
+        try:
+            send_message(base_payload)
+        except Exception:
+            pass
+
+        collected_parts = []
+
+        def on_delta(delta_text):
+            safe_delta = _sanitize_utf8_text(delta_text)
+            if not safe_delta:
+                return
+            collected_parts.append(safe_delta)
+            combined = _sanitize_utf8_text(''.join(collected_parts))
+            payload = {
+                "type": "translation_update",
+                "result_id": result_id,
+                "order": order,
+                "translation": combined,
+                "translation_partial": safe_delta,
+                "translation_pending": True,
+                "timestamp": datetime.now().isoformat()
+            }
+            if context:
+                payload["context"] = context
+            send_message(payload)
+
+        translation_text = None
+        try:
+            translation_text = _translate_text_dispatch(
+                transcription,
+                target_language,
+                stream_callback=on_delta,
+            )
+        except Exception as exc:
+            log_message("error", f"Translation execution error #{order}: {exc}")
+            translation_text = None
+
+        if translation_text:
+            final_text = _sanitize_utf8_text(translation_text.strip())
+            payload = {
+                "type": "translation_update",
+                "result_id": result_id,
+                "translation": final_text,
+                "order": order,
+                "translation_pending": False,
+                "timestamp": datetime.now().isoformat(),
+                "is_final": True,
+            }
+            if context:
+                payload["context"] = context
+            send_message(payload)
+            return True, final_text
+
+        failure_payload = {
+            "type": "translation_update",
+            "result_id": result_id,
+            "translation": _sanitize_utf8_text(''.join(collected_parts)) if collected_parts else '',
+            "order": order,
+            "translation_pending": False,
+            "timestamp": datetime.now().isoformat(),
+            "error": "translation_failed",
+        }
+        if context:
+            failure_payload["context"] = context
+        send_message(failure_payload)
+        return False, None
+
     while translation_worker_running:
         try:
             # Get translation task, timeout mechanism ensures response to stop signals
@@ -869,46 +980,33 @@ def translation_worker():
                 priority, task = translation_queue.get(timeout=2)
             except queue.Empty:
                 continue
-            
+
             # Received stop signal
             if task is None:
                 break
-                
+
             order, result_id, transcription, target_language, context = task
-            
+
             # Check if this is the task in expected order
             if order == next_expected_order:
                 # Correct order, process immediately
                 log_message("info", f"Processing translation task #{order}: {result_id}")
-                
-                # Execute translation
-                translation = _translate_text_dispatch(transcription, target_language)
-                
-                if translation:
-                    # Send translation update message
-                    t_payload = {
-                        "type": "translation_update",
-                        "result_id": result_id,
-                        "translation": translation.strip(),
-                        "order": order,
-                        "timestamp": datetime.now().isoformat()
-                    }
-                    if context:
-                        t_payload["context"] = context
-                    send_message(t_payload)
+
+                success, _ = perform_translation_task(order, result_id, transcription, target_language, context)
+                if success:
                     log_message("info", f"Translation completed #{order}: {result_id}")
                 else:
                     log_message("warning", f"Translation failed #{order}: {result_id}")
-                
+
                 next_expected_order += 1
                 translation_next_expected = next_expected_order
-                
+
                 # Check if there are waiting follow-up tasks to process
                 while True:
                     # Look for the next task in order
                     found_next = False
                     temp_queue = []
-                    
+
                     # Find the next task in order from the queue
                     while not translation_queue.empty():
                         try:
@@ -916,7 +1014,7 @@ def translation_worker():
                             if t is None:  # Stop signal
                                 translation_queue.put((p, t))
                                 break
-                                
+
                             t_order = t[0]
                             if t_order == next_expected_order:
                                 # Found next task
@@ -924,23 +1022,19 @@ def translation_worker():
                                 # Process this task immediately
                                 _, t_result_id, t_transcription, t_target_language, t_context = t
                                 log_message("info", f"Processing waiting translation task #{t_order}: {t_result_id}")
-                                
-                                t_translation = _translate_text_dispatch(t_transcription, t_target_language)
-                                if t_translation:
-                                    t_payload2 = {
-                                        "type": "translation_update",
-                                        "result_id": t_result_id,
-                                        "translation": t_translation.strip(),
-                                        "order": t_order,
-                                        "timestamp": datetime.now().isoformat()
-                                    }
-                                    if t_context:
-                                        t_payload2["context"] = t_context
-                                    send_message(t_payload2)
+
+                                t_success, _ = perform_translation_task(
+                                    t_order,
+                                    t_result_id,
+                                    t_transcription,
+                                    t_target_language,
+                                    t_context,
+                                )
+                                if t_success:
                                     log_message("info", f"Translation completed #{t_order}: {t_result_id}")
                                 else:
                                     log_message("warning", f"Translation failed #{t_order}: {t_result_id}")
-                                
+
                                 next_expected_order += 1
                                 translation_next_expected = next_expected_order
                                 break
@@ -1353,6 +1447,48 @@ def process_combined_audio(
             original_lang = config.get('transcribe_language') if isinstance(config, dict) else None
         except Exception:
             pass
+
+        if not result_id:
+            result_id = str(uuid.uuid4())
+        context_label = "voice_input" if current_recording_context == 'voice_input' else None
+        collected_transcription = []
+
+        def emit_transcription_delta(delta_text):
+            safe_delta = _sanitize_utf8_text(delta_text)
+            if not safe_delta:
+                return
+            collected_transcription.append(safe_delta)
+            combined = _sanitize_utf8_text(''.join(collected_transcription))
+            payload = {
+                "type": "transcription_update",
+                "result_id": result_id,
+                "transcription": combined,
+                "transcription_partial": safe_delta,
+                "transcription_pending": True,
+                "order": trans_order or 0,
+                "timestamp": datetime.now().isoformat(),
+                "recorded_at": recorded_at.isoformat(),
+                "duration_seconds": float(duration_seconds)
+            }
+            if context_label:
+                payload["context"] = context_label
+            send_message(payload)
+
+        try:
+            pending_payload = {
+                "type": "transcription_update",
+                "result_id": result_id,
+                "transcription_pending": True,
+                "order": trans_order or 0,
+                "timestamp": datetime.now().isoformat(),
+                "recorded_at": recorded_at.isoformat(),
+                "duration_seconds": float(duration_seconds)
+            }
+            if context_label:
+                pending_payload["context"] = context_label
+            send_message(pending_payload)
+        except Exception:
+            pass
         try:
             if override_source_for_recording:
                 try: config['transcribe_source'] = override_source_for_recording
@@ -1360,7 +1496,7 @@ def process_combined_audio(
             if override_transcribe_language:
                 try: config['transcribe_language'] = override_transcribe_language
                 except Exception: pass
-            transcription = transcribe_audio_file(filepath)
+            transcription = transcribe_audio_file(filepath, stream_callback=emit_transcription_delta)
         finally:
             try:
                 if original_source is not None:
@@ -1372,23 +1508,30 @@ def process_combined_audio(
                     config['transcribe_language'] = original_lang
             except Exception:
                 pass
-        if transcription:
+        aggregated = _sanitize_utf8_text(''.join(collected_transcription)) if collected_transcription else ''
+        final_transcription = None
+        if isinstance(transcription, str) and transcription.strip():
+            final_transcription = _sanitize_utf8_text(transcription.strip())
+        elif aggregated:
+            final_transcription = aggregated
+
+        if final_transcription:
             # Use existing result_id/order if provided (placeholder flow)
-            if not result_id:
-                result_id = str(uuid.uuid4())
             # Send transcription update to fill the placeholder
             try:
                 payload = {
                     "type": "transcription_update",
                     "result_id": result_id,
-                    "transcription": transcription.strip(),
+                    "transcription": final_transcription,
+                    "transcription_pending": False,
                     "order": trans_order or 0,
-                    "timestamp": recorded_at.isoformat(),
+                    "timestamp": datetime.now().isoformat(),
                     "recorded_at": recorded_at.isoformat(),
-                    "duration_seconds": float(duration_seconds)
+                    "duration_seconds": float(duration_seconds),
+                    "is_final": True,
                 }
-                if current_recording_context == 'voice_input':
-                    payload["context"] = "voice_input"
+                if context_label:
+                    payload["context"] = context_label
                 send_message(payload)
             except Exception:
                 pass
@@ -1400,7 +1543,7 @@ def process_combined_audio(
                     target_language = override_translate_language or config.get('translate_language', 'Chinese')
                     if target_language and target_language.strip() and translation_worker_running:
                         ctx = ("voice_input" if current_recording_context == 'voice_input' else None)
-                        queue_success, translation_order = queue_translation(result_id, transcription, target_language, context=ctx)
+                        queue_success, translation_order = queue_translation(result_id, final_transcription, target_language, context=ctx)
                         if queue_success:
                             log_message("info", f"VoiceInput: queued translation (order #{translation_order}) for result {result_id}")
             elif config.get('enable_translation', True):
@@ -1416,12 +1559,12 @@ def process_combined_audio(
                         language2 = config.get('smart_language2', 'English')
                         
                         # Determine transcription text language and target translation
-                        smart_target = determine_smart_translation_target(transcription, language1, language2)
+                        smart_target = determine_smart_translation_target(final_transcription, language1, language2)
                         
                         if smart_target:
                             # Asynchronously queue translation task, get translation order
                             ctx = ("voice_input" if current_recording_context == 'voice_input' else None)
-                            queue_success, translation_order = queue_translation(result_id, transcription, smart_target, context=ctx)
+                            queue_success, translation_order = queue_translation(result_id, final_transcription, smart_target, context=ctx)
                             
                             # For translation, we rely on translation_update later; placeholder already exists
                             # If queue fails, do nothing further here
@@ -1434,7 +1577,7 @@ def process_combined_audio(
                         if target_language and target_language.strip():
                             # Asynchronously queue translation task, get translation order
                             ctx = ("voice_input" if current_recording_context == 'voice_input' else None)
-                            queue_success, translation_order = queue_translation(result_id, transcription, target_language, context=ctx)
+                            queue_success, translation_order = queue_translation(result_id, final_transcription, target_language, context=ctx)
                             # If queue fails, we keep transcription only
             else:
                 # Translation not enabled: nothing else to do; placeholder already filled
@@ -1476,15 +1619,27 @@ def translate_text(text, target_language="Chinese"):
     """Translate text via configured translation engine (override)."""
     return _translate_text_dispatch(text, target_language)
 
-def transcribe_audio_file(filepath):
+def transcribe_audio_file(filepath, stream_callback=None):
     """Transcribe audio file using selected source."""
     source = (config.get('transcribe_source') if isinstance(config, dict) else None) or 'openai'
     if source == 'soniox':
         log_message("info", "Transcribing via Soniox backend")
-        return transcribe_with_soniox(filepath)
+        result = transcribe_with_soniox(filepath)
+        if stream_callback and result:
+            try:
+                stream_callback(result)
+            except Exception:
+                pass
+        return result
     if source in ('qwen3-asr', 'qwen', 'dashscope'):
         log_message("info", "Transcribing via Qwen3-ASR (DashScope)")
-        return transcribe_with_qwen3_asr(filepath)
+        result = transcribe_with_qwen3_asr(filepath)
+        if stream_callback and result:
+            try:
+                stream_callback(result)
+            except Exception:
+                pass
+        return result
 
     # Default: OpenAI via models module
     try:
@@ -1497,7 +1652,14 @@ def transcribe_audio_file(filepath):
                 model = config.get('openai_transcribe_model') or OPENAI_TRANSCRIBE_MODEL
         except Exception:
             model = OPENAI_TRANSCRIBE_MODEL
-        return modles.transcribe_openai(filepath, transcribe_language, api_key, base_url, model=model)
+        return modles.transcribe_openai(
+            filepath,
+            transcribe_language,
+            api_key,
+            base_url,
+            model=model,
+            stream_callback=stream_callback,
+        )
     except Exception as e:
         log_message("error", f"Transcription failed: {e}")
         return None
@@ -1757,16 +1919,71 @@ def handle_message(message):
 
             max_tokens = message.get('max_tokens') if isinstance(message.get('max_tokens'), int) and message.get('max_tokens') > 0 else 320
             model_used = _resolve_gemini_summary_model() if engine == 'gemini' else _resolve_openai_summary_model()
+            payload['model'] = model_used
+            summary_fragments = []
+
+            def emit_summary_delta(delta_text):
+                safe_delta = _sanitize_utf8_text(delta_text)
+                if not safe_delta:
+                    return
+                summary_fragments.append(safe_delta)
+                combined = _sanitize_utf8_text(''.join(summary_fragments))
+                update_payload = {
+                    'type': 'summary_update',
+                    'request_id': request_id,
+                    'conversation_id': conversation_id,
+                    'engine': engine,
+                    'model': model_used,
+                    'content': combined,
+                    'content_partial': safe_delta,
+                    'summary_pending': True,
+                    'timestamp': datetime.now().isoformat(),
+                }
+                send_message(update_payload)
+
             try:
-                summary = _summarize_text_dispatch(summary_text, target_language, system_prompt, engine=engine, max_tokens=max_tokens)
+                send_message({
+                    'type': 'summary_update',
+                    'request_id': request_id,
+                    'conversation_id': conversation_id,
+                    'engine': engine,
+                    'model': model_used,
+                    'content': '',
+                    'summary_pending': True,
+                    'timestamp': datetime.now().isoformat(),
+                })
+            except Exception:
+                pass
+            try:
+                summary = _summarize_text_dispatch(
+                    summary_text,
+                    target_language,
+                    system_prompt,
+                    engine=engine,
+                    max_tokens=max_tokens,
+                    stream_callback=emit_summary_delta,
+                )
+                aggregated_summary = _sanitize_utf8_text(''.join(summary_fragments)) if summary_fragments else ''
                 if isinstance(summary, str) and summary.strip():
                     cleaned = _sanitize_utf8_text(summary.strip())
-                    payload.update({'content': cleaned, 'success': True, 'engine': engine, 'model': model_used})
                 else:
-                    payload.update({'content': '', 'success': False, 'reason': 'empty_response', 'engine': engine, 'model': model_used})
+                    cleaned = aggregated_summary
+                if cleaned:
+                    payload.update({'content': cleaned, 'success': True, 'engine': engine, 'model': model_used, 'summary_pending': False})
+                else:
+                    payload.update({'content': '', 'success': False, 'reason': 'empty_response', 'engine': engine, 'model': model_used, 'summary_pending': False})
             except Exception as exc:
                 log_message('error', f'Summary generation failed: {exc}')
-                payload.update({'content': '', 'success': False, 'reason': 'error', 'error': str(exc), 'engine': engine, 'model': model_used})
+                aggregated_summary = _sanitize_utf8_text(''.join(summary_fragments)) if summary_fragments else ''
+                payload.update({
+                    'content': aggregated_summary,
+                    'success': False,
+                    'reason': 'error',
+                    'error': str(exc),
+                    'engine': engine,
+                    'model': model_used,
+                    'summary_pending': False,
+                })
             send_message(payload)
             return
         elif msg_type == "shutdown":

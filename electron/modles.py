@@ -6,12 +6,67 @@ Centralizes third-party model calls so transcribe_service.py stays focused on au
 from __future__ import annotations
 
 import os
-from typing import Optional
+import base64
+from typing import Callable, Optional, List
 import json
 from datetime import datetime
 import urllib.request
 import urllib.error
 import urllib.parse
+
+
+def _ensure_text(value: Optional[str]) -> str:
+    """Normalize potentially None values into UTF-8 safe strings."""
+    if not isinstance(value, str):
+        return ''
+    try:
+        return value.encode('utf-8', 'ignore').decode('utf-8', 'ignore')
+    except Exception:
+        return ''.join(ch for ch in value if 0xD800 > ord(ch) or ord(ch) > 0xDFFF)
+
+
+def _extract_chat_delta_text(chunk) -> str:
+    """Extract delta text from a ChatCompletionChunk regardless of SDK version."""
+    try:
+        if not chunk or not getattr(chunk, 'choices', None):
+            return ''
+        choice = chunk.choices[0]
+        delta = getattr(choice, 'delta', None)
+        if delta is None:
+            return ''
+        # New SDKs expose strongly typed objects; older ones may behave like dicts
+        content = getattr(delta, 'content', None)
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            text_parts = []
+            for item in content:
+                if isinstance(item, str):
+                    text_parts.append(item)
+                    continue
+                text = getattr(item, 'text', None)
+                if isinstance(text, str):
+                    text_parts.append(text)
+            return ''.join(text_parts)
+        if isinstance(delta, dict):
+            candidate = delta.get('content')
+            if isinstance(candidate, str):
+                return candidate
+            if isinstance(candidate, list):
+                return ''.join(str(part) for part in candidate if isinstance(part, str))
+        text = getattr(delta, 'text', None)
+        return text if isinstance(text, str) else ''
+    except Exception:
+        return ''
+
+
+def _guess_audio_format(filepath: str) -> str:
+    """Best-effort guess of audio container format for Responses API."""
+    _, ext = os.path.splitext(filepath or '')
+    candidate = (ext or '').lstrip('.').lower()
+    if candidate:
+        return candidate
+    return 'wav'
 
 
 # ---------------------------- OpenAI helpers ----------------------------
@@ -26,14 +81,125 @@ def _create_openai_client(api_key: Optional[str], base_url: Optional[str]):
     return OpenAIClient(api_key=api_key, base_url=base_url) if base_url else OpenAIClient(api_key=api_key)
 
 
+def _transcribe_openai_streaming(
+    client,
+    filepath: str,
+    language: Optional[str],
+    model: Optional[str],
+    callback: Callable[[str], None],
+) -> Optional[str]:
+    """Attempt streaming transcription via Responses API."""
+    if not filepath or not os.path.exists(filepath):
+        return None
+    if not hasattr(client, 'responses') or not hasattr(client.responses, 'stream'):
+        raise AttributeError('OpenAI client lacks streaming responses support')
+
+    with open(filepath, 'rb') as file_obj:
+        audio_bytes = file_obj.read()
+    if not audio_bytes:
+        return None
+
+    encoded_audio = base64.b64encode(audio_bytes).decode('utf-8')
+    audio_format = _guess_audio_format(filepath)
+
+    instructions = 'Transcribe the audio and reply with plain text only.'
+    if language and language != 'auto':
+        instructions = f'Transcribe the audio, responding in {language}. Return plain text only.'
+
+    input_payload = [
+        {
+            'role': 'system',
+            'content': [
+                {'type': 'text', 'text': instructions},
+            ],
+        },
+        {
+            'role': 'user',
+            'content': [
+                {
+                    'type': 'input_audio',
+                    'audio': {
+                        'format': audio_format,
+                        'data': encoded_audio,
+                    },
+                },
+            ],
+        },
+    ]
+
+    streamed_fragments = []
+
+    with client.responses.stream(
+        model=(model or 'gpt-4o-transcribe'),
+        input=input_payload,
+        modalities=['text'],
+        temperature=0,
+    ) as stream:
+        for event in stream:
+            event_type = getattr(event, 'type', '')
+            if event_type == 'response.output_text.delta':
+                delta = getattr(event, 'delta', '')
+                if isinstance(delta, list):
+                    delta = ''.join(str(part) for part in delta if isinstance(part, str))
+                if not isinstance(delta, str):
+                    delta = ''
+                delta = _ensure_text(delta)
+                if delta:
+                    streamed_fragments.append(delta)
+                    callback(delta)
+            elif event_type == 'response.error':
+                error_obj = getattr(event, 'error', None)
+                message = ''
+                if error_obj and isinstance(error_obj, dict):
+                    message = _ensure_text(error_obj.get('message'))
+                elif error_obj and hasattr(error_obj, 'message'):
+                    message = _ensure_text(getattr(error_obj, 'message', ''))
+                raise RuntimeError(f'Streaming transcription error: {message or "unknown"}')
+
+        final_response = stream.get_final_response()
+    if final_response:
+        text = getattr(final_response, 'output_text', None)
+        if isinstance(text, str) and text.strip():
+            return _ensure_text(text.strip())
+        # Legacy structure compatibility
+        output = getattr(final_response, 'output', None)
+        if isinstance(output, list) and output:
+            try:
+                candidates = []
+                for block in output:
+                    content = getattr(block, 'content', None)
+                    if isinstance(content, list):
+                        for item in content:
+                            text_value = getattr(item, 'text', None)
+                            if isinstance(text_value, str):
+                                candidates.append(text_value)
+                    elif isinstance(content, str):
+                        candidates.append(content)
+                if candidates:
+                    return _ensure_text(''.join(candidates).strip())
+            except Exception:
+                pass
+
+    joined = ''.join(streamed_fragments).strip()
+    return _ensure_text(joined) if joined else None
+
+
 def transcribe_openai(
     filepath: str,
     language: Optional[str],
     api_key: Optional[str],
     base_url: Optional[str],
     model: Optional[str] = None,
+    stream_callback: Optional[Callable[[str], None]] = None,
 ) -> Optional[str]:
     client = _create_openai_client(api_key, base_url)
+    if stream_callback:
+        try:
+            return _transcribe_openai_streaming(client, filepath, language, model, stream_callback)
+        except Exception:
+            # Fallback to non-streaming flow
+            pass
+
     params = {
         'model': (model or 'gpt-4o-transcribe'),
         'file': None,
@@ -44,7 +210,11 @@ def transcribe_openai(
     with open(filepath, 'rb') as f:
         params['file'] = f
         result = client.audio.transcriptions.create(**params)
-    return getattr(result, 'text', str(result))
+    output_text = getattr(result, 'text', str(result))
+    cleaned = _ensure_text(output_text)
+    if stream_callback and cleaned:
+        stream_callback(cleaned)
+    return cleaned
 
 
 def translate_openai(
@@ -53,6 +223,7 @@ def translate_openai(
     api_key: Optional[str],
     base_url: Optional[str],
     model: Optional[str] = None,
+    stream_callback: Optional[Callable[[str], None]] = None,
 ) -> Optional[str]:
     if not text or not text.strip():
         return None
@@ -63,8 +234,54 @@ def translate_openai(
         "1) Preserve tone and style\n2) Accurate and natural\n"
         f"3) If already in {target_language}, return as-is\n4) Return only the translation"
     )
+    return _translate_openai_internal(
+        client,
+        text,
+        system_prompt,
+        target_language,
+        model=model,
+        stream_callback=stream_callback,
+    )
+
+
+def _translate_openai_internal(
+    client,
+    text: str,
+    system_prompt: str,
+    target_language: str,
+    *,
+    model: Optional[str] = None,
+    stream_callback: Optional[Callable[[str], None]] = None,
+) -> Optional[str]:
+    translate_model = model or 'gpt-4o-mini'
+    if stream_callback:
+        try:
+            stream = client.chat.completions.create(
+                model=translate_model,
+                messages=[
+                    {'role': 'system', 'content': system_prompt},
+                    {'role': 'user', 'content': text},
+                ],
+                max_tokens=5000,
+                temperature=0.1,
+                top_p=0.95,
+                stream=True,
+            )
+            collected: List[str] = []
+            for chunk in stream:
+                fragment = _extract_chat_delta_text(chunk)
+                fragment = _ensure_text(fragment)
+                if fragment:
+                    collected.append(fragment)
+                    stream_callback(fragment)
+            if collected:
+                return _ensure_text(''.join(collected).strip())
+        except Exception:
+            # Fallback to non-streaming flow if streaming fails
+            pass
+
     resp = client.chat.completions.create(
-        model=(model or 'gpt-4o-mini'),
+        model=translate_model,
         messages=[
             {'role': 'system', 'content': system_prompt},
             {'role': 'user', 'content': text},
@@ -73,7 +290,11 @@ def translate_openai(
         temperature=0.1,
         top_p=0.95,
     )
-    return resp.choices[0].message.content.strip()
+    content = resp.choices[0].message.content if resp.choices else None
+    cleaned = _ensure_text(content)
+    if stream_callback and cleaned:
+        stream_callback(cleaned)
+    return cleaned.strip() if cleaned else None
 
 
 def optimize_openai(
@@ -114,6 +335,7 @@ def summarize_openai(
     model: Optional[str] = None,
     system_prompt: Optional[str] = None,
     max_tokens: int = 120,
+    stream_callback: Optional[Callable[[str], None]] = None,
 ) -> Optional[str]:
     if not segments_text or not segments_text.strip():
         return None
@@ -129,8 +351,34 @@ def summarize_openai(
         prompt = prompt.replace('{{TARGET_LANGUAGE}}', target_language)
     elif '{{TARGET_LANGUAGE}}' in prompt:
         prompt = prompt.replace('{{TARGET_LANGUAGE}}', 'the requested language')
+    summarize_model = model or 'gpt-4o-mini'
+    if stream_callback:
+        try:
+            stream = client.chat.completions.create(
+                model=summarize_model,
+                messages=[
+                    {'role': 'system', 'content': prompt},
+                    {'role': 'user', 'content': segments_text.strip()},
+                ],
+                max_tokens=max_tokens,
+                temperature=0.2,
+                top_p=0.9,
+                stream=True,
+            )
+            collected: List[str] = []
+            for chunk in stream:
+                fragment = _extract_chat_delta_text(chunk)
+                fragment = _ensure_text(fragment)
+                if fragment:
+                    collected.append(fragment)
+                    stream_callback(fragment)
+            if collected:
+                return _ensure_text(''.join(collected).strip())
+        except Exception:
+            pass
+
     resp = client.chat.completions.create(
-        model=(model or 'gpt-4o-mini'),
+        model=summarize_model,
         messages=[
             {'role': 'system', 'content': prompt},
             {'role': 'user', 'content': segments_text.strip()},
@@ -140,12 +388,10 @@ def summarize_openai(
         top_p=0.9,
     )
     content = resp.choices[0].message.content if resp.choices else None
-    if isinstance(content, str):
-        try:
-            return content.encode('utf-8', 'ignore').decode('utf-8', 'ignore').strip()
-        except Exception:
-            return ''.join(ch for ch in content if 0xD800 > ord(ch) or ord(ch) > 0xDFFF).strip()
-    return None
+    cleaned = _ensure_text(content)
+    if stream_callback and cleaned:
+        stream_callback(cleaned)
+    return cleaned.strip() if cleaned else None
 
 
 def detect_language_openai(text: str, language1: str, language2: str, api_key: Optional[str], base_url: Optional[str]) -> str:
