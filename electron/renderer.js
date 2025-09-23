@@ -1,4 +1,4 @@
-﻿let isRecording = false;
+let isRecording = false;
 let lastTranscription = '';
 let lastTranslation = '';
 let pythonServiceStatus = 'unknown'; // 'starting', 'running', 'error', 'stopped'
@@ -460,15 +460,11 @@ function getConversationTitleTargetLanguage() {
 }
 
 function getSummaryTargetLanguage() {
-    if (currentConfig && currentConfig.enable_translation !== false) {
-        const target = typeof currentConfig.translate_language === 'string'
-            ? currentConfig.translate_language.trim()
-            : '';
-        if (target) {
-            return removeInvalidSurrogates(target);
-        }
+    const uiLanguage = getConversationTitleTargetLanguage();
+    if (typeof uiLanguage === 'string' && uiLanguage.trim()) {
+        return removeInvalidSurrogates(uiLanguage.trim());
     }
-    return getConversationTitleTargetLanguage();
+    return 'English';
 }
 
 function normalizeSummaryText(value) {

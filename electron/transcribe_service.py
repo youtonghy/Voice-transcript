@@ -218,6 +218,7 @@ DEFAULT_CONVERSATION_TITLE_PROMPT = (
 DEFAULT_SUMMARY_PROMPT = (
     "You are a helpful assistant who summarizes conversations in {{TARGET_LANGUAGE}}.\n"
     "Review the conversation transcript segments and produce a concise, single-paragraph summary that covers key points.\n"
+    "Ensure the summary is written entirely in {{TARGET_LANGUAGE}} so it matches the application interface language.\n"
     "Avoid mentioning system or policy details. Respond only with the summary text."
 )
 
@@ -704,16 +705,10 @@ def _build_summary_text(segments):
         if not isinstance(item, dict):
             continue
         transcription = _sanitize_utf8_text(item.get('transcription') if isinstance(item.get('transcription'), str) else '')
-        translation = _sanitize_utf8_text(item.get('translation') if isinstance(item.get('translation'), str) else '')
-        parts = []
-        if transcription and transcription.strip():
-            parts.append(transcription.strip())
-        if translation and translation.strip() and translation.strip() != transcription.strip():
-            parts.append(f"Translation: {translation.strip()}")
-        if not parts:
+        if not transcription or not transcription.strip():
             continue
         count += 1
-        lines.append(f"{count}. {' '.join(parts)}")
+        lines.append(f"{count}. {transcription.strip()}")
     summary_text = _sanitize_utf8_text('\n'.join(lines).strip())
     if len(summary_text) > MAX_SUMMARY_TOTAL_CHARS:
         summary_text = summary_text[:MAX_SUMMARY_TOTAL_CHARS]
