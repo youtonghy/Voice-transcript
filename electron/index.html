@@ -21,31 +21,12 @@
             color: #333;
         }
 
-        
-        .control-bar {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            background: #ffffff;
-            border-bottom: 1px solid #e5e5e5;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-            z-index: 1000;
-            height: 60px;
+        .log-header-actions {
+            display: flex;
+            align-items: center;
+            gap: 12px;
         }
 
-    .control-bar-content {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        height: 100%;
-        gap: 20px;
-        padding: 0 20px;
-        max-width: 1200px;
-        margin: 0 auto;
-    }
-
-        
         .control-bar-btn {
             width: 45px;
             height: 45px;
@@ -67,14 +48,55 @@
             transform: translateY(-1px);
         }
 
-        
-        .record-btn.start { color: #333; }
-        .record-btn.stop { color: #d32f2f; }
-        .record-btn.recording-active { color: #d32f2f; animation: pulse-icon 1.6s ease-in-out infinite; }
-        .record-btn.recording-idle { color: #d32f2f; }
-        .record-btn.disabled { color: #ccc !important; cursor: not-allowed !important; animation: none !important; }
+        .record-control {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            min-height: 44px;
+            padding: 10px 20px;
+            border-radius: 9999px;
+            border: none;
+            background: linear-gradient(135deg, #ff8f70, #ff4f81);
+            color: #ffffff;
+            font-weight: 600;
+            font-size: 0.95rem;
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.25s ease, opacity 0.2s ease;
+            box-shadow: 0 10px 22px rgba(255, 79, 129, 0.25);
+        }
 
-        
+        .record-control:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 12px 26px rgba(255, 79, 129, 0.32);
+        }
+
+        .record-control.stop {
+            background: linear-gradient(135deg, #ff5f6d, #d4145a);
+            box-shadow: 0 10px 24px rgba(212, 20, 90, 0.28);
+        }
+
+        .record-control.recording-active {
+            animation: pulse-icon 1.6s ease-in-out infinite;
+        }
+
+        .record-control.disabled {
+            opacity: 0.55;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+            animation: none;
+        }
+
+        .record-control .record-icon {
+            font-size: 1.2rem;
+        }
+
+        .record-control .record-label {
+            font-size: 0.95rem;
+            white-space: nowrap;
+        }
+
         .settings-btn, .media-btn, .keyboard-btn { color: #666; }
         .settings-btn:hover, .media-btn:hover, .keyboard-btn:hover { color: #111; }
 
@@ -90,10 +112,10 @@
           display: flex;
           gap: 16px;
           align-items: stretch;
-          padding-top: 60px;
-          padding-right: 72px;
+          padding-top: 16px;
+          padding-right: 88px;
           padding-bottom: var(--volume-offset);
-          padding-left: 0;
+          padding-left: 16px;
           transition: padding-bottom 0.25s ease;
           height: 100vh;
           overflow: hidden;
@@ -107,8 +129,8 @@
           background: #f8f9fb;
           border-right: 1px solid #e0e5ef;
           border-radius: 0 12px 12px 0;
-          padding: 24px 18px 24px 16px;
-          height: calc(100vh - 60px - var(--volume-offset));
+          padding: 20px 18px 20px 16px;
+          height: calc(100vh - var(--volume-offset) - 32px);
           overflow: hidden;
         }
 
@@ -345,7 +367,7 @@
         
         .right-sidebar {
           position: fixed;
-          top: 60px; 
+          top: 16px;
           right: 0;
           bottom: 0;
           width: 72px;
@@ -356,7 +378,7 @@
           align-items: center;
           gap: 12px;
           padding: 12px 12px;
-          box-shadow: 0 0 0 rgba(0,0,0,0); 
+          box-shadow: 0 0 0 rgba(0,0,0,0);
         }
 
         
@@ -546,9 +568,9 @@
         .log-panel {
             flex: 1;
             min-width: 0;
-            height: calc(100vh - 60px - var(--volume-offset));
+            height: calc(100vh - var(--volume-offset) - 32px);
             background: white;
-            padding: 25px;
+            padding: 20px 24px;
             display: flex;
             flex-direction: column;
             box-sizing: border-box;
@@ -921,11 +943,6 @@
 
         
         @media (max-width: 768px) {
-            .control-bar-content {
-                gap: 15px;
-                padding: 0 15px;
-            }
-
             .control-bar-btn {
                 width: 40px;
                 height: 40px;
@@ -934,11 +951,6 @@
         }
 
         @media (max-width: 480px) {
-            .control-bar-content {
-                gap: 10px;
-                padding: 0 10px;
-            }
-
             .control-bar-btn {
                 width: 35px;
                 height: 35px;
@@ -948,14 +960,6 @@
     </style>
 </head>
 <body>
-  <div class="control-bar">
-    <div class="control-bar-content">
-      <button class="control-bar-btn record-btn start" id="recordButton" title="Start Recording" aria-label="Start Recording" data-i18n-title="index.tooltips.recordStart" data-i18n-ariaLabel="index.tooltips.recordStart">
-        <span class="record-icon" aria-hidden="true">&#x1F3A4;</span>
-      </button>
-    </div>
-  </div>
-
   <div class="right-sidebar">
     <button class="control-bar-btn keyboard-btn" onclick="openKeyboardSettings()" title="Voice Input Settings" data-i18n-title="index.tooltips.voiceInput">&#x2328;&#xFE0F;</button>
     <button class="control-bar-btn settings-btn" onclick="openSettings()" title="Settings" data-i18n-title="index.tooltips.settings">&#x2699;&#xFE0F;</button>
@@ -985,6 +989,12 @@
         <div class="log-header-info">
           <h2 data-i18n="index.logTitle">Real-Time Logs</h2>
           <span class="active-conversation-name" id="activeConversationName"></span>
+        </div>
+        <div class="log-header-actions">
+          <button type="button" class="record-control record-btn start" id="recordButton" title="Start Recording" aria-label="Start Recording" data-i18n-title="index.tooltips.recordStart" data-i18n-ariaLabel="index.tooltips.recordStart">
+            <span class="record-icon" aria-hidden="true">&#x1F3A4;</span>
+            <span class="record-label" data-i18n="index.buttons.recordIdle">Start Recording</span>
+          </button>
         </div>
       </div>
       <div class="log-container" id="logContainer"></div>

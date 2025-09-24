@@ -83,6 +83,8 @@ function removeInvalidSurrogates(text) {
 
 // DOM elements
 const recordButton = document.getElementById('recordButton');
+const recordButtonIconEl = recordButton ? recordButton.querySelector('.record-icon') : null;
+const recordButtonLabel = recordButton ? recordButton.querySelector('.record-label') : null;
 const statusDot = document.getElementById('statusDot');
 const statusText = document.getElementById('statusText');
 const logContainer = document.getElementById('logContainer');
@@ -136,11 +138,18 @@ function setDocumentLanguage(lang) {
     historyDateFormatter = null;
 }
 
-function setRecordButtonIcon(icon) {
+function setRecordButtonVisual(icon, labelKey) {
     if (!recordButton) {
         return;
     }
-    recordButton.textContent = icon;
+    if (recordButtonIconEl) {
+        recordButtonIconEl.textContent = icon;
+    } else {
+        recordButton.textContent = icon;
+    }
+    if (labelKey && recordButtonLabel) {
+        recordButtonLabel.textContent = t(labelKey);
+    }
 }
 
 function getCurrentLanguage() {
@@ -167,6 +176,7 @@ function changeLanguage(lang) {
 
     document.title = t('index.title');
     updateHistoryToggleUI();
+    updateUI();
 }
 
 function formatRecordedAtText(isoString) {
@@ -2392,9 +2402,10 @@ function updateServiceStatus(status) {
 
     if (status !== 'running') {
         recordButton.disabled = true;
-        setRecordButtonIcon(RECORD_ICON_MIC);
+        setRecordButtonVisual(RECORD_ICON_MIC, 'index.buttons.recordPreparing');
         recordButton.title = t('index.recordButton.starting');
-        recordButton.className = 'control-bar-btn record-btn start disabled';
+        recordButton.setAttribute('aria-label', recordButton.title);
+        recordButton.className = 'record-control record-btn start disabled';
         setVolumeRecordingState(false);
     } else {
         recordButton.disabled = false;
@@ -2453,12 +2464,13 @@ async function stopRecording() {
 
 function updateUI() {
     if (isRecording) {
-        setRecordButtonIcon(RECORD_ICON_STOP);
+        setRecordButtonVisual(RECORD_ICON_STOP, 'index.buttons.recordActive');
         recordButton.title = t('index.tooltips.recordStop');
+        recordButton.setAttribute('aria-label', recordButton.title);
         if (isVoiceActive) {
-            recordButton.className = 'control-bar-btn record-btn stop recording-active';
+            recordButton.className = 'record-control record-btn stop recording-active';
         } else {
-            recordButton.className = 'control-bar-btn record-btn stop recording-idle';
+            recordButton.className = 'record-control record-btn stop recording-idle';
         }
         if (typeof statusDot !== 'undefined' && statusDot) {
             statusDot.className = 'status-dot recording';
@@ -2467,9 +2479,10 @@ function updateUI() {
             statusText.textContent = t('index.statusText.recording');
         }
     } else {
-        setRecordButtonIcon(RECORD_ICON_MIC);
+        setRecordButtonVisual(RECORD_ICON_MIC, 'index.buttons.recordIdle');
         recordButton.title = t('index.tooltips.recordStart');
-        recordButton.className = 'control-bar-btn record-btn start';
+        recordButton.setAttribute('aria-label', recordButton.title);
+        recordButton.className = 'record-control record-btn start';
         if (typeof statusDot !== 'undefined' && statusDot) {
             const statusClassMap = {
                 running: 'running',
