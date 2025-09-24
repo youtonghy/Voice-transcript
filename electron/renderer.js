@@ -28,6 +28,7 @@ const HISTORY_COLLAPSED_STORAGE_KEY = 'voice_transcript_history_collapsed';
 let historyCollapsed = false;
 let historySearchQuery = '';
 let historySearchQueryNormalized = '';
+let historyDateFormatter = null;
 const CONVERSATION_TITLE_DEBOUNCE_MS = 800;
 const MAX_TITLE_SEGMENTS = 12;
 const MAX_TITLE_FIELD_LENGTH = 400;
@@ -132,6 +133,7 @@ function setDocumentLanguage(lang) {
     if (document && document.documentElement) {
         document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
     }
+    historyDateFormatter = null;
 }
 
 function setRecordButtonIcon(icon) {
@@ -181,6 +183,72 @@ function formatRecordedAtText(isoString) {
     const hours = String(date.getHours()).padStart(2, '0');
     const minutes = String(date.getMinutes()).padStart(2, '0');
     return `${year}/${month}/${day} ${hours}:${minutes}`;
+}
+
+function getHistoryDateKey(isoString) {
+    if (typeof isoString !== 'string' || !isoString) {
+        return 'unknown';
+    }
+    const date = new Date(isoString);
+    if (Number.isNaN(date.getTime())) {
+        return 'unknown';
+    }
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
+function getHistoryDateFormatter() {
+    if (historyDateFormatter) {
+        return historyDateFormatter;
+    }
+    try {
+        const locale = (typeof navigator === 'object' && navigator && navigator.language)
+            ? navigator.language
+            : DEFAULT_LANGUAGE;
+        historyDateFormatter = new Intl.DateTimeFormat(locale, {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric'
+        });
+    } catch (error) {
+        console.warn('Failed to create history date formatter:', error);
+        historyDateFormatter = null;
+    }
+    return historyDateFormatter;
+}
+
+function formatHistoryDateHeading(isoString) {
+    if (typeof isoString !== 'string' || !isoString) {
+        return 'Unknown date';
+    }
+    const date = new Date(isoString);
+    if (Number.isNaN(date.getTime())) {
+        return 'Unknown date';
+    }
+    const formatter = getHistoryDateFormatter();
+    if (formatter) {
+        try {
+            return formatter.format(date);
+        } catch (error) {
+            console.warn('Failed to format history date:', error);
+        }
+    }
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
+function createHistoryDateDivider(label) {
+    const divider = document.createElement('div');
+    divider.className = 'history-date-divider';
+    const span = document.createElement('span');
+    span.className = 'history-date-label';
+    span.textContent = label && typeof label === 'string' && label ? label : 'Unknown date';
+    divider.appendChild(span);
+    return divider;
 }
 
 function formatDurationText(durationSeconds) {
@@ -1047,7 +1115,17 @@ function renderHistoryList() {
         return;
     }
 
+    let currentDateKey = '';
     filtered.forEach((conversation) => {
+        const timestamp = typeof conversation.createdAt === 'string' && conversation.createdAt
+            ? conversation.createdAt
+            : conversation.updatedAt;
+        const dateKey = getHistoryDateKey(timestamp);
+        if (dateKey !== currentDateKey) {
+            currentDateKey = dateKey;
+            const divider = createHistoryDateDivider(formatHistoryDateHeading(timestamp));
+            historyList.appendChild(divider);
+        }
         const button = document.createElement('button');
         button.type = 'button';
         button.className = 'history-item';
@@ -1084,6 +1162,7 @@ function renderHistoryList() {
         historyList.appendChild(button);
     });
 }
+
 
 function createResultSeparator() {
     const separator = document.createElement('div');

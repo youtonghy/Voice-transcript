@@ -88,26 +88,26 @@
         .main-content {
           --volume-offset: 72px;
           display: flex;
-          gap: 20px;
+          gap: 16px;
           align-items: stretch;
           padding-top: 60px;
           padding-right: 72px;
           padding-bottom: var(--volume-offset);
-          padding-left: 20px;
+          padding-left: 0;
           transition: padding-bottom 0.25s ease;
           height: 100vh;
           overflow: hidden;
         }
 
         .history-panel {
-          flex: 0 0 240px;
-          min-width: 200px;
+          flex: 0 0 260px;
+          min-width: 220px;
           display: flex;
           flex-direction: column;
           background: #f8f9fb;
-          border: 1px solid #e5e5e5;
-          border-radius: 12px;
-          padding: 20px;
+          border-right: 1px solid #e0e5ef;
+          border-radius: 0 12px 12px 0;
+          padding: 24px 18px 24px 16px;
           height: calc(100vh - 60px - var(--volume-offset));
           overflow: hidden;
         }
@@ -196,12 +196,13 @@
         }
 
         .history-list {
-          margin-top: 16px;
+          margin-top: 18px;
           flex: 1;
           overflow-y: auto;
           display: flex;
           flex-direction: column;
-          gap: 10px;
+          gap: 12px;
+          padding-right: 6px;
         }
         .main-content.history-collapsed .history-panel {
           flex: 0 0 54px;
@@ -230,57 +231,71 @@
         
         .history-item {
           display: flex;
-          flex-direction: column;
-          align-items: flex-start;
-          gap: 4px;
-          padding: 10px 12px;
+          align-items: center;
+          gap: 12px;
+          padding: 12px 14px;
           border-radius: 10px;
-          border: 1px solid #e5e5e5;
-          background: #ffffff;
+          border: 1px solid transparent;
+          background: #eef2f7;
           cursor: pointer;
           font-size: 0.88rem;
-          transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+          transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
           text-align: left;
         }
 
         .history-item:hover {
-          border-color: #333;
-          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+          background: #e4e9f3;
+          border-color: #d0d7e7;
         }
 
         .history-item:focus {
           outline: none;
-          border-color: #333;
+          border-color: #4c6ef5;
+          box-shadow: 0 0 0 1px rgba(76, 110, 245, 0.25);
         }
 
         .history-item.active {
-          border-color: #333;
-          background: #f0f1f5;
+          border-color: #4c6ef5;
+          background: #dfe6f8;
+          box-shadow: 0 0 0 1px rgba(76, 110, 245, 0.2);
+        }
+
+        .history-item.active:hover {
+          background: #dae2f6;
         }
 
         .history-item.pinned {
-          border-color: #d97706;
-          background: #fff7ed;
+          border-color: #f59e0b;
+          background: #fff3e0;
+        }
+
+        .history-item.pinned:hover {
+          background: #ffe8c7;
         }
 
         .history-item-header {
           display: flex;
           align-items: center;
-          justify-content: space-between;
-          gap: 6px;
-          width: 100%;
-        }
-
-        .history-name {
-          font-weight: 600;
-          color: #333;
+          gap: 8px;
           flex: 1;
           min-width: 0;
         }
 
+        .history-name {
+          font-weight: 600;
+          color: #1f2937;
+          flex: 1;
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
         .history-detail {
+          margin-left: auto;
           font-size: 0.75rem;
-          color: #888;
+          color: #6b7280;
+          white-space: nowrap;
         }
 
         .history-item.pinned .history-name {
@@ -292,9 +307,39 @@
           color: #b45309;
         }
 
+        .history-date-divider {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          font-size: 0.75rem;
+          color: #8b94a7;
+          margin: 6px 0 2px;
+        }
+
+        .history-date-divider::before,
+        .history-date-divider::after {
+          content: '';
+          flex: 1;
+          height: 1px;
+          background: #d5dae5;
+        }
+
+        .history-date-divider::before {
+          margin-right: 4px;
+        }
+
+        .history-date-divider::after {
+          margin-left: 4px;
+        }
+
+        .history-date-label {
+          white-space: nowrap;
+        }
+
         .history-empty {
           font-size: 0.85rem;
           color: #888;
+          margin-top: 32px;
         }
 
         
