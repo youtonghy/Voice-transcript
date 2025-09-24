@@ -97,6 +97,11 @@ const volumeStatusText = document.getElementById('volumeStatusText');
 const volumeToggleBtn = document.getElementById('volumeToggleBtn');
 const mainContent = document.querySelector('.main-content');
 
+const windowControlMinimize = document.getElementById('windowControlMinimize');
+const windowControlMaximize = document.getElementById('windowControlMaximize');
+const windowControlClose = document.getElementById('windowControlClose');
+let disposeWindowStateListener = null;
+
 const historyList = document.getElementById('historyList');
 const newConversationButton = document.getElementById('newConversationButton');
 const activeConversationNameEl = document.getElementById('activeConversationName');
@@ -177,6 +182,42 @@ function changeLanguage(lang) {
     document.title = t('index.title');
     updateHistoryToggleUI();
     updateUI();
+}
+
+function updateWindowControlState(state) {
+    if (!windowControlMaximize) {
+        return;
+    }
+    const shouldRestore = Boolean(state && (state.isFullScreen || state.isMaximized));
+    windowControlMaximize.classList.toggle('is-maximized', shouldRestore);
+    windowControlMaximize.setAttribute('title', shouldRestore ? 'Restore Window' : 'Maximize Window');
+    windowControlMaximize.setAttribute('aria-label', shouldRestore ? 'Restore Window' : 'Maximize Window');
+}
+
+function initializeWindowControls() {
+    if (!window || !window.electronAPI || !window.electronAPI.windowControls) {
+        return;
+    }
+    const controls = window.electronAPI.windowControls;
+    if (windowControlMinimize && !windowControlMinimize.dataset.bound) {
+        windowControlMinimize.addEventListener('click', () => controls.minimize());
+        windowControlMinimize.dataset.bound = 'true';
+    }
+    if (windowControlMaximize && !windowControlMaximize.dataset.bound) {
+        windowControlMaximize.addEventListener('click', () => controls.toggleMaximize());
+        windowControlMaximize.dataset.bound = 'true';
+    }
+    if (windowControlClose && !windowControlClose.dataset.bound) {
+        windowControlClose.addEventListener('click', () => controls.close());
+        windowControlClose.dataset.bound = 'true';
+    }
+    if (disposeWindowStateListener) {
+        disposeWindowStateListener();
+        disposeWindowStateListener = null;
+    }
+    if (typeof window.electronAPI.onWindowStateChange === 'function') {
+        disposeWindowStateListener = window.electronAPI.onWindowStateChange(updateWindowControlState);
+    }
 }
 
 function formatRecordedAtText(isoString) {
@@ -2202,6 +2243,7 @@ function initializeLanguage() {
 
 // Initialization
 document.addEventListener('DOMContentLoaded', () => {
+    initializeWindowControls();
     initializeLanguage();
     initializeConversationHistory();
     initializeHistoryCollapsedState();
@@ -2230,6 +2272,13 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 window.addEventListener('resize', syncVolumePanelOffset);
+
+window.addEventListener('beforeunload', () => {
+    if (disposeWindowStateListener) {
+        disposeWindowStateListener();
+        disposeWindowStateListener = null;
+    }
+});
 
 // Check provider configuration status
 async function checkOpenAIConfig() {

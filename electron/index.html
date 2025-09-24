@@ -11,6 +11,10 @@
             padding: 0;
         }
 
+        :root {
+            --titlebar-height: 40px;
+        }
+
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Apple Color Emoji', 'Noto Color Emoji', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
             background: #ffffff;
@@ -19,6 +23,91 @@
             height: 100vh;
             overflow: hidden;
             color: #333;
+            padding-top: var(--titlebar-height);
+        }
+
+        .title-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: var(--titlebar-height);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 12px;
+            background: transparent;
+            border-bottom: none;
+            -webkit-app-region: drag;
+            z-index: 1200;
+        }
+
+        .title-bar-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.95rem;
+            font-weight: 500;
+            color: #2f3645;
+            pointer-events: none;
+        }
+
+        .title-bar-buttons {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            -webkit-app-region: no-drag;
+        }
+
+        .title-bar-button {
+            width: 36px;
+            height: 28px;
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            padding: 0;
+        }
+
+        .title-bar-button::before {
+            content: '';
+            display: block;
+            width: 16px;
+            height: 16px;
+            transition: transform 0.2s ease, filter 0.2s ease;
+        }
+
+        .title-bar-button:hover::before {
+            transform: scale(1.08);
+            filter: brightness(1.05);
+        }
+
+        .title-bar-button:active::before {
+            transform: scale(0.95);
+            filter: brightness(0.9);
+        }
+
+        .title-bar-button.minimize::before {
+            background: #34c759;
+            border-radius: 9999px;
+        }
+
+        .title-bar-button.maximize::before {
+            background: #2563eb;
+            border-radius: 4px;
+        }
+
+        .title-bar-button.maximize.is-maximized::before {
+            box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.65);
+        }
+
+        .title-bar-button.close::before {
+            background: #ef4444;
+            -webkit-clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
+            clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
         }
 
         .log-header-actions {
@@ -117,7 +206,7 @@
           padding-bottom: var(--volume-offset);
           padding-left: 16px;
           transition: padding-bottom 0.25s ease;
-          height: 100vh;
+          height: calc(100vh - var(--titlebar-height));
           overflow: hidden;
         }
 
@@ -130,7 +219,7 @@
           border-right: 1px solid #e0e5ef;
           border-radius: 0 12px 12px 0;
           padding: 20px 18px 20px 16px;
-          height: calc(100vh - var(--volume-offset) - 32px);
+          height: calc(100vh - var(--titlebar-height) - var(--volume-offset) - 32px);
           overflow: hidden;
         }
 
@@ -367,7 +456,7 @@
         
         .right-sidebar {
           position: fixed;
-          top: 16px;
+          top: calc(var(--titlebar-height) + 16px);
           right: 0;
           bottom: 0;
           width: 72px;
@@ -568,7 +657,7 @@
         .log-panel {
             flex: 1;
             min-width: 0;
-            height: calc(100vh - var(--volume-offset) - 32px);
+            height: calc(100vh - var(--titlebar-height) - var(--volume-offset) - 32px);
             background: white;
             padding: 20px 24px;
             display: flex;
@@ -960,6 +1049,16 @@
     </style>
 </head>
 <body>
+  <div class="title-bar">
+    <div class="title-bar-title">
+      <span data-i18n="index.title">Voice Transcript Studio</span>
+    </div>
+    <div class="title-bar-buttons">
+      <button type="button" class="title-bar-button minimize" id="windowControlMinimize" aria-label="Minimize Window" title="Minimize Window"></button>
+      <button type="button" class="title-bar-button maximize" id="windowControlMaximize" aria-label="Maximize Window" title="Maximize Window"></button>
+      <button type="button" class="title-bar-button close" id="windowControlClose" aria-label="Close Window" title="Close Window"></button>
+    </div>
+  </div>
   <div class="right-sidebar">
     <button class="control-bar-btn keyboard-btn" onclick="openKeyboardSettings()" title="Voice Input Settings" data-i18n-title="index.tooltips.voiceInput">&#x2328;&#xFE0F;</button>
     <button class="control-bar-btn settings-btn" onclick="openSettings()" title="Settings" data-i18n-title="index.tooltips.settings">&#x2699;&#xFE0F;</button>

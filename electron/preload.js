@@ -42,5 +42,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
   
   removeMediaProgressListener: () => {
     ipcRenderer.removeAllListeners('media-progress');
+  },
+
+  windowControls: {
+    minimize: () => ipcRenderer.invoke('window-control', 'minimize'),
+    toggleMaximize: () => ipcRenderer.invoke('window-control', 'toggle-maximize'),
+    close: () => ipcRenderer.invoke('window-control', 'close')
+  },
+
+  onWindowStateChange: (callback) => {
+    if (typeof callback !== 'function') {
+      return () => {};
+    }
+    const handler = (_event, state) => callback(state);
+    ipcRenderer.on('window-state-changed', handler);
+    return () => {
+      ipcRenderer.removeListener('window-state-changed', handler);
+    };
   }
 });

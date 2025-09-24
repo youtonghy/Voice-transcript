@@ -285,6 +285,8 @@ function createMainWindow() {
   const windowOptions = {
     width: 1000,
     height: 720,
+    frame: false,
+    ...(process.platform === 'darwin' ? { titleBarStyle: 'hidden' } : {}),
     webPreferences: {
       contextIsolation: true,
       preload: path.join(__dirname, 'preload.js')
@@ -293,6 +295,25 @@ function createMainWindow() {
   if (defaultIconPath) windowOptions.icon = defaultIconPath;
 
   mainWindow = new BrowserWindow(windowOptions);
+
+  const broadcastWindowState = () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    try {
+      mainWindow.webContents.send('window-state-changed', {
+        isMaximized: mainWindow.isMaximized(),
+        isFullScreen: mainWindow.isFullScreen()
+      });
+    } catch (error) {
+      // No-op: renderer might not be ready yet
+    }
+  };
+
+  mainWindow.on('maximize', broadcastWindowState);
+  mainWindow.on('unmaximize', broadcastWindowState);
+  mainWindow.on('enter-full-screen', broadcastWindowState);
+  mainWindow.on('leave-full-screen', broadcastWindowState);
+  mainWindow.on('restore', broadcastWindowState);
+  mainWindow.webContents.on('did-finish-load', broadcastWindowState);
 
   updateTaskbarRecordingIcon(isVoiceInputRecording);
   updateTrayRecordingIcon(isVoiceInputRecording);
@@ -735,6 +756,33 @@ async function stopPythonService(graceful = true) {
 }
 
 // IPC Handlers - app/windows
+ipcMain.handle('window-control', async (event, action) => {
+  const targetWindow = BrowserWindow.fromWebContents(event.sender);
+  if (!targetWindow || targetWindow.isDestroyed()) {
+    return false;
+  }
+  switch (action) {
+    case 'minimize':
+      targetWindow.minimize();
+      break;
+    case 'toggle-maximize':
+      if (targetWindow.isFullScreen()) {
+        targetWindow.setFullScreen(false);
+      } else if (targetWindow.isMaximized()) {
+        targetWindow.unmaximize();
+      } else {
+        targetWindow.maximize();
+      }
+      break;
+    case 'close':
+      targetWindow.close();
+      break;
+    default:
+      return false;
+  }
+  return true;
+});
+
 ipcMain.handle('open-settings', async (_event, section) => {
   createSettingsWindow(section);
   return true;
