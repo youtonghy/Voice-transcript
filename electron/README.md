@@ -25,6 +25,13 @@ Voice Transcript 是一个基于 Electron 与 Python 后端的桌面录音转写
    ```
 3. 首次启动后在設定界面填写 API Key、基地址和翻译选项。
 
+## 打包发布
+- Windows：`npm run dist:win`
+  - 会使用 Nuitka 生成 `dist-python/win/*.exe`，随后由 `electron-builder` 产出安装包。
+- Linux：`npm run dist:linux`
+  - 依赖系统的 `python3` 与 Nuitka，生成的二进制位于 `dist-python/linux/`。
+  - 如需随应用分发 `ffmpeg` 可将其放在项目根目录或 `ffmpeg/` 子目录，脚本会自动复制。
+- 仅重新打包 Python 后端可以分别运行 `npm run build:py:win` 或 `npm run build:py:linux`。
+
 ## 配置文件
 运行时配置存储在 `config.json`，包含 API Key、翻译语言、静音阈值等参数。发布版本会将配置移动到用户数据目录，如 Windows 的 `%AppData%/Voice Transcript/`。
-

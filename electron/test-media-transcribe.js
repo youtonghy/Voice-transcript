@@ -5,32 +5,40 @@ const fs = require('fs');
 
 async function testMediaTranscribe() {
     console.log('开始测试媒体转写功能...');
-    
-    // 检查exe文件是否存在
-    const exePath = path.join(__dirname, 'dist-python', 'win', 'media_transcribe.exe');
-    console.log('检查exe文件:', exePath);
-    
-    if (!fs.existsSync(exePath)) {
-        console.error('❌ media_transcribe.exe 不存在');
+
+    const platform = process.platform;
+    const platformDir = platform === 'win32' ? 'win' : (platform === 'darwin' ? 'mac' : 'linux');
+    const binaryCandidates = [
+        path.join(__dirname, 'dist-python', platformDir, platform === 'win32' ? 'media_transcribe.exe' : 'media_transcribe'),
+        path.join(__dirname, 'dist-python', platformDir, 'media_transcribe.bin')
+    ];
+    const exePath = binaryCandidates.find(fs.existsSync);
+
+    console.log('检查媒体转写可执行文件:', binaryCandidates.join(' | '));
+
+    if (!exePath) {
+        console.error('❌ 未找到 media_transcribe 可执行文件');
         return;
     }
-    
-    console.log('✅ media_transcribe.exe 存在');
-    
-    // 检查本地 ffmpeg（项目根目录）是否存在（用于运行时指定给 MoviePy）
-    const ffmpegAtRoot = path.join(__dirname, 'ffmpeg.exe');
-    const ffmpegInFolder = path.join(__dirname, 'ffmpeg', 'ffmpeg.exe');
-    if (fs.existsSync(ffmpegAtRoot)) {
-        console.log('✅ 发现本地 ffmpeg.exe:', ffmpegAtRoot);
-    } else if (fs.existsSync(ffmpegInFolder)) {
-        console.log('✅ 发现本地 ffmpeg/ffmpeg.exe:', ffmpegInFolder);
+
+    console.log('✅ 已找到媒体转写可执行文件:', exePath);
+
+    const ffmpegCandidates = [
+        path.join(__dirname, 'ffmpeg.exe'),
+        path.join(__dirname, 'ffmpeg', 'ffmpeg.exe'),
+        path.join(__dirname, 'ffmpeg'),
+        path.join(__dirname, 'ffmpeg', 'ffmpeg')
+    ];
+    const ffmpegPath = ffmpegCandidates.find(fs.existsSync);
+    if (ffmpegPath) {
+        console.log('✅ 发现本地 ffmpeg:', ffmpegPath);
     } else {
-        console.warn('⚠️ 未在项目根目录找到 ffmpeg.exe（开发模式下建议放在 electron 根目录）');
+        console.warn('⚠️ 未在项目根目录找到 ffmpeg，可使用系统内置版本');
     }
 
     // 测试命令行参数
     console.log('测试命令行参数...');
-    
+
     try {
         const testProcess = spawn(exePath, ['--help'], {
             stdio: ['pipe', 'pipe', 'pipe'],

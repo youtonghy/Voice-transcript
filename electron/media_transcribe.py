@@ -105,22 +105,30 @@ def _resolve_ffmpeg_path():
         if not base_dir:
             base_dir = os.path.dirname(getattr(sys, "executable", sys.argv[0]))
 
-        # Common placement locations
+        # Common placement locations (Windows and Unix)
         candidates = [
-            os.path.join(base_dir, "ffmpeg", "ffmpeg.exe"),  # subdirectory ffmpeg/ffmpeg.exe
-            os.path.join(base_dir, "ffmpeg.exe"),             # same directory ffmpeg.exe
+            os.path.join(base_dir, "ffmpeg", "ffmpeg.exe"),
+            os.path.join(base_dir, "ffmpeg.exe"),
+            os.path.join(base_dir, "ffmpeg", "ffmpeg"),
+            os.path.join(base_dir, "ffmpeg"),
         ]
 
         # Additional attempt: Electron project root (development mode)
-        # When this script is run from electron directory, ffmpeg may be placed at the root of that directory
         project_root = os.path.dirname(os.path.abspath(__file__))
         candidates.append(os.path.join(project_root, "ffmpeg.exe"))
+        candidates.append(os.path.join(project_root, "ffmpeg"))
 
         _log_if("debug", f"Resolving ffmpeg path, candidates: {candidates}")
         for c in candidates:
             if os.path.exists(c):
                 _log_if("info", f"ffmpeg selected: {c}")
                 return c
+
+        # Final fallback: rely on system ffmpeg if available
+        system_ffmpeg = shutil.which("ffmpeg")
+        if system_ffmpeg:
+            _log_if("info", f"ffmpeg located via PATH: {system_ffmpeg}")
+            return system_ffmpeg
     except Exception:
         pass
     return None

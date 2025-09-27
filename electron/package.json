@@ -14,12 +14,17 @@
     "build": "electron-builder",
     "dist:win": "npm run build:py:win && electron-builder --win",
     "kill:pyexe": "node scripts/kill-python-exes.js",
-    "build:py:transcribe": "npm run kill:pyexe && .venv\\Scripts\\python.exe -m nuitka --onefile --windows-console-mode=disable --include-module=modles --output-dir=dist-python\\win --output-filename=transcribe_service.exe transcribe_service.py",
-    "build:py:media": "npm run kill:pyexe && .venv\\Scripts\\python.exe -m nuitka --onefile --windows-console-mode=disable --include-module=modles --include-data-files=ffmpeg.exe=ffmpeg\\ffmpeg.exe --output-dir=dist-python\\win --output-filename=media_transcribe.exe media_transcribe.py",
+    "build:py:transcribe": ".venv\\Scripts\\python.exe -m nuitka --onefile --windows-console-mode=disable --include-module=modles --output-dir=dist-python\\win --output-filename=transcribe_service.exe transcribe_service.py",
+    "build:py:media": ".venv\\Scripts\\python.exe -m nuitka --onefile --windows-console-mode=disable --include-module=modles --include-data-files=ffmpeg.exe=ffmpeg\\ffmpeg.exe --output-dir=dist-python\\win --output-filename=media_transcribe.exe media_transcribe.py",
     "build:py:win": "npm run build:py:transcribe && npm run build:py:media && npm run copy:runtime",
-    "build:pyi:transcribe": "npm run kill:pyexe && .venv\\Scripts\\python.exe -m PyInstaller --noconfirm --onefile --name transcribe_service --hidden-import modles --distpath dist-python\\win --workpath dist-python\\build --clean --noconsole transcribe_service.py",
-    "build:pyi:media": "npm run kill:pyexe && .venv\\Scripts\\python.exe -m PyInstaller --noconfirm --onefile --name media_transcribe --hidden-import modles --distpath dist-python\\win --workpath dist-python\\build --clean --noconsole media_transcribe.py",
-    "copy:runtime": "node -e \"const fs=require('fs'),p='dist-python\\\\win';fs.mkdirSync(p,{recursive:true});try{fs.copyFileSync('ffmpeg.exe',p+'\\\\ffmpeg.exe');}catch(e){}\"",
+    "build:py:transcribe:linux": "python3 -m nuitka --onefile --disable-console --include-module=modles --output-dir=dist-python/linux --output-filename=transcribe_service transcribe_service.py",
+    "build:py:media:linux": "python3 -m nuitka --onefile --disable-console --include-module=modles --output-dir=dist-python/linux --output-filename=media_transcribe media_transcribe.py",
+    "build:py:linux": "npm run build:py:transcribe:linux && npm run build:py:media:linux && npm run copy:runtime:linux",
+    "build:pyi:transcribe": ".venv\\Scripts\\python.exe -m PyInstaller --noconfirm --onefile --name transcribe_service --hidden-import modles --distpath dist-python\\win --workpath dist-python\\build --clean --noconsole transcribe_service.py",
+    "build:pyi:media": ".venv\\Scripts\\python.exe -m PyInstaller --noconfirm --onefile --name media_transcribe --hidden-import modles --distpath dist-python\\win --workpath dist-python\\build --clean --noconsole media_transcribe.py",
+    "copy:runtime": "node scripts/copy-runtime.js dist-python/win",
+    "copy:runtime:linux": "node scripts/copy-runtime.js dist-python/linux",
+    "dist:linux": "npm run build:py:linux && electron-builder --linux",
     "build:pyi:win": "npm run build:pyi:transcribe && npm run build:pyi:media && npm run copy:runtime"
   },
   "devDependencies": {
@@ -49,10 +54,12 @@
     ],
     "extraResources": [
       {
-        "from": "dist-python/win",
+        "from": "dist-python/${os}",
         "to": "python",
         "filter": [
+          "transcribe_service",
           "transcribe_service.exe",
+          "media_transcribe",
           "media_transcribe.exe"
         ]
       },
@@ -60,6 +67,7 @@
         "from": ".",
         "to": "python",
         "filter": [
+          "ffmpeg",
           "ffmpeg.exe"
         ]
       }
@@ -68,6 +76,13 @@
       "target": [
         "nsis"
       ]
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "AudioVideo",
+      "icon": "assets/icons/icon.png"
     },
     "nsis": {
       "oneClick": false,

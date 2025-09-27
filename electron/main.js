@@ -413,19 +413,45 @@ function createVoiceInputWindow() {
 }
 
 // Python service management
+const platformPythonDir = process.platform === 'win32'
+  ? 'win'
+  : process.platform === 'darwin'
+    ? 'mac'
+    : 'linux';
+
+function buildPythonBinaryNames(baseName) {
+  if (process.platform === 'win32') {
+    return [`${baseName}.exe`];
+  }
+  return [baseName, `${baseName}.bin`, `${baseName}.exe`];
+}
+
+function findBundledPythonBinary(baseName) {
+  const binaryNames = buildPythonBinaryNames(baseName);
+  const searchRoots = [];
+  if (isPackaged) {
+    searchRoots.push(path.join(process.resourcesPath, 'python'));
+  } else {
+    searchRoots.push(path.join(__dirname, 'dist-python', platformPythonDir));
+    searchRoots.push(path.join(__dirname, 'dist'));
+  }
+
+  for (const root of searchRoots) {
+    for (const binary of binaryNames) {
+      const candidate = path.join(root, binary);
+      if (fs.existsSync(candidate)) {
+        return candidate;
+      }
+    }
+  }
+  return null;
+}
+
 function resolveTranscribeServicePath() {
   // Prefer compiled exe; fall back to configured python + script in dev
-  const exeCandidates = [];
-  if (isPackaged) {
-    exeCandidates.push(path.join(process.resourcesPath, 'python', 'transcribe_service.exe'));
-  } else {
-    exeCandidates.push(path.join(__dirname, 'dist-python', 'win', 'transcribe_service.exe'));
-    exeCandidates.push(path.join(__dirname, 'dist', 'transcribe_service.exe'));
-  }
-  for (const candidate of exeCandidates) {
-    if (fs.existsSync(candidate)) {
-      return { command: candidate, args: [], useSystemPython: false };
-    }
+  const bundled = findBundledPythonBinary('transcribe_service');
+  if (bundled) {
+    return { command: bundled, args: [], useSystemPython: false };
   }
 
   if (!isPackaged) {
@@ -1064,15 +1090,9 @@ ipcMain.handle('select-output-path', async (_event, { baseName } = {}) => {
 });
 
 function resolveMediaExe() {
-  const exeCandidates = [];
-  if (isPackaged) {
-    exeCandidates.push(path.join(process.resourcesPath, 'python', 'media_transcribe.exe'));
-  } else {
-    exeCandidates.push(path.join(__dirname, 'dist-python', 'win', 'media_transcribe.exe'));
-    exeCandidates.push(path.join(__dirname, 'dist', 'media_transcribe.exe'));
-  }
-  for (const c of exeCandidates) {
-    if (fs.existsSync(c)) return { command: c, args: [], useSystemPython: false };
+  const bundled = findBundledPythonBinary('media_transcribe');
+  if (bundled) {
+    return { command: bundled, args: [], useSystemPython: false };
   }
   if (!isPackaged) {
     const script = path.join(__dirname, 'media_transcribe.py');
