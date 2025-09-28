@@ -29,6 +29,8 @@ let historyCollapsed = false;
 let historySearchQuery = '';
 let historySearchQueryNormalized = '';
 let historyDateFormatter = null;
+let lastVolumeDbDisplay = { type: 'negInf', value: null };
+let lastVolumeRms = 0;
 const CONVERSATION_TITLE_DEBOUNCE_MS = 800;
 const MAX_TITLE_SEGMENTS = 12;
 const MAX_TITLE_FIELD_LENGTH = 400;
@@ -136,6 +138,56 @@ function formatSilenceLabel(db) {
     return t('index.volume.silenceRange');
 }
 
+function formatDbLessEqual(db) {
+    const formatted = typeof db === 'number' && isFinite(db) ? db.toFixed(1) : '0.0';
+    const template = t('index.volume.dbValueLessEqual');
+    if (template && template !== 'index.volume.dbValueLessEqual' && template.includes('{value}')) {
+        return template.replace('{value}', formatted);
+    }
+    return `<= ${formatted} dB`;
+}
+
+function formatDbExact(db) {
+    const formatted = typeof db === 'number' && isFinite(db) ? db.toFixed(1) : '0.0';
+    const template = t('index.volume.dbValue');
+    if (template && template !== 'index.volume.dbValue' && template.includes('{value}')) {
+        return template.replace('{value}', formatted);
+    }
+    return `${formatted} dB`;
+}
+
+function formatDbNegInf() {
+    const textValue = t('index.volume.dbValueNegInf');
+    if (textValue && textValue !== 'index.volume.dbValueNegInf') {
+        return textValue;
+    }
+    return '-inf dB';
+}
+
+function formatRmsDisplay(rms) {
+    const formatted = typeof rms === 'number' && isFinite(rms) ? rms.toFixed(3) : '0.000';
+    const template = t('index.volume.rmsValue');
+    if (template && template !== 'index.volume.rmsValue' && template.includes('{value}')) {
+        return template.replace('{value}', formatted);
+    }
+    return `RMS ${formatted}`;
+}
+
+function renderVolumeValues() {
+    if (volumeDbValue) {
+        if (!lastVolumeDbDisplay || lastVolumeDbDisplay.type === 'negInf') {
+            volumeDbValue.textContent = formatDbNegInf();
+        } else if (lastVolumeDbDisplay.type === 'lessEqual') {
+            volumeDbValue.textContent = formatDbLessEqual(lastVolumeDbDisplay.value);
+        } else {
+            volumeDbValue.textContent = formatDbExact(lastVolumeDbDisplay.value);
+        }
+    }
+    if (volumeRmsValue) {
+        volumeRmsValue.textContent = formatRmsDisplay(lastVolumeRms);
+    }
+}
+
 function setDocumentLanguage(lang) {
     if (document && document.documentElement) {
         let htmlLang = 'en';
@@ -187,6 +239,10 @@ function changeLanguage(lang) {
 
     document.title = t('index.title');
     updateHistoryToggleUI();
+    if (volumeSilenceEl && silenceMarkerDb === null) {
+        volumeSilenceEl.textContent = formatSilenceLabel(SILENCE_PLACEHOLDER_DB);
+    }
+    renderVolumeValues();
     updateUI();
 }
 
@@ -2216,6 +2272,10 @@ function applyLanguageFromConfig(cfg) {
     }
     document.title = t('index.title');
     updateHistoryToggleUI();
+    if (volumeSilenceEl && silenceMarkerDb === null) {
+        volumeSilenceEl.textContent = formatSilenceLabel(SILENCE_PLACEHOLDER_DB);
+    }
+    renderVolumeValues();
 }
 
 function initializeLanguage() {
@@ -2229,6 +2289,10 @@ function initializeLanguage() {
     }
     document.title = t('index.title');
     updateHistoryToggleUI();
+    if (volumeSilenceEl && silenceMarkerDb === null) {
+        volumeSilenceEl.textContent = formatSilenceLabel(SILENCE_PLACEHOLDER_DB);
+    }
+    renderVolumeValues();
     if (typeof window.appI18n.onChange === 'function') {
         window.appI18n.onChange(() => {
             document.title = t('index.title');
@@ -2238,11 +2302,14 @@ function initializeLanguage() {
             renderHistoryList();
             if (silenceMarkerDb !== null) {
                 updateSilenceMarker(silenceMarkerDb);
+            } else if (volumeSilenceEl) {
+                volumeSilenceEl.textContent = formatSilenceLabel(SILENCE_PLACEHOLDER_DB);
             }
             if (volumePanel && volumeToggleBtn) {
                 const expanded = !volumePanel.classList.contains('collapsed');
                 updateVolumeToggleState(expanded);
             }
+            renderVolumeValues();
         });
     }
 }
@@ -2585,12 +2652,8 @@ function setVolumeRecordingState(active) {
                 ? t('index.volume.waiting')
                 : t('index.statusText.notReady');
         }
-        if (volumeDbValue) {
-            volumeDbValue.textContent = '-inf dB';
-        }
-        if (volumeRmsValue) {
-            volumeRmsValue.textContent = 'RMS 0.000';
-        }
+        lastVolumeDbDisplay = { type: 'negInf', value: null };
+        lastVolumeRms = 0;
         if (volumeLevelEl) {
             volumeLevelEl.style.width = '0%';
             volumeLevelEl.className = 'volume-level idle';
@@ -2602,6 +2665,7 @@ function setVolumeRecordingState(active) {
         silenceMarkerDb = null;
     }
 
+    renderVolumeValues();
     syncVolumePanelOffset();
 }
 
@@ -2706,19 +2770,16 @@ function updateVolumeMeter(payload) {
         volumeLevelEl.className = `volume-level ${levelClass}`;
     }
 
-    if (volumeDbValue) {
-        if (!hasDb || rawDb <= VOLUME_MIN_DB) {
-            volumeDbValue.textContent = `<= ${VOLUME_MIN_DB.toFixed(1)} dB`;
-        } else {
-            volumeDbValue.textContent = `${clampedDb.toFixed(1)} dB`;
-        }
+    if (!hasDb || rawDb <= VOLUME_MIN_DB) {
+        lastVolumeDbDisplay = { type: 'lessEqual', value: VOLUME_MIN_DB };
+    } else {
+        lastVolumeDbDisplay = { type: 'value', value: clampedDb };
     }
 
     const hasRms = typeof payload.rms === 'number' && isFinite(payload.rms);
     const rmsValue = hasRms ? payload.rms : 0;
-    if (volumeRmsValue) {
-        volumeRmsValue.textContent = `RMS ${rmsValue.toFixed(3)}`;
-    }
+    lastVolumeRms = rmsValue;
+    renderVolumeValues();
 
     if (volumeSilenceEl) {
         const silenceDbRaw = typeof payload.silence_db === 'number' && isFinite(payload.silence_db)

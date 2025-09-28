@@ -652,8 +652,8 @@
                     <div class="form-group" id="translationSettings">
                 <label for="translationMode">Translation Mode</label>
                 <select id="translationMode" name="translation_mode">
-                    <option value="fixed" selected>Fixed Translation</option>
-                    <option value="smart">Smart Translation</option>
+                    <option value="fixed" selected data-i18n="settings.translationMode.option.fixed">Fixed Translation</option>
+                    <option value="smart" data-i18n="settings.translationMode.option.smart">Smart Translation</option>
                 </select>
                 <div class="form-note">Fixed: always translate to the target; Smart: better for bilingual conversations</div>
                 
@@ -681,7 +681,7 @@
                         <option value="Polish">Polish</option>
                         <option value="Ukrainian">Ukrainian</option>
                         <option value="Czech">Czech</option>
-                        <option value="__custom__">Custom...</option>
+                        <option value="__custom__" data-i18n="media.languages.custom">Custom...</option>
                     </select>
                     <input type="text" id="customLanguage" placeholder="Enter custom language" style="margin-top:10px; display:none;" />
                     <div class="form-note">
@@ -752,7 +752,7 @@
                     <div class="form-group">
                 <label for="transcribeLanguage">Transcription Language</label>
                 <select id="transcribeLanguage" name="transcribe_language">
-                    <option value="auto" selected>Auto Detect</option>
+                    <option value="auto" selected data-i18n="settings.options.autoDetect">Auto Detect</option>
                     <option value="Chinese">Chinese</option>
                     <option value="English">English</option>
                     <option value="Japanese">Japanese</option>
