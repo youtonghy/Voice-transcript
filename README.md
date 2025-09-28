@@ -1,4 +1,4 @@
-# Voice Transcript 桌面应用
+# Voice Transcript Translate 桌面应用
 
 ![](https://github.com/youtonghy/Voice-transcript/blob/dev/electron/PixPin_2025-09-25_14-05-47.png?raw=true)
 
