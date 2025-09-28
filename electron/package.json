@@ -1,5 +1,5 @@
 {
-  "name": "Voice-Transcript-Translate",
+  "name": "VoiceTT",
   "version": "0.2.3",
   "homepage": "https://vtt.tokisantike.net/",
   "description": "Voice transcription and translation desktop app",
@@ -34,7 +34,7 @@
   },
   "build": {
     "appId": "com.youtonghy.voiceTT",
-    "productName": "Voice Transcript",
+    "productName": "VoiceTT",
     "icon": "assets/icons/icon.ico",
     "asar": true,
     "files": [
