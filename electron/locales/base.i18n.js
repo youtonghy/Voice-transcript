@@ -1,4 +1,4 @@
-﻿(function () {
+(function () {
   if (!window.appI18n || typeof window.appI18n.extend !== 'function') {
     console.warn('[i18n] base locale loader: appI18n not ready');
     return;
@@ -151,6 +151,7 @@
       'settings.labels.theaterMode': 'Theater Mode',
       'settings.labels.appLanguage': 'Choose Language',
       'settings.languageOption.zh': 'Simplified Chinese',
+      'settings.languageOption.ja': 'Japanese',
       'settings.placeholders.customLanguage': 'Enter a custom language',
       'settings.notes.recognitionEngine': 'Choose the provider for speech recognition (transcription).',
       'settings.notes.openaiTranscribeModel': 'Audio transcription model (default gpt-4o-transcribe).',
@@ -385,6 +386,7 @@
       'settings.labels.theaterMode': '剧场模式',
       'settings.labels.appLanguage': '选择语言',
       'settings.languageOption.zh': '简体中文',
+      'settings.languageOption.ja': '日语',
       'settings.placeholders.customLanguage': '输入自定义语言',
       'settings.notes.recognitionEngine': '选择用于语音识别（转写）的服务提供商。',
       'settings.notes.openaiTranscribeModel': '音频转写模型（默认为 gpt-4o-transcribe）。',
@@ -472,6 +474,25 @@
       'voice.notify.loadFailed': '加载配置失败',
       'voice.notify.saveFailed': '保存失败'
     }
+  };
+
+  translations.ja = {
+    ...translations.en,
+    'common.backNav': '戻る',
+    'common.backLink': '戻る',
+    'settings.nav.title': '設定',
+    'settings.nav.backTooltip': '前の画面に戻る',
+    'settings.header.title': '設定',
+    'settings.header.subtitle': 'API キーや転写・翻訳オプションを設定します。',
+    'settings.sidebar.title': '設定メニュー',
+    'settings.sidebar.engine': 'エンジン',
+    'settings.sidebar.transcription': '転写',
+    'settings.sidebar.translation': '翻訳',
+    'settings.sidebar.recording': '録音',
+    'settings.sidebar.interface': 'インターフェース',
+    'settings.section.interfaceLanguage': 'インターフェース言語',
+    'settings.languageOption.zh': '簡体字中国語',
+    'settings.languageOption.ja': '日本語'
   };
 
   window.appI18n.extend(translations);

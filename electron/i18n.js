@@ -1,7 +1,8 @@
-﻿(function () {
+(function () {
   const translations = {
     en: {},
-    zh: {}
+    zh: {},
+    ja: {}
   };
 
   const languageAliases = {
@@ -12,7 +13,10 @@
     'zh-cn': 'zh',
     'zh-hans': 'zh',
     'zh-sg': 'zh',
-    chinese: 'zh'
+    chinese: 'zh',
+    ja: 'ja',
+    'ja-jp': 'ja',
+    japanese: 'ja'
   };
 
   const defaultLanguage = 'en';
@@ -79,7 +83,12 @@
   }
 
   function updateDocumentLanguage() {
-    const lang = currentLanguage === 'zh' ? 'zh-CN' : 'en';
+    let lang = 'en';
+    if (currentLanguage === 'zh') {
+      lang = 'zh-CN';
+    } else if (currentLanguage === 'ja') {
+      lang = 'ja-JP';
+    }
     if (document && document.documentElement) {
       document.documentElement.lang = lang;
     }

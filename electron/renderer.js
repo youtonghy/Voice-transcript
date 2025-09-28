@@ -138,7 +138,13 @@ function formatSilenceLabel(db) {
 
 function setDocumentLanguage(lang) {
     if (document && document.documentElement) {
-        document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
+        let htmlLang = 'en';
+        if (lang === 'zh') {
+            htmlLang = 'zh-CN';
+        } else if (lang === 'ja') {
+            htmlLang = 'ja-JP';
+        }
+        document.documentElement.lang = htmlLang;
     }
     historyDateFormatter = null;
 }

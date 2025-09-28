@@ -1,4 +1,4 @@
-﻿(function () {
+(function () {
   const DEFAULT_LANGUAGE = 'en';
   const AUTO_SAVE_DELAY = 800;
   const DEFAULT_SECTION = 'engine';
@@ -36,7 +36,12 @@
     if (!document || !document.documentElement) {
       return;
     }
-    const normalized = lang === 'zh' ? 'zh-CN' : 'en';
+    let normalized = 'en';
+    if (lang === 'zh') {
+      normalized = 'zh-CN';
+    } else if (lang === 'ja') {
+      normalized = 'ja-JP';
+    }
     document.documentElement.lang = normalized;
   }
 
@@ -490,7 +495,8 @@
 
     const appLanguage = document.getElementById('appLanguage');
     if (appLanguage) {
-      const langValue = config.app_language === 'zh' ? 'zh' : 'en';
+      const supportedLanguages = ['en', 'zh', 'ja'];
+      const langValue = supportedLanguages.includes(config.app_language) ? config.app_language : DEFAULT_LANGUAGE;
       appLanguage.value = langValue;
     }
 

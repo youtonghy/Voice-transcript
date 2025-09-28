@@ -1,8 +1,14 @@
-﻿const DEFAULT_LANGUAGE = 'en';
+const DEFAULT_LANGUAGE = 'en';
 
 function setDocumentLanguage(lang) {
   if (document && document.documentElement) {
-    document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
+    let htmlLang = 'en';
+    if (lang === 'zh') {
+      htmlLang = 'zh-CN';
+    } else if (lang === 'ja') {
+      htmlLang = 'ja-JP';
+    }
+    document.documentElement.lang = htmlLang;
   }
 }
 
@@ -14,6 +20,7 @@ const LANGUAGE_ALIASES = {
   en: 'English',
   japanese: 'Japanese',
   ja: 'Japanese',
+  'ja-jp': 'Japanese',
   korean: 'Korean',
   ko: 'Korean',
   spanish: 'Spanish',
