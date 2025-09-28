@@ -59,8 +59,10 @@
         "to": "python",
         "filter": [
           "transcribe_service",
+          "transcribe_service.bin",
           "transcribe_service.exe",
           "media_transcribe",
+          "media_transcribe.bin",
           "media_transcribe.exe"
         ]
       },

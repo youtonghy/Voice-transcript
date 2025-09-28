@@ -30,6 +30,7 @@ Voice Transcript 是一个基于 Electron 与 Python 后端的桌面录音转写
   - 会使用 Nuitka 生成 `dist-python/win/*.exe`，随后由 `electron-builder` 产出安装包。
 - Linux：`npm run dist:linux`
   - 依赖系统的 `python3` 与 Nuitka，生成的二进制位于 `dist-python/linux/`。
+  - 输出文件包含 `transcribe_service.bin` 与 `media_transcribe.bin`，会被打包进 `.deb` 并在运行时自动调用。
   - 如需随应用分发 `ffmpeg` 可将其放在项目根目录或 `ffmpeg/` 子目录，脚本会自动复制。
 - 仅重新打包 Python 后端可以分别运行 `npm run build:py:win` 或 `npm run build:py:linux`。
 
