@@ -82,7 +82,8 @@
     },
     "linux": {
       "target": [
-        "deb"
+        "deb",
+        "AppImage"
       ],
       "category": "AudioVideo",
       "icon": "assets/icons/icon.png"
