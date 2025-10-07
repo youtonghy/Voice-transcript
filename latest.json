@@ -1,1 +1,16 @@
-
+{
+  "version": "0.2.4",
+  "url": "https://github.com/youtonghy/VoiceTT/releases",
+  "changelog": {
+    "en": [
+      "New: auto update check in Settings > About",
+      "Improved: transcription reliability and CPU usage",
+      "Fixed: history scrolling and minor UI polish"
+    ],
+    "zh-Hans": [
+      "新增：设置 > 关于 支持自动检查更新",
+      "优化：结束录音自动切断最后一句转录",
+      "修复：历史列表滚动与界面细节"
+    ]
+  }
+}
