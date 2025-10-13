@@ -17,7 +17,7 @@ use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}
 use tauri::webview::{WebviewWindow, WebviewWindowBuilder};
 use tauri::{App, AppHandle, Emitter, Manager, State, WebviewUrl};
 use tauri_plugin_clipboard_manager::ClipboardExt;
-use tauri_plugin_global_shortcut::GlobalShortcutExt;
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 use tokio::fs as tokio_fs;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
@@ -247,7 +247,7 @@ async fn ensure_tray(app: &AppHandle, state: &AppState) -> Result<(), String> {
 }
 
 async fn refresh_tray(app: &AppHandle, state: &AppState) -> Result<(), String> {
-    let mut guard = state.tray.lock().await;
+    let guard = state.tray.lock().await;
     if let Some(ctx) = guard.as_ref() {
         let window_visible = app
             .get_webview_window(MAIN_WINDOW_LABEL)
@@ -353,7 +353,7 @@ async fn apply_voice_shortcut(
     let manager = app.global_shortcut();
     let mut guard = state.last_voice_shortcut.lock().await;
     if let Some(previous) = guard.take() {
-        if let Err(err) = manager.unregister(&previous) {
+        if let Err(err) = manager.unregister(previous.as_str()) {
             eprintln!("[shortcut] unregister failed: {err}");
         }
     }
@@ -368,16 +368,17 @@ async fn apply_voice_shortcut(
 
     let accelerator = config.voice_input_hotkey.trim().to_string();
     let state_for_handler = state.clone();
-    let app_for_handler = app.clone();
     manager
-        .register(accelerator.clone(), move || {
-            let state = state_for_handler.clone();
-            let app = app_for_handler.clone();
-            tauri::async_runtime::spawn(async move {
-                if let Err(err) = toggle_voice_input_hotkey(&app, &state).await {
-                    eprintln!("[shortcut] voice toggle failed: {err}");
-                }
-            });
+        .on_shortcut(accelerator.as_str(), move |app_handle, _shortcut, event| {
+            if matches!(event.state(), ShortcutState::Pressed) {
+                let state = state_for_handler.clone();
+                let app = app_handle.clone();
+                tauri::async_runtime::spawn(async move {
+                    if let Err(err) = toggle_voice_input_hotkey(&app, &state).await {
+                        eprintln!("[shortcut] voice toggle failed: {err}");
+                    }
+                });
+            }
         })
         .map_err(map_err)?;
     *guard = Some(accelerator);
@@ -1465,17 +1466,22 @@ fn setup_app(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
     let config = tauri::async_runtime::block_on(state.current_config());
     app.manage(state.clone());
 
+    let app_handle_for_python = app_handle.clone();
+    let config_for_python = config.clone();
     tauri::async_runtime::spawn(async move {
-        if let Err(err) = python.start(&app_handle, &config).await {
+        if let Err(err) = python.start(&app_handle_for_python, &config_for_python).await {
             eprintln!("[setup] failed to start python service: {err:?}");
         }
     });
 
+    let app_handle_for_tray = app_handle.clone();
+    let state_for_tray = state.clone();
+    let config_for_shortcut = config.clone();
     tauri::async_runtime::block_on(async {
-        if let Err(err) = ensure_tray(&app_handle, &state).await {
+        if let Err(err) = ensure_tray(&app_handle_for_tray, &state_for_tray).await {
             eprintln!("[tray] failed to initialize tray: {err}");
         }
-        if let Err(err) = apply_voice_shortcut(&app_handle, &state, &config).await {
+        if let Err(err) = apply_voice_shortcut(&app_handle_for_tray, &state_for_tray, &config_for_shortcut).await {
             eprintln!("[shortcut] failed to set initial voice shortcut: {err}");
         }
     });
