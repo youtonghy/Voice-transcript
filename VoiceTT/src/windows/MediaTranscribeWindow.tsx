@@ -2,7 +2,7 @@ import "./media/MediaTranscribeWindow.css";
 
 import { useEffect, useMemo, useState } from "react";
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { stat } from "@tauri-apps/api/fs";
+import { stat } from "@tauri-apps/plugin-fs";
 import { useI18n } from "../i18n";
 import {
   exportResults,

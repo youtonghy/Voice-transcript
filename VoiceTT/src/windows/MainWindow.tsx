@@ -1361,8 +1361,10 @@ export default function MainWindow({
     }
     try {
       const payload = collectExportResults(activeConversation);
-      const response = (await exportResults(payload))
-        as { success?: boolean; error?: unknown } | undefined;
+      const response = (await exportResults(payload)) as {
+        success?: boolean;
+        error?: unknown;
+      } | undefined;
       if (response && response.success !== false) {
         appendLog(
           "info",

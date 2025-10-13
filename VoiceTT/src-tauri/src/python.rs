@@ -320,7 +320,6 @@ pub fn resolve_python_root(app: &AppHandle) -> PathBuf {
         }
     }
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("src-tauri")
         .join("resources")
         .join("python")
 }
