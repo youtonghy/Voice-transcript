@@ -1,0 +1,14 @@
+/home/devuser/github/Voice-transcript/VoiceTT/src-tauri/target/debug/deps/serde-d7a3a8892869d558.d: /home/devuser/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs /home/devuser/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs /home/devuser/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs /home/devuser/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs /home/devuser/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs /home/devuser/github/Voice-transcript/VoiceTT/src-tauri/target/debug/build/serde-90d552bff1053ed6/out/private.rs
+
+/home/devuser/github/Voice-transcript/VoiceTT/src-tauri/target/debug/deps/libserde-d7a3a8892869d558.rlib: /home/devuser/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs /home/devuser/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs /home/devuser/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs /home/devuser/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs /home/devuser/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs /home/devuser/github/Voice-transcript/VoiceTT/src-tauri/target/debug/build/serde-90d552bff1053ed6/out/private.rs
+
+/home/devuser/github/Voice-transcript/VoiceTT/src-tauri/target/debug/deps/libserde-d7a3a8892869d558.rmeta: /home/devuser/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs /home/devuser/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs /home/devuser/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs /home/devuser/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs /home/devuser/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs /home/devuser/github/Voice-transcript/VoiceTT/src-tauri/target/debug/build/serde-90d552bff1053ed6/out/private.rs
+
+/home/devuser/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/lib.rs:
+/home/devuser/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/integer128.rs:
+/home/devuser/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/mod.rs:
+/home/devuser/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/de.rs:
+/home/devuser/.cargo/registry/src/index.crates.io-1949cf8c6b5b557f/serde-1.0.228/src/private/ser.rs:
+/home/devuser/github/Voice-transcript/VoiceTT/src-tauri/target/debug/build/serde-90d552bff1053ed6/out/private.rs:
+
+# env-dep:OUT_DIR=/home/devuser/github/Voice-transcript/VoiceTT/src-tauri/target/debug/build/serde-90d552bff1053ed6/out
