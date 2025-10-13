@@ -1418,8 +1418,11 @@ export default function MainWindow({
       return;
     }
     try {
-      const response = (await exportLogs(entries))
-        as { success?: boolean; error?: unknown; canceled?: boolean } | undefined;
+      const response = (await exportLogs(entries)) as {
+        success?: boolean;
+        error?: unknown;
+        canceled?: boolean;
+      } | undefined;
       if (response && response.success !== false) {
         appendLog(
           "info",

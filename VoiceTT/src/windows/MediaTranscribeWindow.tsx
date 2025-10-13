@@ -2,7 +2,6 @@ import "./media/MediaTranscribeWindow.css";
 
 import { useEffect, useMemo, useState } from "react";
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { stat } from "@tauri-apps/plugin-fs";
 import { useI18n } from "../i18n";
 import {
   exportResults,
@@ -10,6 +9,7 @@ import {
   onMediaProgress,
   processMediaFile,
   saveConfig,
+  statPath,
 } from "../api";
 
 type MediaResult = {
@@ -201,8 +201,8 @@ export default function MediaTranscribeWindow({
       if (!path) return;
       let size = 0;
       try {
-        const info = await stat(path);
-        size = info.size ?? 0;
+        const info = await statPath(path);
+        size = info?.size ?? 0;
       } catch {
         size = 0;
       }

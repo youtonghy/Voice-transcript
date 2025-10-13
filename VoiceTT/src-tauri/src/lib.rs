@@ -54,6 +54,11 @@ pub struct ServiceStatus {
     pub ready: bool,
 }
 
+#[derive(Debug, Serialize)]
+struct FileStat {
+    size: u64,
+}
+
 fn map_err<E: std::fmt::Display>(err: E) -> String {
     err.to_string()
 }
@@ -549,6 +554,18 @@ async fn start_voice_input(app: AppHandle, state: State<'_, AppState>) -> Result
 #[tauri::command]
 async fn stop_voice_input(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
     stop_voice_input_impl(&app, &state).await
+}
+
+#[tauri::command]
+async fn stat_path(path: String) -> Result<Option<FileStat>, String> {
+    match tokio_fs::metadata(&path).await {
+        Ok(metadata) if metadata.is_file() => Ok(Some(FileStat {
+            size: metadata.len(),
+        })),
+        Ok(_) => Ok(None),
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(err) => Err(map_err(err)),
+    }
 }
 
 #[allow(non_snake_case)]
@@ -1493,7 +1510,6 @@ fn setup_app(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_dialog::init())
@@ -1519,6 +1535,7 @@ pub fn run() {
             summarize_conversation_title,
             export_results,
             export_logs,
+            stat_path,
             write_clipboard,
             get_devices,
             set_device,

@@ -140,6 +140,10 @@ export async function exportLogs(entries: ExportLogEntry[]) {
   return invoke<Record<string, unknown>>("export_logs", { payload: { entries } });
 }
 
+export async function statPath(path: string) {
+  return invoke<{ size: number } | null>("stat_path", { path });
+}
+
 type SummaryPayload = {
   conversationId?: string;
   conversation_id?: string;
