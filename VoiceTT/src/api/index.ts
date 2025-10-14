@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, UnlistenFn } from "@tauri-apps/api/event";
+import type { Conversation } from "../windows/main/types";
 
 export type PythonLogMessage = {
   type: "log";
@@ -142,6 +143,20 @@ export async function exportLogs(entries: ExportLogEntry[]) {
 
 export async function statPath(path: string) {
   return invoke<{ size: number } | null>("stat_path", { path });
+}
+
+export type ConversationStatePayload = {
+  conversations: Conversation[];
+  activeConversationId?: string | null;
+  historyCollapsed?: boolean;
+};
+
+export async function loadConversationState() {
+  return invoke<ConversationStatePayload>("load_conversation_state");
+}
+
+export async function saveConversationState(state: ConversationStatePayload) {
+  return invoke<void>("save_conversation_state", { payload: state });
 }
 
 type SummaryPayload = {

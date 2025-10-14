@@ -50,16 +50,21 @@ impl AppState {
         self.python.clone()
     }
 
+    pub fn config_path(&self) -> PathBuf {
+        self.config_path.clone()
+    }
+
     pub async fn current_config(&self) -> AppConfig {
         self.config.read().await.clone()
     }
 
     pub async fn save_config(&self, new_config: AppConfig) -> Result<()> {
+        save_config(&self.config_path, &new_config)?;
+        let persisted = load_config(&self.config_path);
         {
             let mut guard = self.config.write().await;
-            *guard = new_config.clone();
+            *guard = persisted;
         }
-        save_config(&self.config_path, &new_config)?;
         Ok(())
     }
 

@@ -14,6 +14,8 @@ import {
   optimizeText,
   requestTranslation,
   restartPythonService,
+  loadConversationState,
+  saveConversationState,
   startVoiceInput,
   startRecording,
   stopRecording,
@@ -31,9 +33,9 @@ import {
   ServiceStatusState,
 } from "./main/types";
 
-const CONVERSATIONS_STORAGE_KEY = "voice_transcript_conversations_v1";
-const ACTIVE_CONVERSATION_STORAGE_KEY = "voice_transcript_active_conversation_v1";
-const HISTORY_COLLAPSED_STORAGE_KEY = "voice_transcript_history_collapsed";
+const LEGACY_CONVERSATIONS_KEY = "voice_transcript_conversations_v1";
+const LEGACY_ACTIVE_CONVERSATION_KEY = "voice_transcript_active_conversation_v1";
+const LEGACY_HISTORY_COLLAPSED_KEY = "voice_transcript_history_collapsed";
 
 const MAX_LOG_ENTRIES = 300;
 const VOLUME_MIN_DB = -60;
@@ -131,17 +133,6 @@ function sanitizeText(text: unknown): string {
   return typeof text === "string" ? text : "";
 }
 
-function loadFromStorage<T>(key: string, fallback: T): T {
-  if (typeof window === "undefined") return fallback;
-  try {
-    const raw = window.localStorage.getItem(key);
-    if (!raw) return fallback;
-    return JSON.parse(raw) as T;
-  } catch {
-    return fallback;
-  }
-}
-
 export default function MainWindow({
   initialLanguage,
 }: {
@@ -153,23 +144,10 @@ export default function MainWindow({
     useState<ServiceStatusState>("starting");
   const [isRecording, setIsRecording] = useState(false);
   const [isVoiceInputActive, setIsVoiceInputActive] = useState(false);
-  const [conversations, setConversations] = useState<Conversation[]>(() =>
-    sortConversations(
-      loadFromStorage<Conversation[]>(CONVERSATIONS_STORAGE_KEY, []),
-    ),
-  );
-  const conversationsRef = useRef(conversations);
-  const [activeConversationId, setActiveConversationId] = useState<
-    string | null
-  >(() =>
-    loadFromStorage<string | null>(
-      ACTIVE_CONVERSATION_STORAGE_KEY,
-      conversations.length ? conversations[0].id : null,
-    ),
-  );
-  const [historyCollapsed, setHistoryCollapsed] = useState<boolean>(() =>
-    loadFromStorage<boolean>(HISTORY_COLLAPSED_STORAGE_KEY, false),
-  );
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const conversationsRef = useRef<Conversation[]>([]);
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+  const [historyCollapsed, setHistoryCollapsed] = useState<boolean>(false);
   const [historySearch, setHistorySearch] = useState("");
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [summaryInFlight, setSummaryInFlight] = useState(false);
@@ -189,6 +167,8 @@ export default function MainWindow({
   const [lastConversationOrderRank, setLastConversationOrderRank] = useState(
     () => Date.now(),
   );
+  const [conversationsLoaded, setConversationsLoaded] = useState(false);
+  const conversationPersistTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const activeConversationIdRef = useRef<string | null>(activeConversationId);
   useEffect(() => {
@@ -220,32 +200,124 @@ export default function MainWindow({
   }, [isRecording, pythonStatus]);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    window.localStorage.setItem(
-      CONVERSATIONS_STORAGE_KEY,
-      JSON.stringify(conversations),
-    );
-  }, [conversations]);
+    let cancelled = false;
+    (async () => {
+      try {
+        const state = await loadConversationState();
+        if (cancelled) {
+          return;
+        }
+        let loadedConversations = Array.isArray(state?.conversations)
+          ? state.conversations
+          : [];
+        let activeId = state?.activeConversationId ?? null;
+        let collapsed = Boolean(state?.historyCollapsed);
+
+        if (loadedConversations.length === 0 && typeof window !== "undefined") {
+          try {
+            const legacyRaw = window.localStorage.getItem(LEGACY_CONVERSATIONS_KEY);
+            if (legacyRaw) {
+              const parsed = JSON.parse(legacyRaw) as unknown;
+              if (Array.isArray(parsed) && parsed.length > 0) {
+                loadedConversations = parsed as Conversation[];
+                const legacyActiveRaw = window.localStorage.getItem(LEGACY_ACTIVE_CONVERSATION_KEY);
+                if (legacyActiveRaw) {
+                  const legacyActiveParsed = JSON.parse(legacyActiveRaw);
+                  activeId = typeof legacyActiveParsed === "string" ? legacyActiveParsed : null;
+                }
+                const legacyCollapsedRaw = window.localStorage.getItem(LEGACY_HISTORY_COLLAPSED_KEY);
+                if (legacyCollapsedRaw !== null) {
+                  try {
+                    collapsed = Boolean(JSON.parse(legacyCollapsedRaw));
+                  } catch {
+                    collapsed = Boolean(legacyCollapsedRaw);
+                  }
+                }
+                try {
+                  await saveConversationState({
+                    conversations: loadedConversations,
+                    activeConversationId: activeId,
+                    historyCollapsed: collapsed,
+                  });
+                  window.localStorage.removeItem(LEGACY_CONVERSATIONS_KEY);
+                  window.localStorage.removeItem(LEGACY_ACTIVE_CONVERSATION_KEY);
+                  window.localStorage.removeItem(LEGACY_HISTORY_COLLAPSED_KEY);
+                } catch (migrationError) {
+                  console.error(
+                    "[Conversations] failed to migrate legacy conversation data:",
+                    migrationError,
+                  );
+                }
+              }
+            }
+          } catch (legacyError) {
+            console.error("[Conversations] failed to parse legacy conversations:", legacyError);
+          }
+        }
+
+        const sorted = sortConversations(loadedConversations);
+        setConversations(sorted);
+        conversationsRef.current = sorted;
+
+        const desiredActive = activeId;
+        const fallbackActive = sorted.length ? sorted[0].id : null;
+        const resolvedActive =
+          desiredActive && sorted.some((conversation) => conversation.id === desiredActive)
+            ? desiredActive
+            : fallbackActive;
+        setActiveConversationId(resolvedActive);
+        activeConversationIdRef.current = resolvedActive;
+
+        setHistoryCollapsed(collapsed);
+
+        const maxRank = sorted
+          .map((conversation) => conversation.orderRank ?? 0)
+          .reduce((acc, value) => (value > acc ? value : acc), 0);
+        setLastConversationOrderRank(maxRank > 0 ? maxRank : Date.now());
+      } catch (error) {
+        console.error("[Conversations] failed to load conversation state:", error);
+        setConversations([]);
+        conversationsRef.current = [];
+        setActiveConversationId(null);
+        activeConversationIdRef.current = null;
+        setHistoryCollapsed(false);
+        setLastConversationOrderRank(Date.now());
+      } finally {
+        if (!cancelled) {
+          setConversationsLoaded(true);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (activeConversationId) {
-      window.localStorage.setItem(
-        ACTIVE_CONVERSATION_STORAGE_KEY,
-        JSON.stringify(activeConversationId),
-      );
-    } else {
-      window.localStorage.removeItem(ACTIVE_CONVERSATION_STORAGE_KEY);
+    if (!conversationsLoaded || typeof window === "undefined") {
+      return;
     }
-  }, [activeConversationId]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    window.localStorage.setItem(
-      HISTORY_COLLAPSED_STORAGE_KEY,
-      JSON.stringify(historyCollapsed),
-    );
-  }, [historyCollapsed]);
+    if (conversationPersistTimer.current) {
+      clearTimeout(conversationPersistTimer.current);
+    }
+    const payload = {
+      conversations,
+      activeConversationId: activeConversationId ?? null,
+      historyCollapsed,
+    };
+    conversationPersistTimer.current = window.setTimeout(() => {
+      saveConversationState(payload).catch((error) => {
+        console.error("[Conversations] failed to save conversation state:", error);
+      });
+      conversationPersistTimer.current = null;
+    }, 400);
+    return () => {
+      if (conversationPersistTimer.current) {
+        clearTimeout(conversationPersistTimer.current);
+        conversationPersistTimer.current = null;
+      }
+    };
+  }, [conversations, activeConversationId, historyCollapsed, conversationsLoaded]);
 
   useEffect(() => {
     if (historyContextMenu) {
@@ -582,6 +654,9 @@ export default function MainWindow({
   );
 
   const ensureConversation = useCallback(() => {
+    if (!conversationsLoaded) {
+      return;
+    }
     let createdConversationId: string | null = null;
     let createdConversationRank: number | null = null;
     setConversations((prev) => {
@@ -607,7 +682,7 @@ export default function MainWindow({
         return fallback;
       });
     }
-  }, [emptyConversationTitle]);
+  }, [conversationsLoaded, emptyConversationTitle]);
 
   const handlePythonResult = useCallback(
     (message: PythonMessage) => {
@@ -993,6 +1068,9 @@ export default function MainWindow({
   }, []);
 
   useEffect(() => {
+    if (!conversationsLoaded) {
+      return;
+    }
     let unsubscribe: (() => void) | null = null;
     onPythonMessage(handlePythonMessage)
       .then((unlisten) => {
@@ -1006,9 +1084,12 @@ export default function MainWindow({
         unsubscribe();
       }
     };
-  }, [appendLog, handlePythonMessage]);
+  }, [appendLog, handlePythonMessage, conversationsLoaded]);
 
   const handleToggleRecording = useCallback(async () => {
+    if (!conversationsLoaded) {
+      return;
+    }
     try {
       if (isRecording) {
         await stopRecording();
@@ -1059,6 +1140,7 @@ export default function MainWindow({
     }
   }, [
     appendLog,
+    conversationsLoaded,
     ensureConversation,
     isRecording,
     pythonStatus,
@@ -1068,6 +1150,9 @@ export default function MainWindow({
   ]);
 
   const handleToggleVoiceInput = useCallback(async () => {
+    if (!conversationsLoaded) {
+      return;
+    }
     try {
       if (isVoiceInputActive) {
         await stopVoiceInput();
@@ -1113,6 +1198,7 @@ export default function MainWindow({
     }
   }, [
     appendLog,
+    conversationsLoaded,
     ensureConversation,
     isVoiceInputActive,
     pythonStatus,
@@ -1122,6 +1208,9 @@ export default function MainWindow({
   ]);
 
   const handleNewConversation = useCallback(() => {
+    if (!conversationsLoaded) {
+      return;
+    }
     const conversation = createConversation(emptyConversationTitle);
     const rank = conversation.orderRank ?? Date.now();
     setLastConversationOrderRank(rank);
@@ -1129,9 +1218,12 @@ export default function MainWindow({
       sortConversations([conversation, ...prev]),
     );
     setActiveConversationId(conversation.id);
-  }, [emptyConversationTitle, setLastConversationOrderRank]);
+  }, [conversationsLoaded, emptyConversationTitle, setLastConversationOrderRank]);
 
   const handleDeleteConversation = useCallback((id: string) => {
+    if (!conversationsLoaded) {
+      return;
+    }
     const remaining = conversationsRef.current.filter(
       (conversation) => conversation.id !== id,
     );
@@ -1147,9 +1239,12 @@ export default function MainWindow({
       return current;
     });
     setHistoryContextMenu(null);
-  }, []);
+  }, [conversationsLoaded]);
 
   const togglePinConversation = useCallback((id: string) => {
+    if (!conversationsLoaded) {
+      return;
+    }
     setConversations((prev) =>
       sortConversations(
         prev.map((conversation) =>
@@ -1160,10 +1255,13 @@ export default function MainWindow({
       ),
     );
     setHistoryContextMenu(null);
-  }, []);
+  }, [conversationsLoaded]);
 
   const moveConversationToTop = useCallback(
     (id: string) => {
+      if (!conversationsLoaded) {
+        return;
+      }
       const rank = Date.now();
       setLastConversationOrderRank(rank);
       setConversations((prev) =>
@@ -1177,7 +1275,7 @@ export default function MainWindow({
       );
       setHistoryContextMenu(null);
     },
-    [setLastConversationOrderRank],
+    [conversationsLoaded, setLastConversationOrderRank],
   );
 
   const handleRequestTranslation = useCallback(

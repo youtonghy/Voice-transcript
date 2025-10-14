@@ -1,10 +1,13 @@
 mod app_state;
 mod config;
+mod conversation_store;
 mod python;
 
-use app_state::{AppState, TrayContext};
-use config::AppConfig;
 use crate::python::{default_python_binary, resolve_python_root};
+use app_state::{AppState, TrayContext};
+use chrono::Local;
+use config::AppConfig;
+use conversation_store::ConversationStateModel;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::fs;
@@ -22,7 +25,6 @@ use tokio::fs as tokio_fs;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 use tokio::time::timeout;
-use chrono::Local;
 
 const MAIN_WINDOW_LABEL: &str = "main";
 const SETTINGS_WINDOW_LABEL: &str = "settings";
@@ -76,13 +78,9 @@ fn toggle_main_window(app: &AppHandle) -> Result<(), String> {
         }
         Ok(())
     } else {
-        create_or_focus_window(
-            app,
-            MAIN_WINDOW_LABEL,
-            WebviewUrl::App("index.html".into()),
-        )
-        .map(|_| ())
-        .map_err(map_err)
+        create_or_focus_window(app, MAIN_WINDOW_LABEL, WebviewUrl::App("index.html".into()))
+            .map(|_| ())
+            .map_err(map_err)
     }
 }
 
@@ -122,7 +120,11 @@ async fn ensure_tray(app: &AppHandle, state: &AppState) -> Result<(), String> {
     let toggle_window = MenuItem::with_id(
         app,
         TRAY_ITEM_TOGGLE_WINDOW,
-        if main_visible { LABEL_HIDE_MAIN } else { LABEL_SHOW_MAIN },
+        if main_visible {
+            LABEL_HIDE_MAIN
+        } else {
+            LABEL_SHOW_MAIN
+        },
         true,
         Option::<&str>::None,
     )
@@ -167,9 +169,8 @@ async fn ensure_tray(app: &AppHandle, state: &AppState) -> Result<(), String> {
         Option::<&str>::None,
     )
     .map_err(map_err)?;
-    let quit_item =
-        MenuItem::with_id(app, TRAY_ITEM_QUIT, LABEL_QUIT, true, Option::<&str>::None)
-            .map_err(map_err)?;
+    let quit_item = MenuItem::with_id(app, TRAY_ITEM_QUIT, LABEL_QUIT, true, Option::<&str>::None)
+        .map_err(map_err)?;
 
     let menu = MenuBuilder::new(app)
         .item(&toggle_window)
@@ -215,7 +216,12 @@ async fn ensure_tray(app: &AppHandle, state: &AppState) -> Result<(), String> {
         .on_tray_icon_event({
             let state = state.clone();
             move |tray, event| {
-                if let TrayIconEvent::Click { button, button_state, .. } = event {
+                if let TrayIconEvent::Click {
+                    button,
+                    button_state,
+                    ..
+                } = event
+                {
                     if matches!(button, MouseButton::Left)
                         && matches!(button_state, MouseButtonState::Up)
                     {
@@ -286,9 +292,7 @@ async fn refresh_tray(app: &AppHandle, state: &AppState) -> Result<(), String> {
         } else {
             ctx.idle_icon.clone()
         };
-        ctx.tray_icon
-            .set_icon(Some(icon))
-            .map_err(map_err)?;
+        ctx.tray_icon.set_icon(Some(icon)).map_err(map_err)?;
         let tooltip = if state.voice_input_active() {
             TOOLTIP_VOICE
         } else if state.recording_active() {
@@ -296,9 +300,7 @@ async fn refresh_tray(app: &AppHandle, state: &AppState) -> Result<(), String> {
         } else {
             TOOLTIP_IDLE
         };
-        ctx.tray_icon
-            .set_tooltip(Some(tooltip))
-            .map_err(map_err)?;
+        ctx.tray_icon.set_tooltip(Some(tooltip)).map_err(map_err)?;
     }
     Ok(())
 }
@@ -479,17 +481,30 @@ async fn handle_python_message(app: &AppHandle, state: &AppState, message: Value
 
 async fn ensure_service_running(app: &AppHandle, state: &AppState) -> Result<(), String> {
     let config = state.current_config().await;
-    state
-        .python()
-        .start(app, &config)
-        .await
-        .map_err(map_err)?;
+    state.python().start(app, &config).await.map_err(map_err)?;
     Ok(())
 }
 
 #[tauri::command]
 async fn get_config(state: State<'_, AppState>) -> Result<AppConfig, String> {
     Ok(state.current_config().await)
+}
+
+#[tauri::command]
+async fn load_conversation_state(
+    state: State<'_, AppState>,
+) -> Result<ConversationStateModel, String> {
+    let path = state.config_path();
+    conversation_store::load_conversation_state(&path).map_err(map_err)
+}
+
+#[tauri::command]
+async fn save_conversation_state(
+    state: State<'_, AppState>,
+    payload: ConversationStateModel,
+) -> Result<(), String> {
+    let path = state.config_path();
+    conversation_store::save_conversation_state(&path, &payload).map_err(map_err)
 }
 
 #[tauri::command]
@@ -529,11 +544,7 @@ async fn get_service_status(state: State<'_, AppState>) -> Result<ServiceStatus,
 #[tauri::command]
 async fn restart_python_service(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
     let config = state.current_config().await;
-    state
-        .python()
-        .restart(&app, &config)
-        .await
-        .map_err(map_err)
+    state.python().restart(&app, &config).await.map_err(map_err)
 }
 
 #[tauri::command]
@@ -662,11 +673,7 @@ async fn optimize_text(
     payload: OptimizePayload,
 ) -> Result<Value, String> {
     ensure_service_running(&app, &state).await?;
-    let text = payload
-        .text
-        .unwrap_or_default()
-        .trim()
-        .to_string();
+    let text = payload.text.unwrap_or_default().trim().to_string();
     if text.is_empty() {
         return Ok(json!({
             "type": "optimization_result",
@@ -773,9 +780,7 @@ async fn generate_summary(
         .system_prompt
         .or(payload.systemPrompt)
         .filter(|val| !val.trim().is_empty());
-    let receiver = state
-        .register_pending("summary_result", &request_id)
-        .await;
+    let receiver = state.register_pending("summary_result", &request_id).await;
 
     let message = json!({
         "type": "generate_summary",
@@ -785,9 +790,7 @@ async fn generate_summary(
         "system_prompt": system_prompt
     });
     if let Err(err) = state.python().send(message).await {
-        state
-            .cancel_pending("summary_result", &request_id)
-            .await;
+        state.cancel_pending("summary_result", &request_id).await;
         return Ok(json!({
             "type": "summary_result",
             "request_id": request_id,
@@ -982,11 +985,7 @@ async fn test_python(payload: PythonTestPayload) -> Result<Value, String> {
 #[tauri::command]
 async fn restart_service(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
     let config = state.current_config().await;
-    state
-        .python()
-        .restart(&app, &config)
-        .await
-        .map_err(map_err)
+    state.python().restart(&app, &config).await.map_err(map_err)
 }
 
 #[derive(Debug, Deserialize)]
@@ -1183,10 +1182,7 @@ async fn process_media_file(
                         json!({ "type": "progress", "message": message }),
                     );
                 } else if trimmed.starts_with("Processing completed") {
-                    let _ = window_clone.emit(
-                        "media-progress",
-                        json!({ "type": "complete" }),
-                    );
+                    let _ = window_clone.emit("media-progress", json!({ "type": "complete" }));
                 } else if trimmed.starts_with("Error:") {
                     let _ = window_clone.emit(
                         "media-progress",
@@ -1264,22 +1260,19 @@ fn prepare_export_path(
 }
 
 #[tauri::command]
-async fn export_results(
-    app: AppHandle,
-    payload: ExportResultsPayload,
-) -> Result<Value, String> {
+async fn export_results(app: AppHandle, payload: ExportResultsPayload) -> Result<Value, String> {
     if payload.results.is_empty() {
         return Ok(json!({ "success": false, "error": "No results to export" }));
     }
-    let suggested = payload
-        .suggested_path_camel
-        .or(payload.suggested_path);
+    let suggested = payload.suggested_path_camel.or(payload.suggested_path);
     let target = prepare_export_path(&app, suggested, "conversation")?;
 
     let mut lines = Vec::with_capacity(payload.results.len() * 4 + 4);
     lines.push(String::from("Transcription & Translation Results"));
     lines.push(format!("Generated: {}", Local::now().to_rfc3339()));
-    lines.push(String::from("=================================================="));
+    lines.push(String::from(
+        "==================================================",
+    ));
     lines.push(String::new());
 
     for (index, entry) in payload.results.iter().enumerate() {
@@ -1304,10 +1297,7 @@ async fn export_results(
 }
 
 #[tauri::command]
-async fn export_logs(
-    app: AppHandle,
-    payload: ExportLogsPayload,
-) -> Result<Value, String> {
+async fn export_logs(app: AppHandle, payload: ExportLogsPayload) -> Result<Value, String> {
     if payload.entries.is_empty() {
         return Ok(json!({ "success": false, "error": "No logs to export" }));
     }
@@ -1321,8 +1311,7 @@ async fn export_logs(
                 lines.push(transcription);
             }
         }
-        let include_translation =
-            entry.includeTranslation || entry.include_translation;
+        let include_translation = entry.includeTranslation || entry.include_translation;
         if include_translation {
             if let Some(translation) = entry.translation {
                 if !translation.trim().is_empty() {
@@ -1423,9 +1412,7 @@ fn create_or_focus_window(
         window.set_focus()?;
         return Ok(window);
     }
-    WebviewWindowBuilder::new(app, label, url)
-        .center()
-        .build()
+    WebviewWindowBuilder::new(app, label, url).center().build()
 }
 
 #[tauri::command]
@@ -1486,7 +1473,10 @@ fn setup_app(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
     let app_handle_for_python = app_handle.clone();
     let config_for_python = config.clone();
     tauri::async_runtime::spawn(async move {
-        if let Err(err) = python.start(&app_handle_for_python, &config_for_python).await {
+        if let Err(err) = python
+            .start(&app_handle_for_python, &config_for_python)
+            .await
+        {
             eprintln!("[setup] failed to start python service: {err:?}");
         }
     });
@@ -1498,7 +1488,9 @@ fn setup_app(app: &mut App) -> Result<(), Box<dyn std::error::Error>> {
         if let Err(err) = ensure_tray(&app_handle_for_tray, &state_for_tray).await {
             eprintln!("[tray] failed to initialize tray: {err}");
         }
-        if let Err(err) = apply_voice_shortcut(&app_handle_for_tray, &state_for_tray, &config_for_shortcut).await {
+        if let Err(err) =
+            apply_voice_shortcut(&app_handle_for_tray, &state_for_tray, &config_for_shortcut).await
+        {
             eprintln!("[shortcut] failed to set initial voice shortcut: {err}");
         }
     });
@@ -1541,6 +1533,8 @@ pub fn run() {
             set_device,
             test_python,
             restart_service,
+            load_conversation_state,
+            save_conversation_state,
             window_control,
             open_settings,
             open_media_transcribe,
