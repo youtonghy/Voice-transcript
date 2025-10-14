@@ -109,6 +109,25 @@ function normaliseConfig(config: Partial<AppConfig> | null | undefined): AppConf
   };
 }
 
+const CONFIG_LOAD_TIMEOUT_MS = 2000;
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error("timeout"));
+    }, timeoutMs);
+    promise
+      .then((value) => {
+        clearTimeout(timer);
+        resolve(value);
+      })
+      .catch((error) => {
+        clearTimeout(timer);
+        reject(error);
+      });
+  });
+}
+
 function parseSectionFromHash(value: string): string {
   const normalized = value.replace(/^#/, "");
   if (!normalized) {
@@ -195,9 +214,14 @@ export default function SettingsWindow({
   useEffect(() => {
     (async () => {
       try {
-        const current = await getConfig<AppConfig>();
-        const normalized = normaliseConfig(current);
+        const fetched = await withTimeout(
+          getConfig<AppConfig>(),
+          CONFIG_LOAD_TIMEOUT_MS,
+        );
+
         if (!isMountedRef.current) return;
+
+        const normalized = normaliseConfig(fetched);
         latestConfig.current = normalized;
         setConfig(normalized);
         setLanguage(normalized.app_language as any);
