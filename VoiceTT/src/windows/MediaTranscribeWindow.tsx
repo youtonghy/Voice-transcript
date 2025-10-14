@@ -6,6 +6,7 @@ import { useI18n } from "../i18n";
 import {
   exportResults,
   getConfig,
+  navigateToMain,
   onMediaProgress,
   processMediaFile,
   saveConfig,
@@ -350,7 +351,7 @@ export default function MediaTranscribeWindow({
     <div className="media-window">
       <header className="media-nav">
         <div className="media-nav-content">
-          <button className="media-back" onClick={() => window.close()}>
+          <button className="media-back" onClick={() => navigateToMain()}>
             <span className="media-back-icon">←</span>
             <span>{t("common.backLink") || "Back"}</span>
           </button>

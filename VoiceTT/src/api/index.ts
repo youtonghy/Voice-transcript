@@ -204,16 +204,42 @@ export async function windowControl(action: "minimize" | "toggle-maximize" | "cl
   return invoke<void>("window_control", { payload: { action } });
 }
 
-export async function openSettings(section?: string) {
-  return invoke<void>("open_settings", { section });
+function navigateToHash(target?: string | null) {
+  if (typeof window === "undefined") {
+    return;
+  }
+  const sanitized = target ? String(target).replace(/^#/, "") : "";
+  if (!sanitized) {
+    if (window.location.hash) {
+      window.location.hash = "";
+    } else {
+      window.dispatchEvent(new HashChangeEvent("hashchange"));
+    }
+    return;
+  }
+  const next = `#${sanitized}`;
+  if (window.location.hash === next) {
+    window.dispatchEvent(new HashChangeEvent("hashchange"));
+  } else {
+    window.location.hash = sanitized;
+  }
 }
 
-export async function openMediaTranscribe() {
-  return invoke<void>("open_media_transcribe");
+export function navigateToMain() {
+  navigateToHash("");
 }
 
-export async function openVoiceInputSettings() {
-  return invoke<void>("open_voice_input_settings");
+export function openSettings(section?: string) {
+  const suffix = section ? `settings/${section}` : "settings";
+  navigateToHash(suffix);
+}
+
+export function openMediaTranscribe() {
+  navigateToHash("media");
+}
+
+export function openVoiceInputSettings() {
+  navigateToHash("voice");
 }
 
 export async function onPythonMessage(handler: (message: PythonMessage) => void) {

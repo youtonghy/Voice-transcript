@@ -9,7 +9,7 @@ import {
   useState,
 } from "react";
 import { useI18n } from "../i18n";
-import { getConfig, saveConfig } from "../api";
+import { getConfig, saveConfig, openSettings, navigateToMain } from "../api";
 
 type LanguageOption = "en" | "zh" | "ja";
 
@@ -110,8 +110,22 @@ function normaliseConfig(config: Partial<AppConfig> | null | undefined): AppConf
   };
 }
 
+function parseSectionFromHash(value: string): string {
+  const normalized = value.replace(/^#/, "");
+  if (!normalized) {
+    return "";
+  }
+  if (normalized.startsWith("settings")) {
+    const [, section = ""] = normalized.split("/");
+    return section;
+  }
+  return normalized;
+}
+
 function getHashSection(): SettingsSection {
-  const hash = (window.location.hash || "").replace(/^#/, "");
+  if (typeof window === "undefined") {
+    return DEFAULT_SECTION;
+  }
   const available: SettingsSection[] = [
     "engine",
     "transcription",
@@ -119,8 +133,9 @@ function getHashSection(): SettingsSection {
     "recording",
     "interface",
   ];
-  if (available.includes(hash as SettingsSection)) {
-    return hash as SettingsSection;
+  const section = parseSectionFromHash(window.location.hash || "");
+  if (available.includes(section as SettingsSection)) {
+    return section as SettingsSection;
   }
   return DEFAULT_SECTION;
 }
@@ -167,6 +182,16 @@ export default function SettingsWindow({
     window.addEventListener("hashchange", handleHashChange);
     return () => window.removeEventListener("hashchange", handleHashChange);
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    const current = (window.location.hash || "").replace(/^#/, "");
+    if (current === "settings") {
+      openSettings(selectedSection);
+    }
+  }, [openSettings, selectedSection]);
 
   useEffect(() => {
     (async () => {
@@ -378,18 +403,17 @@ export default function SettingsWindow({
     },
   ];
 
-  const handleSectionSelect = useCallback((section: SettingsSection) => {
-    setSelectedSection(section);
-    try {
-      window.location.hash = section;
-    } catch (_) {
-      // ignore
-    }
-  }, []);
+  const handleSectionSelect = useCallback(
+    (section: SettingsSection) => {
+      setSelectedSection(section);
+      openSettings(section);
+    },
+    [openSettings],
+  );
 
   const closeWindow = useCallback(() => {
-    window.close();
-  }, []);
+    navigateToMain();
+  }, [navigateToMain]);
 
   const numericInput =
     (key: keyof AppConfig, fallback: number, decimals = 3) =>

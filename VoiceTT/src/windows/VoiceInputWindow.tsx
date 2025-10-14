@@ -9,7 +9,7 @@ import {
   useState,
 } from "react";
 import { useI18n } from "../i18n";
-import { getConfig, saveConfig } from "../api";
+import { getConfig, saveConfig, navigateToMain } from "../api";
 
 type LanguageOption =
   | "Chinese"
@@ -352,7 +352,7 @@ export default function VoiceInputWindow({
     <div className="voice-window">
       <header className="voice-nav">
         <div className="voice-nav-content">
-          <button className="voice-back" onClick={() => window.close()}>
+          <button className="voice-back" onClick={() => navigateToMain()}>
             <span className="voice-back-icon">←</span>
             <span>{t("common.backLink") || "Back"}</span>
           </button>
