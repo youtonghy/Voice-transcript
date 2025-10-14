@@ -4,7 +4,6 @@ import {
   ChangeEvent,
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
 } from "react";
@@ -146,7 +145,7 @@ export default function SettingsWindow({
   initialLanguage: string;
 }) {
   const { setLanguage, t } = useI18n();
-  const [config, setConfig] = useState<AppConfig | null>(null);
+  const [config, setConfig] = useState<AppConfig>(() => normaliseConfig(null));
   const [selectedSection, setSelectedSection] =
     useState<SettingsSection>(getHashSection);
   const [isLoading, setLoading] = useState(true);
@@ -155,7 +154,7 @@ export default function SettingsWindow({
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const latestConfig = useRef<AppConfig | null>(null);
+  const latestConfig = useRef<AppConfig>(normaliseConfig(null));
   const isMountedRef = useRef(true);
 
   useEffect(
@@ -201,14 +200,14 @@ export default function SettingsWindow({
         if (!isMountedRef.current) return;
         latestConfig.current = normalized;
         setConfig(normalized);
-        setLanguage(normalized.app_language as LanguageOption);
+        setLanguage(normalized.app_language as any);
       } catch (error) {
         if (!isMountedRef.current) return;
         console.error(error);
         const fallback = normaliseConfig(null);
         latestConfig.current = fallback;
         setConfig(fallback);
-        setLanguage(fallback.app_language as LanguageOption);
+        setLanguage(fallback.app_language as any);
         setErrorMessage(
           `${t("settings.notify.loadFailed") || "Failed to load configuration"}`,
         );
@@ -230,10 +229,6 @@ export default function SettingsWindow({
       setErrorMessage(null);
       setSuccessMessage(null);
       autoSaveTimer.current = setTimeout(async () => {
-        if (!latestConfig.current) {
-          setSaving(false);
-          return;
-        }
         try {
           await saveConfig(latestConfig.current);
           if (!isMountedRef.current) return;
@@ -260,8 +255,7 @@ export default function SettingsWindow({
   const updateConfig = useCallback(
     (updater: (current: AppConfig) => AppConfig) => {
       setConfig((prev) => {
-        const base = prev ?? normaliseConfig(null);
-        const nextConfig = updater(base);
+        const nextConfig = updater(prev);
         scheduleSave(nextConfig);
         return nextConfig;
       });
@@ -349,8 +343,7 @@ export default function SettingsWindow({
     return () => clearTimeout(timer);
   }, [successMessage]);
 
-  const effectiveConfig = config;
-  const selectedConfig = effectiveConfig ?? DEFAULT_CONFIG;
+  const selectedConfig = config;
 
   const translationEnabled = selectedConfig.enable_translation !== false;
   const translationMode = selectedConfig.translation_mode || "fixed";
@@ -1012,7 +1005,7 @@ export default function SettingsWindow({
     </section>
   );
 
-  if (isLoading || !effectiveConfig) {
+  if (isLoading) {
     return (
       <div className="settings-window">
         <div className="settings-loading">
