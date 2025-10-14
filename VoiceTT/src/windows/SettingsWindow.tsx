@@ -222,10 +222,11 @@ export default function SettingsWindow({
       return;
     }
     const current = (window.location.hash || "").replace(/^#/, "");
-    if (current === "settings") {
+    const expectedHash = selectedSection ? `settings/${selectedSection}` : "settings";
+    if (current === "settings" && selectedSection && current !== expectedHash) {
       openSettings(selectedSection);
     }
-  }, [openSettings, selectedSection]);
+  }, [selectedSection]);
 
   useEffect(() => {
     (async () => {
@@ -398,7 +399,7 @@ export default function SettingsWindow({
     if (isTestingPython) {
       return;
     }
-    const path = (selectedConfig.python_path || "").trim();
+    const path = (config.python_path || "").trim();
     if (!path) {
       const base =
         t("settings.notify.pythonTestFailed") ||
@@ -458,7 +459,7 @@ export default function SettingsWindow({
     }
   }, [
     isTestingPython,
-    selectedConfig.python_path,
+    config.python_path,
     t,
   ]);
 
