@@ -216,18 +216,6 @@ export default function SettingsWindow({
     window.addEventListener("hashchange", handleHashChange);
     return () => window.removeEventListener("hashchange", handleHashChange);
   }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined") {
-      return;
-    }
-    const current = (window.location.hash || "").replace(/^#/, "");
-    const expectedHash = selectedSection ? `settings/${selectedSection}` : "settings";
-    if (current === "settings" && selectedSection && current !== expectedHash) {
-      openSettings(selectedSection);
-    }
-  }, [selectedSection]);
-
   useEffect(() => {
     (async () => {
       try {
