@@ -66,6 +66,7 @@ const DEFAULT_VOICE_CONFIG: VoiceConfig = {
 };
 
 const AUTO_SAVE_DELAY = 600;
+const LOAD_GUARD_TIMEOUT_MS = 5000;
 
 const TRANSCRIPTION_LANGUAGE_OPTIONS = ["auto", "Chinese", "English"] as const;
 
@@ -204,12 +205,17 @@ export default function VoiceInputWindow({
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latestConfig = useRef<(AppConfig & VoiceConfig) | null>(null);
   const isMounted = useRef(true);
+  const loadGuardTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     return () => {
       isMounted.current = false;
       if (autoSaveTimer.current) {
         clearTimeout(autoSaveTimer.current);
+      }
+      if (loadGuardTimer.current) {
+        clearTimeout(loadGuardTimer.current);
+        loadGuardTimer.current = null;
       }
     };
   }, []);
@@ -222,6 +228,19 @@ export default function VoiceInputWindow({
     let cancelled = false;
     (async () => {
       try {
+        if (loadGuardTimer.current) {
+          clearTimeout(loadGuardTimer.current);
+        }
+        loadGuardTimer.current = setTimeout(() => {
+          if (isMounted.current) {
+            setLoading(false);
+            setErrorMessage((prev) =>
+              prev ??
+              (t("voice.notify.loadFailed") || "Failed to load configuration"),
+            );
+          }
+        }, LOAD_GUARD_TIMEOUT_MS);
+
         const raw = await getConfig<AppConfig>();
         if (cancelled || !isMounted.current) return;
         const normalized = normalizeVoiceConfig(raw);
@@ -238,6 +257,10 @@ export default function VoiceInputWindow({
           }`,
         );
       } finally {
+        if (loadGuardTimer.current) {
+          clearTimeout(loadGuardTimer.current);
+          loadGuardTimer.current = null;
+        }
         if (!isMounted.current || cancelled) return;
         setLoading(false);
       }

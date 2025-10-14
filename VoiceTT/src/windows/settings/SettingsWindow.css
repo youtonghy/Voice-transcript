@@ -198,6 +198,40 @@
   gap: 20px;
 }
 
+.form-field.full-width {
+  grid-column: 1 / -1;
+}
+
+.form-actions {
+  margin-top: 12px;
+  display: flex;
+  gap: 10px;
+}
+
+.settings-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid #cbd5f5;
+  background: #f8fafc;
+  color: #1d4ed8;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s ease, border 0.2s ease;
+}
+
+.settings-button:hover:not(:disabled) {
+  background: rgba(37, 99, 235, 0.12);
+  border-color: rgba(37, 99, 235, 0.4);
+}
+
+.settings-button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 .form-field {
   display: flex;
   flex-direction: column;

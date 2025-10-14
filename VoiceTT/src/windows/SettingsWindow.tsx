@@ -8,7 +8,13 @@ import {
   useState,
 } from "react";
 import { useI18n } from "../i18n";
-import { getConfig, saveConfig, openSettings, navigateToMain } from "../api";
+import {
+  getConfig,
+  saveConfig,
+  openSettings,
+  navigateToMain,
+  testPython,
+} from "../api";
 
 type LanguageOption = "en" | "zh" | "ja";
 
@@ -42,6 +48,7 @@ type AppConfig = {
   min_silence_seconds: number;
   theater_mode: boolean;
   app_language: LanguageOption;
+  python_path: string;
 };
 
 type SettingsSection =
@@ -100,6 +107,7 @@ const DEFAULT_CONFIG: AppConfig = {
   min_silence_seconds: 1.0,
   theater_mode: false,
   app_language: "en",
+  python_path: "",
 };
 
 function normaliseConfig(config: Partial<AppConfig> | null | undefined): AppConfig {
@@ -110,6 +118,7 @@ function normaliseConfig(config: Partial<AppConfig> | null | undefined): AppConf
 }
 
 const CONFIG_LOAD_TIMEOUT_MS = 2000;
+const LOAD_GUARD_TIMEOUT_MS = 5000;
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -171,16 +180,23 @@ export default function SettingsWindow({
   const [isSaving, setSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [isTestingPython, setIsTestingPython] = useState(false);
 
   const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const latestConfig = useRef<AppConfig>(normaliseConfig(null));
   const isMountedRef = useRef(true);
+  const loadGuardTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(
     () => () => {
       isMountedRef.current = false;
       if (autoSaveTimer.current) {
         clearTimeout(autoSaveTimer.current);
+        autoSaveTimer.current = null;
+      }
+      if (loadGuardTimer.current) {
+        clearTimeout(loadGuardTimer.current);
+        loadGuardTimer.current = null;
       }
     },
     [],
@@ -214,6 +230,19 @@ export default function SettingsWindow({
   useEffect(() => {
     (async () => {
       try {
+        if (loadGuardTimer.current) {
+          clearTimeout(loadGuardTimer.current);
+        }
+        loadGuardTimer.current = setTimeout(() => {
+          if (isMountedRef.current) {
+            setLoading(false);
+            setErrorMessage((prev) =>
+              prev ??
+              (t("settings.notify.loadFailed") || "Failed to load configuration"),
+            );
+          }
+        }, LOAD_GUARD_TIMEOUT_MS);
+
         const fetched = await withTimeout(
           getConfig<AppConfig>(),
           CONFIG_LOAD_TIMEOUT_MS,
@@ -236,6 +265,10 @@ export default function SettingsWindow({
           `${t("settings.notify.loadFailed") || "Failed to load configuration"}`,
         );
       } finally {
+        if (loadGuardTimer.current) {
+          clearTimeout(loadGuardTimer.current);
+          loadGuardTimer.current = null;
+        }
         if (isMountedRef.current) {
           setLoading(false);
         }
@@ -360,6 +393,74 @@ export default function SettingsWindow({
     },
     [updateConfig],
   );
+
+  const handleTestPython = useCallback(async () => {
+    if (isTestingPython) {
+      return;
+    }
+    const path = (selectedConfig.python_path || "").trim();
+    if (!path) {
+      const base =
+        t("settings.notify.pythonTestFailed") ||
+        "Interpreter check failed";
+      setErrorMessage(base);
+      return;
+    }
+    setIsTestingPython(true);
+    setErrorMessage(null);
+    setSuccessMessage(null);
+    try {
+      const result = await testPython(path);
+      const success =
+        result &&
+        typeof result === "object" &&
+        "success" in result
+          ? Boolean(
+              (result as Record<string, unknown>).success,
+            )
+          : false;
+      if (success) {
+        const version =
+          result &&
+          typeof result === "object" &&
+          "version" in result &&
+          typeof (result as Record<string, unknown>).version ===
+            "string"
+            ? ((result as Record<string, unknown>).version as string)
+            : "";
+        const base =
+          t("settings.notify.pythonTestSuccess") ||
+          "Interpreter check succeeded";
+        setSuccessMessage(version ? `${base} (${version})` : base);
+      } else {
+        const detail =
+          result &&
+          typeof result === "object" &&
+          "error" in result &&
+          typeof (result as Record<string, unknown>).error ===
+            "string"
+            ? ((result as Record<string, unknown>).error as string)
+            : "";
+        const base =
+          t("settings.notify.pythonTestFailed") ||
+          "Interpreter check failed";
+        setErrorMessage(detail ? `${base}: ${detail}` : base);
+      }
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : String(error);
+      const base =
+        t("settings.notify.pythonTestFailed") ||
+        "Interpreter check failed";
+      setErrorMessage(`${base}: ${message}`);
+    } finally {
+      setIsTestingPython(false);
+    }
+  }, [
+    isTestingPython,
+    selectedConfig.python_path,
+    t,
+  ]);
 
   useEffect(() => {
     if (!successMessage) return;
@@ -988,6 +1089,44 @@ export default function SettingsWindow({
             {t("settings.notes.theaterMode") ||
               "Amplify quiet audio to improve recognition."}
           </p>
+        </div>
+        <div className="form-field full-width">
+          <label htmlFor="pythonPath">
+            {t("settings.labels.pythonPath") || "Python Interpreter Path"}
+          </label>
+          <input
+            id="pythonPath"
+            value={selectedConfig.python_path}
+            placeholder={
+              t("settings.placeholders.pythonPath") ||
+              "e.g. C:\\\\Python311\\\\python.exe"
+            }
+            onChange={(event) => handleInputChange(event, "python_path")}
+            onBlur={(event) =>
+              updateConfig((current) => ({
+                ...current,
+                python_path: event.target.value.trim(),
+              }))
+            }
+          />
+          <p className="form-note">
+            {t("settings.notes.pythonPath") ||
+              "Set this if Python is not on PATH. Leave empty to use the default python/python3 command."}
+          </p>
+          <div className="form-actions">
+            <button
+              type="button"
+              className="settings-button"
+              onClick={handleTestPython}
+              disabled={
+                isTestingPython || !selectedConfig.python_path.trim()
+              }
+            >
+              {isTestingPython
+                ? t("settings.buttons.testingPython") || "Testing…"
+                : t("settings.buttons.testPython") || "Test Interpreter"}
+            </button>
+          </div>
         </div>
       </div>
     </section>

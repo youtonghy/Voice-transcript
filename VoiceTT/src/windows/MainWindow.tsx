@@ -540,6 +540,15 @@ export default function MainWindow({
     return t("index.statusText.notReady") || "Service not ready";
   }, [t, volumeStatus]);
 
+  const historyToggleLabel = useMemo(
+    () =>
+      historyCollapsed
+        ? t("index.history.show") || "Show History"
+        : t("index.history.hide") || "Hide History",
+    [historyCollapsed, t],
+  );
+  const historyToggleIcon = historyCollapsed ? "›" : "‹";
+
   const contextConversation = useMemo(() => {
     if (!historyContextMenu) {
       return null;
@@ -1025,10 +1034,21 @@ export default function MainWindow({
         appendLog("info", t("index.log.recordingStarted") || "Recording started");
       }
     } catch (error) {
-      appendLog(
-        "error",
-        t("index.log.recordingError") || `Recording error: ${String(error)}`,
-      );
+      const detail =
+        error instanceof Error ? error.message : String(error);
+      const base = t("index.log.recordingError") || "Recording error";
+      appendLog("error", `${base}: ${detail}`);
+      if (
+        /python/i.test(detail) ||
+        /spawn/i.test(detail) ||
+        /no such file/i.test(detail)
+      ) {
+        appendLog(
+          "warning",
+          t("index.log.recordingPythonHint") ||
+            "Recording service failed to start. Check the Python interpreter in Settings → Recording.",
+        );
+      }
       setIsRecording(false);
       setIsVoiceInputActive(false);
       setPythonStatus("error");
@@ -1727,12 +1747,17 @@ export default function MainWindow({
               {t("index.history.title") || "History"}
             </div>
             <button
+              type="button"
               className="history-toggle"
               onClick={() => setHistoryCollapsed((value) => !value)}
+              aria-expanded={!historyCollapsed}
+              aria-label={historyToggleLabel}
+              title={historyToggleLabel}
             >
-              {historyCollapsed
-                ? t("index.history.show") || "Show History"
-                : t("index.history.hide") || "Hide History"}
+              <span className="history-toggle-icon" aria-hidden="true">
+                {historyToggleIcon}
+              </span>
+              <span className="history-toggle-label">{historyToggleLabel}</span>
             </button>
           </div>
           <button className="new-conversation" onClick={handleNewConversation}>
