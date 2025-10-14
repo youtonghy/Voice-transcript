@@ -205,6 +205,10 @@ export default function SettingsWindow({
       } catch (error) {
         if (!isMountedRef.current) return;
         console.error(error);
+        const fallback = normaliseConfig(null);
+        latestConfig.current = fallback;
+        setConfig(fallback);
+        setLanguage(fallback.app_language as LanguageOption);
         setErrorMessage(
           `${t("settings.notify.loadFailed") || "Failed to load configuration"}`,
         );
