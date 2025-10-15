@@ -1,5 +1,6 @@
 // Media transcription renderer process script
 
+(() => {
 const DEFAULT_LANGUAGE = 'en';
 let isEmbedded = false;
 let hasInitialized = false;
@@ -891,3 +892,4 @@ window.MediaTranscribePage = {
   init: (options) => initializeMediaTranscribePage(options || {})
 };
 window.initializeMediaTranscribePage = initializeMediaTranscribePage;
+})();

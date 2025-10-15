@@ -1,3 +1,4 @@
+(() => {
 const DEFAULT_LANGUAGE = 'en';
 
 function setDocumentLanguage(lang) {
@@ -321,3 +322,4 @@ window.VoiceInputPage = {
   init: (options) => initializeVoiceInputPage(options || {})
 };
 window.initializeVoiceInputPage = initializeVoiceInputPage;
+})();
