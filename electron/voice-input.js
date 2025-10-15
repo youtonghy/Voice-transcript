@@ -94,15 +94,20 @@ function initializeLanguage() {
   if (typeof window.appI18n.apply === 'function') {
     window.appI18n.apply();
   }
-  document.title = t('voice.pageTitle');
-  if (typeof window.appI18n.onChange === 'function') {
+  if (!isEmbedded) {
+    document.title = t('voice.pageTitle');
+  }
+  if (!i18nChangeRegistered && typeof window.appI18n.onChange === 'function') {
     window.appI18n.onChange(() => {
       registerVoiceInputTranslations();
       if (typeof window.appI18n.apply === 'function') {
         window.appI18n.apply();
       }
-      document.title = t('voice.pageTitle');
+      if (!isEmbedded) {
+        document.title = t('voice.pageTitle');
+      }
     });
+    i18nChangeRegistered = true;
   }
 }
 
@@ -169,14 +174,10 @@ function registerVoiceInputTranslations() {
 
 
 let currentConfig = {};
-
-document.addEventListener('DOMContentLoaded', () => {
-  initializeLanguage();
-  registerVoiceInputTranslations();
-  if (window.appI18n) { window.appI18n.apply(); }
-  loadConfig();
-  setupEvents();
-});
+let hasInitialized = false;
+let isEmbedded = false;
+let eventsBound = false;
+let i18nChangeRegistered = false;
 
 async function loadConfig() {
   try {
@@ -216,8 +217,14 @@ function fillForm(cfg) {
 }
 
 function setupEvents() {
+  if (eventsBound) {
+    return;
+  }
   const viTlChk = document.getElementById('voiceInputTranslate');
   const viTlGroup = document.getElementById('voiceInputTranslateLanguageGroup');
+  if (!viTlChk || !viTlGroup) {
+    return;
+  }
   viTlChk.addEventListener('change', () => {
     viTlGroup.style.display = viTlChk.checked ? 'block' : 'none';
     const tlNote = document.getElementById('tlNote');
@@ -231,6 +238,7 @@ function setupEvents() {
     el.addEventListener('blur', autoSave);
     if (el.tagName === 'INPUT') el.addEventListener('input', debounce(autoSave, 500));
   });
+  eventsBound = true;
 }
 
 function collect() {
@@ -278,5 +286,38 @@ function notify(text, type) {
 }
 
 
+function applyVoiceTranslations() {
+  registerVoiceInputTranslations();
+  if (window.appI18n && typeof window.appI18n.apply === 'function') {
+    window.appI18n.apply();
+  }
+}
 
+function initializeVoiceInputPage(options = {}) {
+  isEmbedded = !!(options && options.embedded);
+  initializeLanguage();
+  applyVoiceTranslations();
+  setupEvents();
+  hasInitialized = true;
+  return loadConfig();
+}
 
+function autoInitVoicePage() {
+  initializeVoiceInputPage();
+}
+
+const voiceCurrentScript = document.currentScript;
+const voiceShouldAutoInit = !voiceCurrentScript || voiceCurrentScript.dataset.autoInit !== 'false';
+
+if (voiceShouldAutoInit) {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', autoInitVoicePage);
+  } else {
+    autoInitVoicePage();
+  }
+}
+
+window.VoiceInputPage = {
+  init: (options) => initializeVoiceInputPage(options || {})
+};
+window.initializeVoiceInputPage = initializeVoiceInputPage;

@@ -43,6 +43,28 @@ contextBridge.exposeInMainWorld('electronAPI', {
     };
   },
   
+  onShowVoiceInput: (callback) => {
+    if (typeof callback !== 'function') {
+      return () => {};
+    }
+    const handler = () => callback();
+    ipcRenderer.on('show-voice-input-modal', handler);
+    return () => {
+      ipcRenderer.removeListener('show-voice-input-modal', handler);
+    };
+  },
+  
+  onShowMediaTranscribe: (callback) => {
+    if (typeof callback !== 'function') {
+      return () => {};
+    }
+    const handler = () => callback();
+    ipcRenderer.on('show-media-transcribe-modal', handler);
+    return () => {
+      ipcRenderer.removeListener('show-media-transcribe-modal', handler);
+    };
+  },
+  
   onMediaProgress: (callback) => {
     ipcRenderer.on('media-progress', (event, message) => callback(message));
   },

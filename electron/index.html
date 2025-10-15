@@ -1184,10 +1184,9 @@
 
 
         .settings-btn, .media-btn, .keyboard-btn { color: #666; }
-
         .settings-btn:hover, .media-btn:hover, .keyboard-btn:hover { color: #111; }
 
-        .settings-modal {
+        .modal-overlay {
             position: fixed;
             inset: 0;
             display: flex;
@@ -1201,12 +1200,12 @@
             transition: opacity 0.2s ease;
         }
 
-        .settings-modal.active {
+        .modal-overlay.active {
             opacity: 1;
             pointer-events: auto;
         }
 
-        .settings-modal-dialog {
+        .modal-dialog {
             width: min(1100px, 100%);
             max-height: 100%;
             display: flex;
@@ -1216,7 +1215,7 @@
             background: transparent;
         }
 
-        .settings-modal-scroll {
+        .modal-scroll {
             background: #ffffff;
             border-radius: 16px;
             box-shadow: 0 20px 48px rgba(0, 0, 0, 0.25);
@@ -1225,16 +1224,16 @@
             position: relative;
         }
 
-        .settings-modal-scroll::-webkit-scrollbar {
+        .modal-scroll::-webkit-scrollbar {
             width: 10px;
         }
 
-        .settings-modal-scroll::-webkit-scrollbar-thumb {
+        .modal-scroll::-webkit-scrollbar-thumb {
             background: rgba(0, 0, 0, 0.18);
             border-radius: 999px;
         }
 
-        body.settings-modal-open {
+        body.modal-open {
             overflow: hidden;
         }
 
@@ -8724,9 +8723,21 @@
 
 
 
-  <div id="settingsModal" class="settings-modal" aria-hidden="true">
-    <div class="settings-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="settingsModalTitle">
-      <div id="settingsModalScroll" class="settings-modal-scroll"></div>
+  <div id="settingsModal" class="modal-overlay settings-modal" aria-hidden="true">
+    <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="settingsModalTitle">
+      <div id="settingsModalScroll" class="modal-scroll"></div>
+    </div>
+  </div>
+
+  <div id="voiceModal" class="modal-overlay voice-modal" aria-hidden="true">
+    <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="voiceModalTitle">
+      <div id="voiceModalScroll" class="modal-scroll"></div>
+    </div>
+  </div>
+
+  <div id="mediaModal" class="modal-overlay media-modal" aria-hidden="true">
+    <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="mediaModalTitle">
+      <div id="mediaModalScroll" class="modal-scroll"></div>
     </div>
   </div>
 
@@ -8748,6 +8759,10 @@
 
   <script src="settings.js" data-auto-init="false"></script>
 
+  <script src="voice-input.js" data-auto-init="false"></script>
+
+  <script src="media-transcribe-renderer.js" data-auto-init="false"></script>
+
   <script src="renderer.js"></script>
 
 
@@ -8765,7 +8780,6 @@
 
 
 </html>
-
 
 
 

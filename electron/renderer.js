@@ -3693,160 +3693,312 @@ function clearLogs() {
 window.addEventListener('beforeunload', () => {
     stopConfigMonitoring();
 });
+const modalManagers = {};
+const bodyModalClass = 'modal-open';
+let activeModalName = null;
 
-function bindSettingsDismissHandlers(root) {
-    if (!root) {
+function getModalManager(name) {
+    return modalManagers[name] || null;
+}
+
+function bindModalDismissHandlers(root, modalName, hideFn) {
+    if (!root || typeof hideFn !== 'function') {
         return;
     }
-    const dismissers = root.querySelectorAll('[data-settings-dismiss]');
-    dismissers.forEach((el) => {
-        if (el.dataset.settingsDismissBound === 'true') {
+    root.querySelectorAll('[data-modal-dismiss]').forEach((element) => {
+        if (element.dataset.modalDismissBound === 'true') {
             return;
         }
-        el.addEventListener('click', (event) => {
+        const target = element.dataset.modalDismiss;
+        if (target && target !== modalName) {
+            return;
+        }
+        element.addEventListener('click', (event) => {
             event.preventDefault();
-            hideSettingsModal();
+            hideFn();
         });
-        el.dataset.settingsDismissBound = 'true';
+        element.dataset.modalDismissBound = 'true';
     });
 }
 
-async function loadSettingsContent(section) {
-    if (settingsMarkupLoaded) {
-        if (window.SettingsPage && typeof window.SettingsPage.init === 'function') {
-            await window.SettingsPage.init({ embedded: true, section });
-        }
-        return;
+function createRemoteModal(name, config) {
+    const modalElement = document.getElementById(config.modalId);
+    const scrollElement = document.getElementById(config.scrollId);
+    if (!modalElement || !scrollElement) {
+        console.warn(`Modal "${name}" elements not found.`);
+        return null;
     }
-    if (settingsMarkupLoadingPromise) {
-        await settingsMarkupLoadingPromise;
-        if (window.SettingsPage && typeof window.SettingsPage.init === 'function') {
-            await window.SettingsPage.init({ embedded: true, section });
-        }
-        return;
-    }
-    if (!settingsModalScroll) {
-        throw new Error('Settings modal container missing.');
-    }
-    const loadTask = (async () => {
-        const response = await fetch('settings.html', { cache: 'no-cache' });
-        if (!response.ok) {
-            throw new Error(`Failed to load settings page: ${response.status}`);
-        }
-        const html = await response.text();
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(html, 'text/html');
+    const styleAttribute = config.styleAttribute || `data-${name}-style`;
+    let markupLoaded = false;
+    let loadingPromise = null;
+    let stylesInjected = false;
 
-        if (!settingsStylesInjected) {
-            const styleNode = doc.head ? doc.head.querySelector('style') : null;
-            if (styleNode && !document.head.querySelector('style[data-settings-style]')) {
-                const styleClone = styleNode.cloneNode(true);
-                styleClone.dataset.settingsStyle = 'true';
-                document.head.appendChild(styleClone);
-            }
-            settingsStylesInjected = true;
+    function hide(focusOrigin = true) {
+        if (!modalElement.classList.contains('active')) {
+            return;
         }
-
-        doc.querySelectorAll('script').forEach((script) => script.remove());
-
-        const wrapper = document.createElement('div');
-        wrapper.className = 'settings-page settings-page-embedded';
-        if (doc.body) {
-            while (doc.body.firstChild) {
-                wrapper.appendChild(doc.body.firstChild);
+        modalElement.classList.remove('active');
+        modalElement.setAttribute('aria-hidden', 'true');
+        document.body.classList.remove(bodyModalClass);
+        if (activeModalName === name) {
+            activeModalName = null;
+        }
+        if (typeof config.onHide === 'function') {
+            try {
+                config.onHide();
+            } catch (error) {
+                console.warn(`Modal "${name}" onHide failed:`, error);
             }
         }
-        const navTitle = wrapper.querySelector('.nav-title');
-        if (navTitle && !navTitle.id) {
-            navTitle.id = 'settingsModalTitle';
+        if (focusOrigin && config.triggerSelector) {
+            const trigger = document.querySelector(config.triggerSelector);
+            if (trigger && typeof trigger.focus === 'function') {
+                requestAnimationFrame(() => {
+                    try {
+                        trigger.focus({ preventScroll: true });
+                    } catch (_) {
+                        trigger.focus();
+                    }
+                });
+            }
         }
-        settingsModalScroll.innerHTML = '';
-        settingsModalScroll.appendChild(wrapper);
-        bindSettingsDismissHandlers(wrapper);
-
-        if (window.SettingsPage && typeof window.SettingsPage.init === 'function') {
-            await window.SettingsPage.init({ embedded: true, section });
-        }
-        settingsMarkupLoaded = true;
-    })();
-
-    settingsMarkupLoadingPromise = loadTask;
-    try {
-        await loadTask;
-    } finally {
-        settingsMarkupLoadingPromise = null;
     }
+
+    async function ensureContent(params) {
+        if (markupLoaded) {
+            if (typeof config.init === 'function') {
+                await config.init(params);
+            }
+            return;
+        }
+        if (loadingPromise) {
+            await loadingPromise;
+            if (typeof config.init === 'function') {
+                await config.init(params);
+            }
+            return;
+        }
+        loadingPromise = (async () => {
+            const response = await fetch(config.htmlPath, { cache: 'no-cache' });
+            if (!response.ok) {
+                throw new Error(`Failed to load ${config.htmlPath} (${response.status})`);
+            }
+            const html = await response.text();
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+
+            if (!stylesInjected) {
+                const styleNode = doc.head ? doc.head.querySelector('style') : null;
+                if (styleNode && !document.head.querySelector(`style[${styleAttribute}]`)) {
+                    const clone = styleNode.cloneNode(true);
+                    clone.setAttribute(styleAttribute, 'true');
+                    document.head.appendChild(clone);
+                }
+                stylesInjected = true;
+            }
+
+            doc.querySelectorAll('script').forEach((script) => script.remove());
+
+            const wrapper = document.createElement('div');
+            wrapper.className = config.wrapperClass;
+            if (doc.body) {
+                while (doc.body.firstChild) {
+                    wrapper.appendChild(doc.body.firstChild);
+                }
+            }
+            if (typeof config.prepare === 'function') {
+                try {
+                    config.prepare(wrapper);
+                } catch (error) {
+                    console.warn(`Modal "${name}" prepare failed:`, error);
+                }
+            }
+
+            scrollElement.innerHTML = '';
+            scrollElement.appendChild(wrapper);
+            bindModalDismissHandlers(wrapper, name, hide);
+            markupLoaded = true;
+        })();
+
+        try {
+            await loadingPromise;
+        } finally {
+            loadingPromise = null;
+        }
+
+        if (typeof config.init === 'function') {
+            await config.init(params);
+        }
+    }
+
+    function focusInitial() {
+        let target = null;
+        if (config.initialFocusSelector) {
+            target = modalElement.querySelector(config.initialFocusSelector);
+        }
+        if (!target) {
+            target = modalElement.querySelector('[autofocus]');
+        }
+        if (!target) {
+            target = modalElement.querySelector("button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])");
+        }
+        if (target && typeof target.focus === 'function') {
+            requestAnimationFrame(() => {
+                try {
+                    target.focus({ preventScroll: true });
+                } catch (_) {
+                    target.focus();
+                }
+            });
+        }
+    }
+
+    async function show(params) {
+        try {
+            await ensureContent(params);
+        } catch (error) {
+            console.error(`Failed to display "${name}" modal:`, error);
+            return;
+        }
+        if (activeModalName && activeModalName !== name) {
+            const previous = getModalManager(activeModalName);
+            if (previous) {
+                previous.hide(false);
+            }
+        }
+        if (scrollElement) {
+            scrollElement.scrollTop = 0;
+        }
+        modalElement.classList.add('active');
+        modalElement.setAttribute('aria-hidden', 'false');
+        document.body.classList.add(bodyModalClass);
+        activeModalName = name;
+        if (typeof config.onShow === 'function') {
+            try {
+                config.onShow();
+            } catch (error) {
+                console.warn(`Modal "${name}" onShow failed:`, error);
+            }
+        }
+        focusInitial();
+    }
+
+    modalElement.addEventListener('click', (event) => {
+        if (event.target === modalElement) {
+            hide();
+        }
+    });
+
+    const manager = {
+        show,
+        hide,
+        isOpen: () => modalElement.classList.contains('active')
+    };
+    modalManagers[name] = manager;
+    return manager;
 }
 
-function isSettingsModalOpen() {
-    return !!(settingsModal && settingsModal.classList.contains('active'));
+document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && activeModalName) {
+        const manager = getModalManager(activeModalName);
+        if (manager) {
+            manager.hide();
+        }
+    }
+});
+
+const settingsModalManager = createRemoteModal('settings', {
+    modalId: 'settingsModal',
+    scrollId: 'settingsModalScroll',
+    htmlPath: 'settings.html',
+    wrapperClass: 'settings-page settings-page-embedded',
+    styleAttribute: 'data-settings-style',
+    triggerSelector: '.settings-btn',
+    initialFocusSelector: '.sidebar-item.active',
+    init: async (section) => {
+        if (window.SettingsPage && typeof window.SettingsPage.init === 'function') {
+            await window.SettingsPage.init({ embedded: true, section });
+        }
+    }
+});
+
+const voiceModalManager = createRemoteModal('voice', {
+    modalId: 'voiceModal',
+    scrollId: 'voiceModalScroll',
+    htmlPath: 'voice-input.html',
+    wrapperClass: 'voice-page voice-page-embedded',
+    styleAttribute: 'data-voice-style',
+    triggerSelector: '.keyboard-btn',
+    initialFocusSelector: '#voiceInputHotkey',
+    init: async () => {
+        if (window.VoiceInputPage && typeof window.VoiceInputPage.init === 'function') {
+            await window.VoiceInputPage.init({ embedded: true });
+        }
+    }
+});
+
+const mediaModalManager = createRemoteModal('media', {
+    modalId: 'mediaModal',
+    scrollId: 'mediaModalScroll',
+    htmlPath: 'media-transcribe.html',
+    wrapperClass: 'media-page media-page-embedded',
+    styleAttribute: 'data-media-style',
+    triggerSelector: '.media-btn',
+    init: async () => {
+        if (window.MediaTranscribePage && typeof window.MediaTranscribePage.init === 'function') {
+            await window.MediaTranscribePage.init({ embedded: true });
+        }
+    }
+});
+
+function showSettingsModal(section) {
+    if (settingsModalManager) {
+        settingsModalManager.show(section);
+    } else {
+        console.warn('Settings modal unavailable');
+    }
 }
 
 function hideSettingsModal() {
-    if (!settingsModal) {
-        return;
-    }
-    settingsModal.classList.remove('active');
-    settingsModal.setAttribute('aria-hidden', 'true');
-    document.body.classList.remove('settings-modal-open');
-    const settingsButton = document.querySelector('.settings-btn');
-    if (settingsButton && typeof settingsButton.focus === 'function') {
-        requestAnimationFrame(() => {
-            settingsButton.focus({ preventScroll: true });
-        });
+    if (settingsModalManager) {
+        settingsModalManager.hide();
     }
 }
 
-async function showSettingsModal(section) {
-    if (!settingsModal) {
-        return;
-    }
-    try {
-        await loadSettingsContent(section);
-    } catch (error) {
-        console.error('Failed to display settings modal:', error);
-        return;
-    }
-    settingsModal.classList.add('active');
-    settingsModal.setAttribute('aria-hidden', 'false');
-    document.body.classList.add('settings-modal-open');
-    if (settingsModalScroll) {
-        settingsModalScroll.scrollTop = 0;
-    }
-    const activeButton = settingsModal.querySelector('.sidebar-item.active');
-    if (activeButton && typeof activeButton.focus === 'function') {
-        requestAnimationFrame(() => {
-            activeButton.focus({ preventScroll: true });
-        });
+function showVoiceModal() {
+    if (voiceModalManager) {
+        voiceModalManager.show();
+    } else {
+        console.warn('Voice input modal unavailable');
     }
 }
 
-function handleSettingsOverlayClick(event) {
-    if (!settingsModal) {
-        return;
-    }
-    if (event.target === settingsModal) {
-        hideSettingsModal();
-    }
-}
-
-function handleSettingsKeydown(event) {
-    if (event.key === 'Escape' && isSettingsModalOpen()) {
-        hideSettingsModal();
+function showMediaModal() {
+    if (mediaModalManager) {
+        mediaModalManager.show();
+    } else {
+        console.warn('Media modal unavailable');
     }
 }
-
-if (settingsModal) {
-    settingsModal.addEventListener('click', handleSettingsOverlayClick);
-}
-
-document.addEventListener('keydown', handleSettingsKeydown);
 
 if (window.electronAPI && typeof window.electronAPI.onShowSettings === 'function') {
     window.electronAPI.onShowSettings((section) => {
         showSettingsModal(section);
     });
 }
+
+if (window.electronAPI && typeof window.electronAPI.onShowVoiceInput === 'function') {
+    window.electronAPI.onShowVoiceInput(() => {
+        showVoiceModal();
+    });
+}
+
+if (window.electronAPI && typeof window.electronAPI.onShowMediaTranscribe === 'function') {
+    window.electronAPI.onShowMediaTranscribe(() => {
+        showMediaModal();
+    });
+}
+
 
 // Helpers for top-bar buttons
 function openSettings() {
@@ -3868,6 +4020,7 @@ function openMediaTranscribe() {
       window.electronAPI.openMediaTranscribe();
     } else {
       console.warn('Electron API not available');
+      showMediaModal();
     }
   } catch (error) {
     console.error('Failed to open media transcribe:', error);
@@ -3881,6 +4034,7 @@ function openKeyboardSettings() {
       window.electronAPI.openVoiceInputSettings();
     } else {
       console.warn('Electron API not available');
+      showVoiceModal();
     }
   } catch (error) {
     console.error('Failed to open keyboard/voice settings:', error);

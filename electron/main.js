@@ -11,8 +11,6 @@ if (!app.requestSingleInstanceLock()) {
 
 // Global windows
 let mainWindow = null;
-let mediaTranscribeWindow = null;
-let voiceInputWindow = null;
 let tray = null;
 let isQuitting = false;
 let defaultTaskbarIcon = null;
@@ -354,46 +352,24 @@ function showSettingsModal(section) {
   return true;
 }
 
-function createMediaTranscribeWindow() {
-  if (mediaTranscribeWindow && !mediaTranscribeWindow.isDestroyed()) {
-    mediaTranscribeWindow.focus();
-    return;
+function showMediaTranscribeModal() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return false;
   }
-  mediaTranscribeWindow = new BrowserWindow({
-    width: 1100,
-    height: 720,
-    parent: mainWindow || undefined,
-    modal: false,
-    webPreferences: {
-      contextIsolation: true,
-      preload: path.join(__dirname, 'preload.js')
-    }
-  });
-  mediaTranscribeWindow.loadFile(path.join(__dirname, 'media-transcribe.html'));
-  mediaTranscribeWindow.on('closed', () => {
-    mediaTranscribeWindow = null;
-  });
+  try { mainWindow.focus(); } catch {}
+  try { mainWindow.show(); } catch {}
+  mainWindow.webContents.send('show-media-transcribe-modal');
+  return true;
 }
 
-function createVoiceInputWindow() {
-  if (voiceInputWindow && !voiceInputWindow.isDestroyed()) {
-    voiceInputWindow.focus();
-    return;
+function showVoiceInputModal() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return false;
   }
-  voiceInputWindow = new BrowserWindow({
-    width: 720,
-    height: 640,
-    parent: mainWindow || undefined,
-    modal: false,
-    webPreferences: {
-      contextIsolation: true,
-      preload: path.join(__dirname, 'preload.js')
-    }
-  });
-  voiceInputWindow.loadFile(path.join(__dirname, 'voice-input.html'));
-  voiceInputWindow.on('closed', () => {
-    voiceInputWindow = null;
-  });
+  try { mainWindow.focus(); } catch {}
+  try { mainWindow.show(); } catch {}
+  mainWindow.webContents.send('show-voice-input-modal');
+  return true;
 }
 
 // Python service management
@@ -799,13 +775,13 @@ ipcMain.handle('open-settings', async (_event, section) => {
 });
 
 ipcMain.handle('open-media-transcribe', async () => {
-  createMediaTranscribeWindow();
-  return true;
+  const ok = showMediaTranscribeModal();
+  return ok;
 });
 
 ipcMain.handle('open-voice-input-settings', async () => {
-  createVoiceInputWindow();
-  return true;
+  const ok = showVoiceInputModal();
+  return ok;
 });
 
 // IPC Handlers - config
@@ -1049,7 +1025,7 @@ ipcMain.handle('test-python', async (_event, pythonPath) => {
 
 // IPC Handlers - media transcription helpers
 ipcMain.handle('select-media-file', async () => {
-  const win = mediaTranscribeWindow || mainWindow;
+  const win = mainWindow;
   if (!win) return { canceled: true };
   const result = await dialog.showOpenDialog(win, {
     title: 'Select Media File',
@@ -1062,7 +1038,7 @@ ipcMain.handle('select-media-file', async () => {
 });
 
 ipcMain.handle('select-output-path', async (_event, { baseName } = {}) => {
-  const win = mediaTranscribeWindow || mainWindow;
+  const win = mainWindow;
   if (!win) return { canceled: true };
   const defaultName = (baseName ? baseName.replace(/\.[^/.]+$/, '') : 'output') + '.txt';
   const result = await dialog.showSaveDialog(win, {
@@ -1117,7 +1093,7 @@ function parseExportTxtToResults(txtContent) {
 }
 
 ipcMain.handle('process-media-file', async (_event, { filePath, settings }) => {
-  const win = mediaTranscribeWindow || mainWindow;
+  const win = mainWindow;
   if (!win) return { success: false, error: 'No active window' };
   try {
     const resolved = resolveMediaExe();

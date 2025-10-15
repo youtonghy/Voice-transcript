@@ -11,19 +11,16 @@
             padding: 0;
         }
 
-        body {
+        .media-page {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Apple Color Emoji', 'Noto Color Emoji', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
             background: #ffffff;
             color: #333;
-            height: 100vh;
-            overflow: hidden;
+            min-height: 100vh;
         }
 
         .nav-bar {
-            position: fixed;
+            position: sticky;
             top: 0;
-            left: 0;
-            right: 0;
             background: #ffffff;
             border-bottom: 1px solid #e5e5e5;
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
@@ -83,9 +80,9 @@
 
         .main-content {
             padding-top: 60px;
-            height: 100vh;
             display: flex;
             flex-direction: column;
+            min-height: 0;
         }
 
         .content-wrapper {
@@ -109,6 +106,23 @@
             gap: 20px;
             overflow-y: auto;
             min-height: 0;
+        }
+
+        .media-page.media-page-embedded {
+            min-height: auto;
+        }
+
+        .media-page.media-page-embedded .main-content {
+            height: auto;
+        }
+
+        .media-page.media-page-embedded .content-wrapper {
+            max-height: none;
+        }
+
+        .media-page.media-page-embedded .settings-panel,
+        .media-page.media-page-embedded .results-panel {
+            max-height: none;
         }
 
         .panel-section {
@@ -445,15 +459,15 @@
     
     </style>
 </head>
-<body>
+<body class="media-page">
     <div class="nav-bar">
         <div class="nav-content">
             <div class="nav-left">
-                <a href="#" class="back-btn" title="Back to Home" data-i18n-title="media.nav.backTooltip" onclick="window.close(); return false;">
+                <a href="#" class="back-btn" title="Back to Home" data-i18n-title="media.nav.backTooltip" data-modal-dismiss="media">
                     <span class="back-btn-icon" aria-hidden="true">&#8592;</span>
                     <span data-i18n="common.backLink">Back</span>
                 </a>
-                <div class="nav-title" data-i18n="media.nav.title">Media Transcription</div>
+                <div class="nav-title" data-i18n="media.nav.title" id="mediaModalTitle">Media Transcription</div>
             </div>
         </div>
     </div>

@@ -1,6 +1,13 @@
 // Media transcription renderer process script
 
 const DEFAULT_LANGUAGE = 'en';
+let isEmbedded = false;
+let hasInitialized = false;
+let mediaI18nChangeRegistered = false;
+let mediaProgressBound = false;
+let beforeUnloadBound = false;
+let mediaAppInstance = null;
+let electronMissingNotified = false;
 
 function setDocumentLanguage(lang) {
   if (document && document.documentElement) {
@@ -75,15 +82,20 @@ function initializeLanguage() {
   if (typeof window.appI18n.apply === 'function') {
     window.appI18n.apply();
   }
-  document.title = t('media.pageTitle');
-  if (typeof window.appI18n.onChange === 'function') {
+  if (!isEmbedded) {
+    document.title = t('media.pageTitle');
+  }
+  if (!mediaI18nChangeRegistered && typeof window.appI18n.onChange === 'function') {
     window.appI18n.onChange(() => {
       registerMediaTranslations();
       if (typeof window.appI18n.apply === 'function') {
         window.appI18n.apply();
       }
-      document.title = t('media.pageTitle');
+      if (!isEmbedded) {
+        document.title = t('media.pageTitle');
+      }
     });
+    mediaI18nChangeRegistered = true;
   }
 }
 
@@ -756,66 +768,126 @@ class MediaTranscribeApp {
   }
 }
 
-document.addEventListener('DOMContentLoaded', () => {
-  initializeLanguage();
+function applyMediaTranslations() {
   registerMediaTranslations();
-  if (window.appI18n) {
+  if (window.appI18n && typeof window.appI18n.apply === 'function') {
     window.appI18n.apply();
   }
+}
 
-  if (typeof window.electronAPI === 'undefined') {
-    console.error('Electron API unavailable');
-    document.body.innerHTML = `
-      <div style="display: flex; align-items: center; justify-content: center; height: 100vh; text-align: center; color: #e74c3c;">
-        <div>
-          <h2>${t('media.error.processingFailed')}</h2>
-          <p>Electron environment required.</p>
-        </div>
-      </div>
-    `;
+function showMediaInitializationError(error) {
+  const container = document.querySelector('.main-content') || document.body;
+  if (!container) {
+    console.error('Media initialization failed:', error);
     return;
   }
+  const wrapper = document.createElement('div');
+  wrapper.style.cssText = 'display:flex; align-items:center; justify-content:center; padding:60px 20px; text-align:center; color:#e74c3c;';
+  const inner = document.createElement('div');
+  const title = document.createElement('h2');
+  title.textContent = t('media.error.processingFailed');
+  const message = document.createElement('p');
+  message.textContent = (error && error.message) ? error.message : String(error || 'Unknown error');
+  inner.appendChild(title);
+  inner.appendChild(message);
+  wrapper.appendChild(inner);
+  container.innerHTML = '';
+  container.appendChild(wrapper);
+}
 
-  try {
-    const app = new MediaTranscribeApp();
-
-    if (window.electronAPI.onMediaProgress) {
-      window.electronAPI.onMediaProgress((message) => {
-        if (!message || !message.type) {
-          return;
-        }
-
-        if (message.type === 'progress') {
-          app.showProgress(message.message || '', message.progress || 0);
-        } else if (message.type === 'result') {
-          app.addResult({
-            transcription: message.transcription,
-            translation: message.translation
-          });
-        } else if (message.type === 'error') {
-          app.showError(message.message || t('media.error.processingFailed'));
-        } else if (message.type === 'complete') {
-          app.showProgress(t('media.progress.complete'), 100);
-          app.exportBtn.disabled = false;
-        }
-      });
+function bindMediaProgressEvents() {
+  if (mediaProgressBound) {
+    return;
+  }
+  if (!window.electronAPI || typeof window.electronAPI.onMediaProgress !== 'function') {
+    return;
+  }
+  window.electronAPI.onMediaProgress((message) => {
+    if (!message || !message.type || !mediaAppInstance) {
+      return;
     }
 
-    window.addEventListener('beforeunload', () => {
-      app.saveSettings();
-    });
-  } catch (error) {
-    console.error('Failed to bootstrap media transcribe app:', error);
-    document.body.innerHTML = `
-      <div style="display: flex; align-items: center; justify-content: center; height: 100vh; text-align: center; color: #e74c3c;">
-        <div>
-          <h2>Initialization error</h2>
-          <p>${error.message}</p>
-        </div>
-      </div>
-    `;
+    if (message.type === 'progress') {
+      mediaAppInstance.showProgress(message.message || '', message.progress || 0);
+    } else if (message.type === 'result') {
+      mediaAppInstance.addResult({
+        transcription: message.transcription,
+        translation: message.translation
+      });
+    } else if (message.type === 'error') {
+      mediaAppInstance.showError(message.message || t('media.error.processingFailed'));
+    } else if (message.type === 'complete') {
+      mediaAppInstance.showProgress(t('media.progress.complete'), 100);
+      if (mediaAppInstance.exportBtn) {
+        mediaAppInstance.exportBtn.disabled = false;
+      }
+    }
+  });
+  mediaProgressBound = true;
+}
+
+function initializeMediaTranscribePage(options = {}) {
+  isEmbedded = !!(options && options.embedded);
+  initializeLanguage();
+  applyMediaTranslations();
+
+  if (typeof window.electronAPI === 'undefined') {
+    if (!electronMissingNotified) {
+      console.error('Electron API unavailable');
+      showMediaInitializationError(new Error('Electron environment required.'));
+      electronMissingNotified = true;
+    }
+    return Promise.resolve();
   }
-});
 
+  if (!mediaAppInstance) {
+    try {
+      mediaAppInstance = new MediaTranscribeApp();
+    } catch (error) {
+      console.error('Failed to bootstrap media transcribe app:', error);
+      showMediaInitializationError(error);
+      return Promise.reject(error);
+    }
+  }
 
+  bindMediaProgressEvents();
 
+  if (!beforeUnloadBound) {
+    window.addEventListener('beforeunload', () => {
+      if (mediaAppInstance && typeof mediaAppInstance.saveSettings === 'function') {
+        mediaAppInstance.saveSettings();
+      }
+    });
+    beforeUnloadBound = true;
+  }
+
+  hasInitialized = true;
+
+  if (mediaAppInstance && typeof mediaAppInstance.loadSettings === 'function') {
+    return mediaAppInstance.loadSettings().catch((error) => {
+      console.warn('Failed to load media settings:', error);
+    });
+  }
+
+  return Promise.resolve();
+}
+
+function autoInitMediaPage() {
+  initializeMediaTranscribePage();
+}
+
+const mediaCurrentScript = document.currentScript;
+const mediaShouldAutoInit = !mediaCurrentScript || mediaCurrentScript.dataset.autoInit !== 'false';
+
+if (mediaShouldAutoInit) {
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', autoInitMediaPage);
+  } else {
+    autoInitMediaPage();
+  }
+}
+
+window.MediaTranscribePage = {
+  init: (options) => initializeMediaTranscribePage(options || {})
+};
+window.initializeMediaTranscribePage = initializeMediaTranscribePage;
