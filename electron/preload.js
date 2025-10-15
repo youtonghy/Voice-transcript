@@ -32,6 +32,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('python-message', (event, message) => callback(message));
   },
   
+  onShowSettings: (callback) => {
+    if (typeof callback !== 'function') {
+      return () => {};
+    }
+    const handler = (_event, section) => callback(section);
+    ipcRenderer.on('show-settings-modal', handler);
+    return () => {
+      ipcRenderer.removeListener('show-settings-modal', handler);
+    };
+  },
+  
   onMediaProgress: (callback) => {
     ipcRenderer.on('media-progress', (event, message) => callback(message));
   },

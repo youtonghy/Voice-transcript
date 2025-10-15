@@ -11,7 +11,6 @@ if (!app.requestSingleInstanceLock()) {
 
 // Global windows
 let mainWindow = null;
-let settingsWindow = null;
 let mediaTranscribeWindow = null;
 let voiceInputWindow = null;
 let tray = null;
@@ -341,33 +340,18 @@ function createMainWindow() {
   });
 }
 
-function createSettingsWindow(section) {
-  if (settingsWindow && !settingsWindow.isDestroyed()) {
-    settingsWindow.focus();
-    return;
+function showSettingsModal(section) {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return false;
   }
-  settingsWindow = new BrowserWindow({
-    width: 1024,
-    height: 760,
-    parent: mainWindow || undefined,
-    modal: false,
-    webPreferences: {
-      contextIsolation: true,
-      preload: path.join(__dirname, 'preload.js')
-    }
-  });
-  if (section) {
-    try {
-      settingsWindow.loadFile(path.join(__dirname, 'settings.html'), { hash: String(section) });
-    } catch (_) {
-      settingsWindow.loadFile(path.join(__dirname, 'settings.html'));
-    }
-  } else {
-    settingsWindow.loadFile(path.join(__dirname, 'settings.html'));
-  }
-  settingsWindow.on('closed', () => {
-    settingsWindow = null;
-  });
+  try {
+    mainWindow.focus();
+  } catch {}
+  try {
+    mainWindow.show();
+  } catch {}
+  mainWindow.webContents.send('show-settings-modal', section || null);
+  return true;
 }
 
 function createMediaTranscribeWindow() {
@@ -810,8 +794,8 @@ ipcMain.handle('window-control', async (event, action) => {
 });
 
 ipcMain.handle('open-settings', async (_event, section) => {
-  createSettingsWindow(section);
-  return true;
+  const ok = showSettingsModal(section);
+  return ok;
 });
 
 ipcMain.handle('open-media-transcribe', async () => {

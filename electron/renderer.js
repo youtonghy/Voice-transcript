@@ -98,6 +98,11 @@ const volumeRmsValue = document.getElementById('volumeRmsValue');
 const volumeStatusText = document.getElementById('volumeStatusText');
 const volumeToggleBtn = document.getElementById('volumeToggleBtn');
 const mainContent = document.querySelector('.main-content');
+const settingsModal = document.getElementById('settingsModal');
+const settingsModalScroll = document.getElementById('settingsModalScroll');
+let settingsMarkupLoaded = false;
+let settingsMarkupLoadingPromise = null;
+let settingsStylesInjected = false;
 
 const windowControlMinimize = document.getElementById('windowControlMinimize');
 const windowControlMaximize = document.getElementById('windowControlMaximize');
@@ -3689,6 +3694,160 @@ window.addEventListener('beforeunload', () => {
     stopConfigMonitoring();
 });
 
+function bindSettingsDismissHandlers(root) {
+    if (!root) {
+        return;
+    }
+    const dismissers = root.querySelectorAll('[data-settings-dismiss]');
+    dismissers.forEach((el) => {
+        if (el.dataset.settingsDismissBound === 'true') {
+            return;
+        }
+        el.addEventListener('click', (event) => {
+            event.preventDefault();
+            hideSettingsModal();
+        });
+        el.dataset.settingsDismissBound = 'true';
+    });
+}
+
+async function loadSettingsContent(section) {
+    if (settingsMarkupLoaded) {
+        if (window.SettingsPage && typeof window.SettingsPage.init === 'function') {
+            await window.SettingsPage.init({ embedded: true, section });
+        }
+        return;
+    }
+    if (settingsMarkupLoadingPromise) {
+        await settingsMarkupLoadingPromise;
+        if (window.SettingsPage && typeof window.SettingsPage.init === 'function') {
+            await window.SettingsPage.init({ embedded: true, section });
+        }
+        return;
+    }
+    if (!settingsModalScroll) {
+        throw new Error('Settings modal container missing.');
+    }
+    const loadTask = (async () => {
+        const response = await fetch('settings.html', { cache: 'no-cache' });
+        if (!response.ok) {
+            throw new Error(`Failed to load settings page: ${response.status}`);
+        }
+        const html = await response.text();
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+
+        if (!settingsStylesInjected) {
+            const styleNode = doc.head ? doc.head.querySelector('style') : null;
+            if (styleNode && !document.head.querySelector('style[data-settings-style]')) {
+                const styleClone = styleNode.cloneNode(true);
+                styleClone.dataset.settingsStyle = 'true';
+                document.head.appendChild(styleClone);
+            }
+            settingsStylesInjected = true;
+        }
+
+        doc.querySelectorAll('script').forEach((script) => script.remove());
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'settings-page settings-page-embedded';
+        if (doc.body) {
+            while (doc.body.firstChild) {
+                wrapper.appendChild(doc.body.firstChild);
+            }
+        }
+        const navTitle = wrapper.querySelector('.nav-title');
+        if (navTitle && !navTitle.id) {
+            navTitle.id = 'settingsModalTitle';
+        }
+        settingsModalScroll.innerHTML = '';
+        settingsModalScroll.appendChild(wrapper);
+        bindSettingsDismissHandlers(wrapper);
+
+        if (window.SettingsPage && typeof window.SettingsPage.init === 'function') {
+            await window.SettingsPage.init({ embedded: true, section });
+        }
+        settingsMarkupLoaded = true;
+    })();
+
+    settingsMarkupLoadingPromise = loadTask;
+    try {
+        await loadTask;
+    } finally {
+        settingsMarkupLoadingPromise = null;
+    }
+}
+
+function isSettingsModalOpen() {
+    return !!(settingsModal && settingsModal.classList.contains('active'));
+}
+
+function hideSettingsModal() {
+    if (!settingsModal) {
+        return;
+    }
+    settingsModal.classList.remove('active');
+    settingsModal.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('settings-modal-open');
+    const settingsButton = document.querySelector('.settings-btn');
+    if (settingsButton && typeof settingsButton.focus === 'function') {
+        requestAnimationFrame(() => {
+            settingsButton.focus({ preventScroll: true });
+        });
+    }
+}
+
+async function showSettingsModal(section) {
+    if (!settingsModal) {
+        return;
+    }
+    try {
+        await loadSettingsContent(section);
+    } catch (error) {
+        console.error('Failed to display settings modal:', error);
+        return;
+    }
+    settingsModal.classList.add('active');
+    settingsModal.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('settings-modal-open');
+    if (settingsModalScroll) {
+        settingsModalScroll.scrollTop = 0;
+    }
+    const activeButton = settingsModal.querySelector('.sidebar-item.active');
+    if (activeButton && typeof activeButton.focus === 'function') {
+        requestAnimationFrame(() => {
+            activeButton.focus({ preventScroll: true });
+        });
+    }
+}
+
+function handleSettingsOverlayClick(event) {
+    if (!settingsModal) {
+        return;
+    }
+    if (event.target === settingsModal) {
+        hideSettingsModal();
+    }
+}
+
+function handleSettingsKeydown(event) {
+    if (event.key === 'Escape' && isSettingsModalOpen()) {
+        hideSettingsModal();
+    }
+}
+
+if (settingsModal) {
+    settingsModal.addEventListener('click', handleSettingsOverlayClick);
+}
+
+document.addEventListener('keydown', handleSettingsKeydown);
+
+if (window.electronAPI && typeof window.electronAPI.onShowSettings === 'function') {
+    window.electronAPI.onShowSettings((section) => {
+        showSettingsModal(section);
+    });
+}
+
 // Helpers for top-bar buttons
 function openSettings() {
   try {
@@ -3696,6 +3855,7 @@ function openSettings() {
       window.electronAPI.openSettings();
     } else {
       console.warn('Electron API not available');
+      showSettingsModal();
     }
   } catch (error) {
     console.error('Failed to open settings:', error);
@@ -3728,11 +3888,6 @@ function openKeyboardSettings() {
 }
 
 window.copyLastResult = copyLastResult;
-
-
-
-
-
 
 
 

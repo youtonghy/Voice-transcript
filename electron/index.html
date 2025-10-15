@@ -1185,13 +1185,58 @@
 
         .settings-btn, .media-btn, .keyboard-btn { color: #666; }
 
-
-
-
-
-
-
         .settings-btn:hover, .media-btn:hover, .keyboard-btn:hover { color: #111; }
+
+        .settings-modal {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 48px 24px;
+            background: rgba(18, 21, 26, 0.48);
+            z-index: 11000;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s ease;
+        }
+
+        .settings-modal.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .settings-modal-dialog {
+            width: min(1100px, 100%);
+            max-height: 100%;
+            display: flex;
+            flex-direction: column;
+            border-radius: 16px;
+            overflow: hidden;
+            background: transparent;
+        }
+
+        .settings-modal-scroll {
+            background: #ffffff;
+            border-radius: 16px;
+            box-shadow: 0 20px 48px rgba(0, 0, 0, 0.25);
+            overflow-y: auto;
+            max-height: 100%;
+            position: relative;
+        }
+
+        .settings-modal-scroll::-webkit-scrollbar {
+            width: 10px;
+        }
+
+        .settings-modal-scroll::-webkit-scrollbar-thumb {
+            background: rgba(0, 0, 0, 0.18);
+            border-radius: 999px;
+        }
+
+        body.settings-modal-open {
+            overflow: hidden;
+        }
 
 
 
@@ -8679,6 +8724,12 @@
 
 
 
+  <div id="settingsModal" class="settings-modal" aria-hidden="true">
+    <div class="settings-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="settingsModalTitle">
+      <div id="settingsModalScroll" class="settings-modal-scroll"></div>
+    </div>
+  </div>
+
   <script src="i18n.js"></script>
 
 
@@ -8694,6 +8745,8 @@
 
 
 
+
+  <script src="settings.js" data-auto-init="false"></script>
 
   <script src="renderer.js"></script>
 
@@ -8712,7 +8765,6 @@
 
 
 </html>
-
 
 
 

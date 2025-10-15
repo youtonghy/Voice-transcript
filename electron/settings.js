@@ -16,6 +16,8 @@
   let currentConfig = {};
   let autoSaveTimer = null;
   let currentSection = DEFAULT_SECTION;
+  let isEmbedded = false;
+  let hasInitialized = false;
 
   function t(key) {
     if (window.appI18n && typeof window.appI18n.t === 'function') {
@@ -205,7 +207,7 @@
     });
 
     currentSection = nextSection;
-    if (updateHash) {
+    if (updateHash && !isEmbedded) {
       const targetHash = `#${nextSection}`;
       if (window.location.hash !== targetHash) {
         try {
@@ -251,7 +253,9 @@
     if (typeof window.appI18n.apply === 'function') {
       window.appI18n.apply();
     }
-    document.title = t('settings.nav.title');
+    if (!isEmbedded) {
+      document.title = t('settings.nav.title');
+    }
   }
 
   function initializeLanguage() {
@@ -263,14 +267,18 @@
     if (typeof window.appI18n.apply === 'function') {
       window.appI18n.apply();
     }
-    document.title = t('settings.nav.title');
+    if (!isEmbedded) {
+      document.title = t('settings.nav.title');
+    }
     if (typeof window.appI18n.onChange === 'function') {
       window.appI18n.onChange(() => {
         registerSettingsTranslations();
         if (typeof window.appI18n.apply === 'function') {
           window.appI18n.apply();
         }
-        document.title = t('settings.nav.title');
+        if (!isEmbedded) {
+          document.title = t('settings.nav.title');
+        }
       });
     }
   }
@@ -762,11 +770,61 @@
     }, 2800);
   }
 
-  document.addEventListener('DOMContentLoaded', () => {
+  function initializeSettingsPage(options = {}) {
+    if (hasInitialized) {
+      const followUpSection = options.section;
+      if (followUpSection) {
+        activateSection(followUpSection, { updateHash: false });
+      }
+      return loadCurrentConfig().then(() => {
+        if (followUpSection) {
+          activateSection(followUpSection, { updateHash: false });
+        }
+      });
+    }
+    isEmbedded = !!options.embedded;
+    hasInitialized = true;
+
     initializeLanguage();
     setupSidebarNavigation();
     setupEventListeners();
-    loadCurrentConfig();
-    scrollToHashSection();
-  });
+
+    const targetSection = options.section;
+    if (targetSection) {
+      activateSection(targetSection, { updateHash: false });
+    } else if (isEmbedded) {
+      activateSection(currentSection || DEFAULT_SECTION, { updateHash: false });
+    } else {
+      scrollToHashSection();
+    }
+
+    const loadPromise = loadCurrentConfig().then(() => {
+      if (targetSection) {
+        activateSection(targetSection, { updateHash: false });
+      }
+    });
+
+    return loadPromise;
+  }
+
+  const currentScript = document.currentScript;
+  const shouldAutoInit = !currentScript || currentScript.dataset.autoInit !== 'false';
+
+  function autoInit() {
+    initializeSettingsPage();
+  }
+
+  if (shouldAutoInit) {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', autoInit);
+    } else {
+      autoInit();
+    }
+  }
+
+  window.SettingsPage = {
+    init: initializeSettingsPage,
+    activateSection: (section) => activateSection(section, { updateHash: false })
+  };
+  window.initializeSettingsPage = initializeSettingsPage;
 })();
