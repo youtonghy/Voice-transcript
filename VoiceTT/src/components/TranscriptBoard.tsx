@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import type { ConversationEntry } from "../types";
 import "./TranscriptBoard.css";
 
@@ -14,19 +15,26 @@ export function TranscriptBoard({
   onTranslate,
   onOptimize,
 }: TranscriptBoardProps) {
+  const { t } = useTranslation();
   return (
     <section className="transcript-board">
       <header>
         <div>
-          <h2>{activeConversationTitle || "Transcript"}</h2>
-          <p>{entries.length === 0 ? "No entries yet." : `${entries.length} segments`}</p>
+          <h2>{activeConversationTitle || t("transcript.title")}</h2>
+          <p>
+            {entries.length === 0
+              ? t("transcript.empty")
+              : t("transcript.count", { count: entries.length })}
+          </p>
         </div>
       </header>
       <div className="transcript-scroll">
         {entries.map((entry) => (
           <article key={entry.id} className={`transcript-entry ${entry.kind}`}>
             <div className="transcript-meta">
-              <span className="entry-kind">{entry.kind}</span>
+              <span className="entry-kind">
+                {t(`transcript.kinds.${entry.kind}`, { defaultValue: entry.kind })}
+              </span>
               <span className="entry-time">
                 {new Date(entry.createdAt).toLocaleTimeString()}
               </span>
@@ -34,19 +42,19 @@ export function TranscriptBoard({
             <p className="entry-text">{entry.text}</p>
             {entry.translatedText && (
               <p className="entry-translation">
-                <span>Translation</span>
+                <span>{t("transcript.translationLabel")}</span>
                 {entry.translatedText}
               </p>
             )}
             <div className="entry-actions">
               {onTranslate && (
                 <button type="button" onClick={() => onTranslate(entry)}>
-                  Translate
+                  {t("transcript.actions.translate")}
                 </button>
               )}
               {onOptimize && (
                 <button type="button" onClick={() => onOptimize(entry)}>
-                  Improve phrasing
+                  {t("transcript.actions.optimize")}
                 </button>
               )}
             </div>

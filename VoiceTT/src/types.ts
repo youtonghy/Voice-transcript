@@ -115,4 +115,8 @@ export type TranscriptionEvent =
   | {
       type: "media_complete";
       conversationId: string;
+    }
+  | {
+      type: "status";
+      status: ServiceStatus;
     };

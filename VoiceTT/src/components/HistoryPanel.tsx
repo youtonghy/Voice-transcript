@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import type { Conversation } from "../types";
 import "./HistoryPanel.css";
 
@@ -20,19 +21,20 @@ export function HistoryPanel({
   collapsed,
   onToggleCollapse,
 }: HistoryPanelProps) {
+  const { t } = useTranslation();
   return (
     <aside className={`history-panel ${collapsed ? "collapsed" : ""}`}>
       <header>
-        <h3>History</h3>
+        <h3>{t("history.title")}</h3>
         <div className="history-actions">
-          <button type="button" onClick={onToggleCollapse}>
-            {collapsed ? "Expand" : "Collapse"}
+          <button type="button" onClick={onToggleCollapse} disabled={!onToggleCollapse}>
+            {collapsed ? t("history.expand") : t("history.collapse")}
           </button>
         </div>
       </header>
       <div className="history-scroll">
         {conversations.length === 0 ? (
-          <p className="history-empty">No conversations yet.</p>
+          <p className="history-empty">{t("history.empty")}</p>
         ) : (
           conversations.map((conversation) => {
             const isActive = conversation.id === activeConversationId;
@@ -58,7 +60,7 @@ export function HistoryPanel({
                       onPin(conversation.id, !conversation.pinned);
                     }}
                   >
-                    {conversation.pinned ? "Unpin" : "Pin"}
+                    {conversation.pinned ? t("history.unpin") : t("history.pin")}
                   </button>
                   <button
                     type="button"
@@ -67,7 +69,7 @@ export function HistoryPanel({
                       onDelete(conversation.id);
                     }}
                   >
-                    Delete
+                    {t("history.delete")}
                   </button>
                 </div>
               </button>

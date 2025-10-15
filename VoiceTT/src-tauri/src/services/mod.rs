@@ -227,12 +227,21 @@ impl TranscriptionService {
 
         let handle = recorder.start(callback)?;
 
-        *self.inner.status.write() = ServiceStatus {
-            running: true,
-            ready: true,
-            is_recording: true,
-            mode: Some(context.mode.as_str().to_string()),
+        let status_snapshot = {
+            let mut status_guard = self.inner.status.write();
+            *status_guard = ServiceStatus {
+                running: true,
+                ready: true,
+                is_recording: true,
+                mode: Some(context.mode.as_str().to_string()),
+            };
+            status_guard.clone()
         };
+        let status_payload = json!({
+            "type": "status",
+            "status": status_snapshot,
+        });
+        let _ = self.inner.app.emit("transcription-event", status_payload);
 
         *guard = Some(ActiveSession {
             metadata,
@@ -249,12 +258,21 @@ impl TranscriptionService {
             handle.stop();
         }
 
-        *self.inner.status.write() = ServiceStatus {
-            running: true,
-            ready: true,
-            is_recording: false,
-            mode: None,
+        let status_snapshot = {
+            let mut status_guard = self.inner.status.write();
+            *status_guard = ServiceStatus {
+                running: true,
+                ready: true,
+                is_recording: false,
+                mode: None,
+            };
+            status_guard.clone()
         };
+        let status_payload = json!({
+            "type": "status",
+            "status": status_snapshot,
+        });
+        let _ = self.inner.app.emit("transcription-event", status_payload);
 
         if session.metadata.mode == RecordingMode::Default {
             let config_snapshot = self.inner.config.read().clone();

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   fetchConfig,
   fetchStatus,
@@ -46,23 +47,42 @@ function App() {
     null,
   );
   const [lastVoiceInput, setLastVoiceInput] = useState<TranscriptionEvent | null>(null);
+  const { t, i18n } = useTranslation();
 
+  const defaultConversationTitle = t("transcript.title");
   const activeConversationTitle = useMemo(() => {
-    return conversations.find((conversation) => conversation.id === activeConversationId)?.title ?? "Transcript";
-  }, [conversations, activeConversationId]);
+    return (
+      conversations.find((conversation) => conversation.id === activeConversationId)?.title ??
+      defaultConversationTitle
+    );
+  }, [conversations, activeConversationId, defaultConversationTitle]);
 
-  const refreshStatus = useCallback(async () => {
-    const next = await fetchStatus();
-    setStatus(next);
-  }, []);
+  const isRecording = status?.isRecording ?? false;
 
-  const refreshConversations = useCallback(async () => {
+  useEffect(() => {
+    const nextLanguage = config?.app_language?.trim() || "zh-CN";
+    if (i18n.language !== nextLanguage) {
+      void i18n.changeLanguage(nextLanguage);
+    }
+  }, [config?.app_language, i18n]);
+
+  const refreshConversations = useCallback(async (preferredActiveId?: string) => {
     const list = await fetchConversations();
     setConversations(list);
-    if (!activeConversationId && list.length > 0) {
-      setActiveConversationId(list[0].id);
+    if (preferredActiveId) {
+      setActiveConversationId(preferredActiveId);
+      return;
     }
-  }, [activeConversationId]);
+    setActiveConversationId((previous) => {
+      if (previous) {
+        const stillPresent = list.some((conversation) => conversation.id === previous);
+        if (stillPresent) {
+          return previous;
+        }
+      }
+      return list.length > 0 ? list[0].id : undefined;
+    });
+  }, []);
 
   const refreshEntries = useCallback(
     async (conversationId: string) => {
@@ -90,7 +110,7 @@ function App() {
 
   useEffect(() => {
     if (activeConversationId) {
-      refreshEntries(activeConversationId);
+      void refreshEntries(activeConversationId);
     } else {
       setEntries([]);
     }
@@ -102,9 +122,9 @@ function App() {
         case "segment":
         case "translation":
         case "summary":
-          refreshConversations();
+          void refreshConversations();
           if (activeConversationId === event.conversationId) {
-            refreshEntries(event.conversationId);
+            void refreshEntries(event.conversationId);
           }
           break;
         case "voice_input":
@@ -115,7 +135,10 @@ function App() {
           break;
         case "media_complete":
           setMediaProgress(null);
-          refreshConversations();
+          void refreshConversations();
+          break;
+        case "status":
+          setStatus(event.status);
           break;
         default:
           break;
@@ -127,60 +150,74 @@ function App() {
   useTranscriptionEvents(handleTranscriptionEvent);
 
   const handleStartRecording = useCallback(async () => {
-    if (!config) return;
+    if (!config || isRecording) {
+      return;
+    }
     try {
       setBusy(true);
-      await startRecording({
+      const conversationId = await startRecording({
         translate: config.enable_translation,
         translateLanguage: config.translate_language,
       });
-      await refreshStatus();
+      await refreshConversations(conversationId);
+      await refreshEntries(conversationId);
+    } catch (err) {
+      console.error(err);
     } finally {
       setBusy(false);
     }
-  }, [config, refreshStatus]);
+  }, [config, isRecording, refreshConversations, refreshEntries]);
 
   const handleStopRecording = useCallback(async () => {
     try {
       setBusy(true);
       await stopRecording();
-      await refreshStatus();
       if (activeConversationId) {
         await refreshEntries(activeConversationId);
       }
+      await refreshConversations();
+    } catch (err) {
+      console.error(err);
     } finally {
       setBusy(false);
     }
-  }, [activeConversationId, refreshEntries, refreshStatus]);
+  }, [activeConversationId, refreshConversations, refreshEntries]);
 
   const handleStartVoiceInput = useCallback(async () => {
-    if (!config) return;
+    if (!config || isRecording) {
+      return;
+    }
     try {
       setBusy(true);
-      await startVoiceInput({
+      const conversationId = await startVoiceInput({
         translate: config.voice_input_translate,
         translateLanguage: config.voice_input_translate_language,
         recognitionEngine: config.voice_input_engine,
         transcribeLanguage: config.voice_input_language,
       });
-      await refreshStatus();
+      await refreshConversations(conversationId);
+      await refreshEntries(conversationId);
+    } catch (err) {
+      console.error(err);
     } finally {
       setBusy(false);
     }
-  }, [config, refreshStatus]);
+  }, [config, isRecording, refreshConversations, refreshEntries]);
 
   const handleStopVoiceInput = useCallback(async () => {
     try {
       setBusy(true);
       await stopVoiceInput();
-      await refreshStatus();
       if (activeConversationId) {
         await refreshEntries(activeConversationId);
       }
+      await refreshConversations();
+    } catch (err) {
+      console.error(err);
     } finally {
       setBusy(false);
     }
-  }, [activeConversationId, refreshEntries, refreshStatus]);
+  }, [activeConversationId, refreshConversations, refreshEntries]);
 
   const handleSelectConversation = useCallback((conversationId: string) => {
     setActiveConversationId(conversationId);
@@ -189,7 +226,7 @@ function App() {
   const handlePinConversation = useCallback(
     async (conversationId: string, pinned: boolean) => {
       await setConversationPinned(conversationId, pinned);
-      refreshConversations();
+      await refreshConversations();
     },
     [refreshConversations],
   );
@@ -197,20 +234,16 @@ function App() {
   const handleDeleteConversation = useCallback(
     async (conversationId: string) => {
       await deleteConversation(conversationId);
-      refreshConversations();
-      if (conversationId === activeConversationId) {
-        setActiveConversationId(undefined);
-        setEntries([]);
-      }
+      await refreshConversations();
     },
-    [activeConversationId, refreshConversations],
+    [refreshConversations],
   );
 
   const handleTranslateEntry = useCallback(
     async (entry: ConversationEntry) => {
       const targetLanguage = config?.translate_language ?? "Chinese";
       await requestTranslation(entry.conversationId, entry.text, targetLanguage);
-      refreshEntries(entry.conversationId);
+      await refreshEntries(entry.conversationId);
     },
     [config, refreshEntries],
   );
@@ -236,8 +269,7 @@ function App() {
       try {
         setMediaBusy(true);
         const conversationId = await processMediaFile(options);
-        setActiveConversationId(conversationId);
-        await refreshConversations();
+        await refreshConversations(conversationId);
         await refreshEntries(conversationId);
       } finally {
         setMediaBusy(false);
@@ -258,16 +290,16 @@ function App() {
         <div className="brand">
           <span className="brand-icon">🎙️</span>
           <div>
-            <h1>Voice Transcript Studio</h1>
-            <p>Real-time transcription, translation, and summaries in a single workspace.</p>
+            <h1>{t("app.title")}</h1>
+            <p>{t("app.tagline")}</p>
           </div>
         </div>
         <div className="header-actions">
-          <button type="button" onClick={() => refreshConversations()}>
-            Refresh
+          <button type="button" onClick={() => void refreshConversations()}>
+            {t("app.actions.refresh")}
           </button>
           <button type="button" onClick={() => setSettingsOpen(true)}>
-            Settings
+            {t("app.actions.settings")}
           </button>
         </div>
       </header>
@@ -301,19 +333,22 @@ function App() {
               onProcess={handleProcessMedia}
             />
             <div className="summary-panel">
-              <h3>Summary</h3>
-              <p>Generate a high-level summary for the current conversation.</p>
+              <h3>{t("app.summary.title")}</h3>
+              <p>{t("app.summary.description")}</p>
               <button type="button" onClick={handleSummarizeConversation} disabled={!entries.length}>
-                Summarize Conversation
+                {t("app.summary.button")}
               </button>
               {mediaProgress && (
                 <p className="media-progress">
-                  Processing media… {mediaProgress.current} / {mediaProgress.total}
+                  {t("app.summary.mediaProgress", {
+                    current: mediaProgress.current,
+                    total: mediaProgress.total,
+                  })}
                 </p>
               )}
               {lastVoiceInput && lastVoiceInput.type === "voice_input" && (
                 <div className="voice-preview">
-                  <h4>Last voice input</h4>
+                  <h4>{t("app.summary.lastVoiceInput")}</h4>
                   <p>{lastVoiceInput.transcription}</p>
                   {lastVoiceInput.translation && (
                     <p className="voice-translation">{lastVoiceInput.translation}</p>

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { open } from "@tauri-apps/plugin-dialog";
 import "./MediaPanel.css";
 
@@ -12,6 +13,7 @@ export function MediaPanel({ busy, defaultTargetLanguage, onProcess }: MediaPane
   const [path, setPath] = useState<string>("");
   const [translate, setTranslate] = useState(true);
   const [targetLanguage, setTargetLanguage] = useState(defaultTargetLanguage);
+  const { t } = useTranslation();
 
   async function handleSelectFile() {
     const result = await open({ multiple: false, filters: [{ name: "Media", extensions: ["mp3", "mp4", "m4a", "wav", "aac", "flac"] }] });
@@ -29,16 +31,21 @@ export function MediaPanel({ busy, defaultTargetLanguage, onProcess }: MediaPane
   return (
     <section className="media-panel">
       <header>
-        <h3>Media Transcription</h3>
-        <p>Transcribe audio/video files directly.</p>
+        <h3>{t("media.title")}</h3>
+        <p>{t("media.description")}</p>
       </header>
       <form onSubmit={handleSubmit} className="media-form">
         <div className="media-field">
-          <label>Source File</label>
+          <label>{t("media.sourceFile")}</label>
           <div className="media-file">
-            <input type="text" value={path} readOnly placeholder="Select audio or video file" />
+            <input
+              type="text"
+              value={path}
+              readOnly
+              placeholder={t("media.placeholder")}
+            />
             <button type="button" onClick={handleSelectFile} disabled={busy}>
-              Browse…
+              {t("media.browse")}
             </button>
           </div>
         </div>
@@ -48,11 +55,11 @@ export function MediaPanel({ busy, defaultTargetLanguage, onProcess }: MediaPane
             checked={translate}
             onChange={(event) => setTranslate(event.target.checked)}
           />
-          Translate automatically
+          {t("media.translateAutomatically")}
         </label>
         {translate && (
           <div className="media-field">
-            <label>Target language</label>
+            <label>{t("media.targetLanguage")}</label>
             <input
               type="text"
               value={targetLanguage}
@@ -61,7 +68,7 @@ export function MediaPanel({ busy, defaultTargetLanguage, onProcess }: MediaPane
           </div>
         )}
         <button type="submit" disabled={!path || busy}>
-          {busy ? "Processing…" : "Process"}
+          {busy ? t("media.processing") : t("media.submit")}
         </button>
       </form>
     </section>

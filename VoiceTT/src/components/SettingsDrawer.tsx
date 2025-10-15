@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { useTranslation } from "react-i18next";
 import type { AppConfig } from "../types";
 import "./SettingsDrawer.css";
 
@@ -11,23 +12,27 @@ interface SettingsDrawerProps {
   busy?: boolean;
 }
 
-const KEY_FIELDS: Array<{ key: keyof AppConfig; label: string; placeholder?: string } > = [
-  { key: "openai_api_key", label: "OpenAI API Key" },
-  { key: "openai_base_url", label: "OpenAI Base URL", placeholder: "https://api.openai.com" },
-  { key: "gemini_api_key", label: "Gemini API Key" },
-  { key: "soniox_api_key", label: "Soniox API Key" },
-  { key: "dashscope_api_key", label: "DashScope API Key" },
+const KEY_FIELDS: Array<{ key: keyof AppConfig; labelKey: string; placeholderKey?: string }> = [
+  { key: "openai_api_key", labelKey: "settings.credentials.openaiApiKey" },
+  {
+    key: "openai_base_url",
+    labelKey: "settings.credentials.openaiBaseUrl",
+    placeholderKey: "settings.placeholders.openaiBaseUrl",
+  },
+  { key: "gemini_api_key", labelKey: "settings.credentials.geminiApiKey" },
+  { key: "soniox_api_key", labelKey: "settings.credentials.sonioxApiKey" },
+  { key: "dashscope_api_key", labelKey: "settings.credentials.dashscopeApiKey" },
 ];
 
-const MODEL_FIELDS: Array<{ key: keyof AppConfig; label: string }> = [
-  { key: "openai_transcribe_model", label: "OpenAI Transcribe Model" },
-  { key: "openai_translate_model", label: "OpenAI Translate Model" },
-  { key: "openai_summary_model", label: "OpenAI Summary Model" },
-  { key: "openai_optimize_model", label: "OpenAI Optimize Model" },
-  { key: "gemini_translate_model", label: "Gemini Translate Model" },
-  { key: "gemini_summary_model", label: "Gemini Summary Model" },
-  { key: "gemini_optimize_model", label: "Gemini Optimize Model" },
-  { key: "qwen3_asr_model", label: "Qwen ASR Model" },
+const MODEL_FIELDS: Array<{ key: keyof AppConfig; labelKey: string }> = [
+  { key: "openai_transcribe_model", labelKey: "settings.models.openaiTranscribe" },
+  { key: "openai_translate_model", labelKey: "settings.models.openaiTranslate" },
+  { key: "openai_summary_model", labelKey: "settings.models.openaiSummary" },
+  { key: "openai_optimize_model", labelKey: "settings.models.openaiOptimize" },
+  { key: "gemini_translate_model", labelKey: "settings.models.geminiTranslate" },
+  { key: "gemini_summary_model", labelKey: "settings.models.geminiSummary" },
+  { key: "gemini_optimize_model", labelKey: "settings.models.geminiOptimize" },
+  { key: "qwen3_asr_model", labelKey: "settings.models.qwenAsr" },
 ];
 
 export function SettingsDrawer({
@@ -38,6 +43,7 @@ export function SettingsDrawer({
   onClose,
   busy,
 }: SettingsDrawerProps) {
+  const { t } = useTranslation();
   const className = useMemo(
     () => `settings-drawer ${open ? "open" : ""}`,
     [open],
@@ -47,24 +53,26 @@ export function SettingsDrawer({
     <aside className={className}>
       <header>
         <div>
-          <h2>Settings</h2>
-          <p>Configure engines, prompts, and language preferences.</p>
+          <h2>{t("settings.title")}</h2>
+          <p>{t("settings.subtitle")}</p>
         </div>
         <button type="button" onClick={onClose}>
-          Close
+          {t("settings.close")}
         </button>
       </header>
       <div className="settings-content">
         <section>
-          <h3>Credentials</h3>
+          <h3>{t("settings.sections.credentials")}</h3>
           <div className="settings-grid">
             {KEY_FIELDS.map((field) => (
               <label key={field.key} className="settings-field">
-                <span>{field.label}</span>
+                <span>{t(field.labelKey)}</span>
                 <input
                   type="password"
                   value={config[field.key] as string}
-                  placeholder={field.placeholder}
+                  placeholder={
+                    field.placeholderKey ? t(field.placeholderKey) : undefined
+                  }
                   onChange={(event) =>
                     onChange({ [field.key]: event.target.value } as Partial<AppConfig>)
                   }
@@ -75,11 +83,11 @@ export function SettingsDrawer({
         </section>
 
         <section>
-          <h3>Models</h3>
+          <h3>{t("settings.sections.models")}</h3>
           <div className="settings-grid">
             {MODEL_FIELDS.map((field) => (
               <label key={field.key} className="settings-field">
-                <span>{field.label}</span>
+                <span>{t(field.labelKey)}</span>
                 <input
                   type="text"
                   value={config[field.key] as string}
@@ -93,10 +101,10 @@ export function SettingsDrawer({
         </section>
 
         <section>
-          <h3>Language & Behaviour</h3>
+          <h3>{t("settings.sections.language")}</h3>
           <div className="settings-grid">
             <label className="settings-field">
-              <span>Default Translate Language</span>
+              <span>{t("settings.language.defaultTranslateLanguage")}</span>
               <input
                 type="text"
                 value={config.translate_language}
@@ -104,7 +112,7 @@ export function SettingsDrawer({
               />
             </label>
             <label className="settings-field">
-              <span>Transcribe Language</span>
+              <span>{t("settings.language.transcribeLanguage")}</span>
               <input
                 type="text"
                 value={config.transcribe_language}
@@ -112,7 +120,7 @@ export function SettingsDrawer({
               />
             </label>
             <label className="settings-field">
-              <span>Silence Threshold</span>
+              <span>{t("settings.language.silenceThreshold")}</span>
               <input
                 type="number"
                 step="0.001"
@@ -125,7 +133,7 @@ export function SettingsDrawer({
               />
             </label>
             <label className="settings-field">
-              <span>Minimum Silence (seconds)</span>
+              <span>{t("settings.language.minSilence")}</span>
               <input
                 type="number"
                 step="0.1"
@@ -143,7 +151,7 @@ export function SettingsDrawer({
                 checked={config.enable_translation}
                 onChange={(event) => onChange({ enable_translation: event.target.checked })}
               />
-              <span>Enable translation by default</span>
+              <span>{t("settings.language.enableTranslation")}</span>
             </label>
             <label className="settings-checkbox">
               <input
@@ -153,14 +161,14 @@ export function SettingsDrawer({
                   onChange({ voice_input_translate: event.target.checked })
                 }
               />
-              <span>Translate voice input</span>
+              <span>{t("settings.language.translateVoiceInput")}</span>
             </label>
           </div>
         </section>
       </div>
       <footer>
         <button type="button" onClick={onSave} disabled={busy}>
-          Save Changes
+          {t("settings.save")}
         </button>
       </footer>
     </aside>

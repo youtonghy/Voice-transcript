@@ -101,7 +101,7 @@ impl Default for AppConfig {
             silence_rms_threshold: 0.010,
             min_silence_seconds: 1.0,
             theater_mode: false,
-            app_language: "en".into(),
+            app_language: "zh-CN".into(),
             voice_input_enabled: false,
             voice_input_hotkey: "F3".into(),
             voice_input_engine: "openai".into(),
@@ -196,7 +196,7 @@ impl AppConfig {
             self.optimize_system_prompt = DEFAULT_OPTIMIZE_PROMPT.into();
         }
         if self.app_language.trim().is_empty() {
-            self.app_language = "en".into();
+            self.app_language = "zh-CN".into();
         }
         if self.recognition_engine.trim().is_empty() && !self.transcribe_source.trim().is_empty() {
             self.recognition_engine = self.transcribe_source.clone();
