@@ -1,0 +1,86 @@
+.control-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 18px;
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  background: var(--surface);
+  gap: 18px;
+}
+
+.control-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.status-indicator {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--muted);
+  box-shadow: 0 0 6px rgba(0, 0, 0, 0.12);
+}
+
+.status-indicator.recording {
+  background: var(--danger);
+  animation: pulse 1.5s infinite;
+}
+
+.status-indicator.idle {
+  background: var(--success);
+}
+
+.control-status h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.control-status p {
+  margin: 0;
+  color: var(--muted-text);
+  font-size: 0.85rem;
+}
+
+.control-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.control-actions button {
+  padding: 8px 14px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: var(--surface-elevated);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.control-actions button.primary {
+  background: var(--primary);
+  color: #fff;
+}
+
+.control-actions button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.control-actions button:not(:disabled):hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+@keyframes pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(231, 76, 60, 0.6);
+  }
+  50% {
+    box-shadow: 0 0 0 10px rgba(231, 76, 60, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(231, 76, 60, 0);
+  }
+}

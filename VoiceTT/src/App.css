@@ -1,116 +1,178 @@
-.logo.vite:hover {
-  filter: drop-shadow(0 0 2em #747bff);
-}
-
-.logo.react:hover {
-  filter: drop-shadow(0 0 2em #61dafb);
-}
 :root {
-  font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
-  font-size: 16px;
-  line-height: 24px;
+  font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  color: #1f2933;
+  background: #f3f5f8;
+  line-height: 1.5;
   font-weight: 400;
-
-  color: #0f0f0f;
-  background-color: #f6f6f6;
-
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   -webkit-text-size-adjust: 100%;
+
+  --surface: #ffffff;
+  --surface-elevated: #f8f9fb;
+  --surface-stronger: #f0f3f8;
+  --border-color: rgba(30, 60, 114, 0.1);
+  --muted: rgba(15, 99, 255, 0.08);
+  --muted-text: #6b778c;
+  --muted-text-strong: #334155;
+  --primary: #4f6ef7;
+  --success: #16a34a;
+  --danger: #e74c3c;
 }
 
-.container {
+body {
   margin: 0;
-  padding-top: 10vh;
+  min-height: 100vh;
+  background: radial-gradient(circle at top, rgba(79, 110, 247, 0.08), transparent), var(--surface-stronger);
+  color: inherit;
+}
+
+.app-shell {
+  min-height: 100vh;
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  text-align: center;
 }
 
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: 0.75s;
-}
-
-.logo.tauri:hover {
-  filter: drop-shadow(0 0 2em #24c8db);
-}
-
-.row {
+.app-header {
   display: flex;
-  justify-content: center;
+  justify-content: space-between;
+  align-items: center;
+  padding: 22px 32px;
 }
 
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 16px;
 }
 
-a:hover {
-  color: #535bf2;
+.brand-icon {
+  font-size: 2rem;
 }
 
-h1 {
-  text-align: center;
+.brand h1 {
+  margin: 0;
+  font-size: 1.5rem;
 }
 
-input,
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  color: #0f0f0f;
-  background-color: #ffffff;
-  transition: border-color 0.25s;
-  box-shadow: 0 2px 2px rgba(0, 0, 0, 0.2);
+.brand p {
+  margin: 4px 0 0;
+  color: var(--muted-text);
 }
 
-button {
+.header-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.header-actions button {
+  border: none;
+  padding: 8px 14px;
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.08);
   cursor: pointer;
 }
 
-button:hover {
-  border-color: #396cd8;
-}
-button:active {
-  border-color: #396cd8;
-  background-color: #e8e8e8;
-}
-
-input,
-button {
-  outline: none;
+.app-content {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 28px;
+  padding: 0 32px 32px;
 }
 
-#greet-input {
-  margin-right: 5px;
+.app-main {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    color: #f6f6f6;
-    background-color: #2f2f2f;
+.app-footer-widgets {
+  display: grid;
+  grid-template-columns: minmax(260px, 340px) minmax(220px, 1fr);
+  gap: 18px;
+}
+
+.summary-panel {
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  background: var(--surface);
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.summary-panel h3 {
+  margin: 0;
+}
+
+.summary-panel button {
+  align-self: flex-start;
+  border: none;
+  border-radius: 10px;
+  padding: 8px 16px;
+  background: var(--primary);
+  color: #fff;
+  cursor: pointer;
+}
+
+.summary-panel button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.media-progress {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--muted-text);
+}
+
+.voice-preview {
+  padding: 12px;
+  border-radius: 10px;
+  background: var(--surface-elevated);
+  border: 1px solid rgba(79, 110, 247, 0.2);
+}
+
+.voice-preview h4 {
+  margin: 0 0 6px;
+  font-size: 0.95rem;
+}
+
+.voice-preview p {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.voice-preview .voice-translation {
+  margin-top: 6px;
+  color: var(--muted-text-strong);
+}
+
+@media (max-width: 1280px) {
+  .app-content {
+    grid-template-columns: 260px 1fr;
   }
 
-  a:hover {
-    color: #24c8db;
+  .app-footer-widgets {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 900px) {
+  .app-content {
+    grid-template-columns: 1fr;
   }
 
-  input,
-  button {
-    color: #ffffff;
-    background-color: #0f0f0f98;
+  .app-footer-widgets {
+    grid-template-columns: 1fr;
   }
-  button:active {
-    background-color: #0f0f0f69;
-  }
+}
+
+button, input {
+  font-family: inherit;
 }

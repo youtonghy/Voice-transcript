@@ -1,0 +1,102 @@
+.history-panel {
+  width: 280px;
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  transition: width 0.2s ease;
+}
+
+.history-panel.collapsed {
+  width: 70px;
+}
+
+.history-panel header {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.history-panel header h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.history-actions button {
+  border: none;
+  background: none;
+  color: var(--primary);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.history-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.history-empty {
+  text-align: center;
+  color: var(--muted-text);
+  font-size: 0.85rem;
+  margin: 40px 0;
+}
+
+.history-item {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: var(--surface-elevated);
+  text-align: left;
+  cursor: pointer;
+  gap: 6px;
+}
+
+.history-item.active {
+  border-color: var(--primary);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.history-title {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 600;
+}
+
+.history-title span:last-child {
+  font-size: 1rem;
+}
+
+.history-meta {
+  font-size: 0.75rem;
+  color: var(--muted-text);
+}
+
+.history-toolbar {
+  display: flex;
+  gap: 8px;
+}
+
+.history-toolbar button {
+  border: none;
+  background: rgba(0, 0, 0, 0.04);
+  border-radius: 8px;
+  padding: 4px 8px;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.history-toolbar button:hover {
+  background: rgba(76, 110, 245, 0.2);
+}

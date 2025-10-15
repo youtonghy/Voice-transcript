@@ -1,0 +1,80 @@
+.media-panel {
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  background: var(--surface);
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.media-panel header h3 {
+  margin: 0 0 4px;
+}
+
+.media-panel header p {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--muted-text);
+}
+
+.media-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.media-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.media-field label {
+  font-size: 0.85rem;
+  color: var(--muted-text);
+}
+
+.media-file {
+  display: flex;
+  gap: 8px;
+}
+
+.media-file input {
+  flex: 1;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  padding: 8px 12px;
+  background: var(--surface-stronger);
+}
+
+.media-file button {
+  border: none;
+  background: var(--surface-elevated);
+  padding: 8px 14px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.media-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+  color: var(--muted-text-strong);
+}
+
+.media-form button[type="submit"] {
+  align-self: flex-start;
+  padding: 8px 18px;
+  border: none;
+  border-radius: 10px;
+  background: var(--primary);
+  color: #fff;
+  cursor: pointer;
+}
+
+.media-form button[type="submit"]:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

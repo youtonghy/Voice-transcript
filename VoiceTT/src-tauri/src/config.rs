@@ -1,12 +1,30 @@
-use anyhow::{Context, Result};
-use rusqlite::{params, Connection};
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::fs;
-use std::path::{Path, PathBuf};
+use std::{fs, path::Path};
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(default)]
+use anyhow::{Context, Result};
+use serde::{Deserialize, Serialize};
+
+pub const DEFAULT_GEMINI_TRANSLATE_PROMPT: &str = r#"You are a professional translation assistant.
+Translate user text into {{TARGET_LANGUAGE}}.
+Requirements:
+1) Preserve the tone and intent of the original text.
+2) Provide natural and fluent translations.
+3) If the input is already in {{TARGET_LANGUAGE}}, return it unchanged.
+4) Respond with the translation only without additional commentary."#;
+
+pub const DEFAULT_CONVERSATION_TITLE_PROMPT: &str = r#"You are a helpful assistant who writes concise conversation titles in {{TARGET_LANGUAGE}}.
+Summarize the provided conversation transcript into one short, descriptive sentence.
+Only return the title without extra commentary."#;
+
+pub const DEFAULT_SUMMARY_PROMPT: &str = r#"You are a helpful assistant who summarizes conversations in {{TARGET_LANGUAGE}}.
+Review the provided transcript segments and produce a concise paragraph covering the important points.
+Do not include system messages or safety policies; respond with summary text only."#;
+
+pub const DEFAULT_OPTIMIZE_PROMPT: &str = r#"You are a friendly conversation coach.
+Rewrite the provided text so it sounds natural, fluent, and conversational while keeping the original meaning.
+Preserve key information, remain concise, and respond in the same language as the input.
+Return only the rewritten text without commentary."#;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
     pub openai_api_key: String,
     pub openai_base_url: String,
@@ -46,7 +64,7 @@ pub struct AppConfig {
     pub voice_input_language: String,
     pub voice_input_translate: bool,
     pub voice_input_translate_language: String,
-    pub python_path: String,
+    pub python_path: Option<String>,
 }
 
 impl Default for AppConfig {
@@ -54,468 +72,155 @@ impl Default for AppConfig {
         Self {
             openai_api_key: String::new(),
             openai_base_url: String::new(),
-            openai_transcribe_model: "gpt-4o-transcribe".to_string(),
-            openai_translate_model: "gpt-4o-mini".to_string(),
+            openai_transcribe_model: "gpt-4o-transcribe".into(),
+            openai_translate_model: "gpt-4o-mini".into(),
             gemini_api_key: String::new(),
-            gemini_translate_model: "gemini-2.0-flash".to_string(),
-            gemini_translate_system_prompt: DEFAULT_GEMINI_TRANSLATE_PROMPT.to_string(),
-            conversation_title_system_prompt: DEFAULT_CONVERSATION_TITLE_PROMPT.to_string(),
-            summary_engine: "openai".to_string(),
-            openai_summary_model: "gpt-4o-mini".to_string(),
-            gemini_summary_model: "gemini-2.0-flash".to_string(),
-            summary_system_prompt: DEFAULT_SUMMARY_PROMPT.to_string(),
-            optimize_engine: "openai".to_string(),
-            openai_optimize_model: "gpt-4o-mini".to_string(),
-            gemini_optimize_model: "gemini-2.0-flash".to_string(),
-            optimize_system_prompt: DEFAULT_OPTIMIZE_PROMPT.to_string(),
-            recognition_engine: "openai".to_string(),
-            translation_engine: "openai".to_string(),
-            transcribe_source: "openai".to_string(),
+            gemini_translate_model: "gemini-2.0-flash".into(),
+            gemini_translate_system_prompt: DEFAULT_GEMINI_TRANSLATE_PROMPT.into(),
+            conversation_title_system_prompt: DEFAULT_CONVERSATION_TITLE_PROMPT.into(),
+            summary_engine: "openai".into(),
+            openai_summary_model: "gpt-4o-mini".into(),
+            gemini_summary_model: "gemini-2.0-flash".into(),
+            summary_system_prompt: DEFAULT_SUMMARY_PROMPT.into(),
+            optimize_engine: "openai".into(),
+            openai_optimize_model: "gpt-4o-mini".into(),
+            gemini_optimize_model: "gemini-2.0-flash".into(),
+            optimize_system_prompt: DEFAULT_OPTIMIZE_PROMPT.into(),
+            recognition_engine: "openai".into(),
+            translation_engine: "openai".into(),
+            transcribe_source: "openai".into(),
             soniox_api_key: String::new(),
             dashscope_api_key: String::new(),
-            qwen3_asr_model: "qwen3-asr-flash".to_string(),
+            qwen3_asr_model: "qwen3-asr-flash".into(),
             enable_translation: true,
-            translate_language: "Chinese".to_string(),
-            translation_mode: "fixed".to_string(),
-            smart_language1: "Chinese".to_string(),
-            smart_language2: "English".to_string(),
-            transcribe_language: "auto".to_string(),
+            translate_language: "Chinese".into(),
+            translation_mode: "fixed".into(),
+            smart_language1: "Chinese".into(),
+            smart_language2: "English".into(),
+            transcribe_language: "auto".into(),
             silence_rms_threshold: 0.010,
             min_silence_seconds: 1.0,
             theater_mode: false,
-            app_language: "en".to_string(),
+            app_language: "en".into(),
             voice_input_enabled: false,
-            voice_input_hotkey: "F3".to_string(),
-            voice_input_engine: "openai".to_string(),
-            voice_input_language: "auto".to_string(),
+            voice_input_hotkey: "F3".into(),
+            voice_input_engine: "openai".into(),
+            voice_input_language: "auto".into(),
             voice_input_translate: false,
-            voice_input_translate_language: "Chinese".to_string(),
-            python_path: String::new(),
+            voice_input_translate_language: "Chinese".into(),
+            python_path: None,
         }
     }
 }
 
-pub const DEFAULT_GEMINI_TRANSLATE_PROMPT: &str = concat!(
-    "You are a professional translation assistant.\n",
-    "Translate user text into {{TARGET_LANGUAGE}}.\n",
-    "Requirements:\n",
-    "1) Preserve the tone and intent of the original text.\n",
-    "2) Provide natural and fluent translations.\n",
-    "3) If the input is already in {{TARGET_LANGUAGE}}, return it unchanged.\n",
-    "4) Respond with the translation only without additional commentary."
-);
-
-pub const DEFAULT_CONVERSATION_TITLE_PROMPT: &str = concat!(
-    "You are a helpful assistant who writes concise conversation titles in {{TARGET_LANGUAGE}}.\n",
-    "Summarize the provided conversation transcript into one short, descriptive sentence.\n",
-    "Only return the title without extra commentary."
-);
-
-pub const DEFAULT_SUMMARY_PROMPT: &str = concat!(
-    "You are a helpful assistant who summarizes conversations in {{TARGET_LANGUAGE}}.\n",
-    "Review the provided transcript segments and produce a concise paragraph covering the important points.\n",
-    "Do not include system messages or safety policies; respond with summary text only."
-);
-
-pub const DEFAULT_OPTIMIZE_PROMPT: &str = concat!(
-    "You are a friendly conversation coach.\n",
-    "Rewrite the provided text so it sounds natural, fluent, and conversational while keeping the original meaning.\n",
-    "Preserve key information, remain concise, and respond in the same language as the input.\n",
-    "Return only the rewritten text without commentary."
-);
-
-pub fn load_config(path: &Path) -> AppConfig {
-    match load_config_internal(path) {
-        Ok(config) => config,
-        Err(error) => {
-            eprintln!("[config] failed to load config: {error:?}");
-            AppConfig::default()
+impl AppConfig {
+    pub fn load_from(path: &Path) -> Result<Self> {
+        if !path.exists() {
+            return Ok(Self::default());
         }
-    }
-}
 
-pub fn save_config(path: &Path, config: &AppConfig) -> anyhow::Result<()> {
-    let mut normalized = config.clone();
-    normalize_config(&mut normalized);
-    let mut conn = open_or_create_connection(path)?;
-    save_config_with_conn(&mut conn, &normalized)?;
-    Ok(())
-}
+        let raw = fs::read_to_string(path)
+            .with_context(|| format!("Failed to read config file at {}", path.display()))?;
+        let mut config: AppConfig = serde_json::from_str(&raw)
+            .with_context(|| format!("Failed to parse config file at {}", path.display()))?;
 
-fn normalize_config(config: &mut AppConfig) {
-    if config.gemini_translate_model.trim().is_empty() {
-        config.gemini_translate_model = "gemini-2.0-flash".to_string();
+        config.hydrate_defaults();
+        Ok(config)
     }
-    if config.gemini_translate_system_prompt.trim().is_empty() {
-        config.gemini_translate_system_prompt = DEFAULT_GEMINI_TRANSLATE_PROMPT.to_string();
-    }
-    if config.conversation_title_system_prompt.trim().is_empty() {
-        config.conversation_title_system_prompt = DEFAULT_CONVERSATION_TITLE_PROMPT.to_string();
-    }
-    if config.summary_system_prompt.trim().is_empty() {
-        config.summary_system_prompt = DEFAULT_SUMMARY_PROMPT.to_string();
-    }
-    if config.optimize_system_prompt.trim().is_empty() {
-        config.optimize_system_prompt = DEFAULT_OPTIMIZE_PROMPT.to_string();
-    }
-    if config.summary_engine.trim().is_empty() {
-        config.summary_engine = if !config.translation_engine.trim().is_empty() {
-            config.translation_engine.clone()
-        } else {
-            "openai".to_string()
-        };
-    }
-    if config.openai_summary_model.trim().is_empty() {
-        config.openai_summary_model = config.openai_translate_model.clone();
-    }
-    if config.gemini_summary_model.trim().is_empty() {
-        config.gemini_summary_model = config.gemini_translate_model.clone();
-    }
-    if config.optimize_engine.trim().is_empty() {
-        config.optimize_engine = if !config.summary_engine.trim().is_empty() {
-            config.summary_engine.clone()
-        } else if !config.translation_engine.trim().is_empty() {
-            config.translation_engine.clone()
-        } else {
-            "openai".to_string()
-        };
-    }
-    if config.openai_optimize_model.trim().is_empty() {
-        config.openai_optimize_model = config.openai_summary_model.clone();
-    }
-    if config.gemini_optimize_model.trim().is_empty() {
-        config.gemini_optimize_model = config.gemini_summary_model.clone();
-    }
-    if config.app_language.trim().is_empty() {
-        config.app_language = "en".to_string();
-    }
-    if config.recognition_engine.trim().is_empty() {
-        config.recognition_engine = config.transcribe_source.clone();
-    }
-    if config.transcribe_source.trim().is_empty() {
-        config.transcribe_source = config.recognition_engine.clone();
-    }
-}
 
-pub fn config_path(app_dir: &Path) -> PathBuf {
-    app_dir.join("config.sqlite")
-}
-
-pub(crate) fn open_or_create_connection(path: &Path) -> Result<Connection> {
-    if let Some(parent) = path.parent() {
-        if !parent.exists() {
-            fs::create_dir_all(parent).with_context(|| {
-                format!("failed to create config directory {}", parent.display())
-            })?;
+    pub fn save_to(&self, path: &Path) -> Result<()> {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)
+                .with_context(|| format!("Failed to create config directory {}", parent.display()))?;
         }
+
+        let data = serde_json::to_string_pretty(self).context("Failed to serialize config")?;
+        fs::write(path, data).with_context(|| format!("Failed to write config to {}", path.display()))
     }
-    let conn = Connection::open(path)
-        .with_context(|| format!("failed to open config database {}", path.display()))?;
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS app_config (
-            key   TEXT PRIMARY KEY,
-            value TEXT NOT NULL
-        )",
-        [],
-    )
-    .context("failed to create app_config table")?;
-    Ok(conn)
-}
 
-fn load_config_internal(path: &Path) -> Result<AppConfig> {
-    let mut conn = open_or_create_connection(path)?;
-    let mut map = read_key_values(&conn)?;
-
-    if map.is_empty() {
-        if let Some(config) = migrate_from_json(path, &mut conn)? {
-            return Ok(config);
+    fn hydrate_defaults(&mut self) {
+        if self.gemini_translate_model.trim().is_empty() {
+            self.gemini_translate_model = "gemini-2.0-flash".into();
         }
-    }
-
-    if map.is_empty() {
-        let mut config = AppConfig::default();
-        normalize_config(&mut config);
-        return Ok(config);
-    }
-
-    let config = build_config_from_map(&mut map);
-    Ok(config)
-}
-
-fn migrate_from_json(path: &Path, conn: &mut Connection) -> Result<Option<AppConfig>> {
-    let legacy_path = path.with_extension("json");
-    if !legacy_path.exists() {
-        return Ok(None);
-    }
-    let content = fs::read_to_string(&legacy_path).with_context(|| {
-        format!(
-            "failed to read legacy config file {}",
-            legacy_path.display()
-        )
-    })?;
-    let mut config: AppConfig =
-        serde_json::from_str(&content).unwrap_or_else(|_| AppConfig::default());
-    normalize_config(&mut config);
-    save_config_with_conn(conn, &config)?;
-    Ok(Some(config))
-}
-
-fn read_key_values(conn: &Connection) -> Result<HashMap<String, String>> {
-    let mut stmt = conn
-        .prepare("SELECT key, value FROM app_config")
-        .context("failed to prepare config query")?;
-    let rows = stmt
-        .query_map([], |row| {
-            let key: String = row.get(0)?;
-            let value: String = row.get(1)?;
-            Ok((key, value))
-        })
-        .context("failed to iterate config rows")?;
-
-    let mut map = HashMap::new();
-    for entry in rows {
-        let (key, value) = entry?;
-        map.insert(key, value);
-    }
-    Ok(map)
-}
-
-fn save_config_with_conn(conn: &mut Connection, config: &AppConfig) -> Result<()> {
-    let entries = config_to_entries(config);
-    let tx = conn
-        .transaction()
-        .context("failed to open config transaction")?;
-    for (key, value) in entries {
-        tx.execute(
-            "INSERT INTO app_config (key, value) VALUES (?1, ?2)
-             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-            params![key, value],
-        )
-        .with_context(|| format!("failed to persist config key {}", key))?;
-    }
-    tx.commit().context("failed to commit config transaction")?;
-    Ok(())
-}
-
-fn config_to_entries(config: &AppConfig) -> Vec<(&'static str, String)> {
-    vec![
-        ("openai_api_key", config.openai_api_key.clone()),
-        ("openai_base_url", config.openai_base_url.clone()),
-        (
-            "openai_transcribe_model",
-            config.openai_transcribe_model.clone(),
-        ),
-        (
-            "openai_translate_model",
-            config.openai_translate_model.clone(),
-        ),
-        ("gemini_api_key", config.gemini_api_key.clone()),
-        (
-            "gemini_translate_model",
-            config.gemini_translate_model.clone(),
-        ),
-        (
-            "gemini_translate_system_prompt",
-            config.gemini_translate_system_prompt.clone(),
-        ),
-        (
-            "conversation_title_system_prompt",
-            config.conversation_title_system_prompt.clone(),
-        ),
-        ("summary_engine", config.summary_engine.clone()),
-        ("openai_summary_model", config.openai_summary_model.clone()),
-        ("gemini_summary_model", config.gemini_summary_model.clone()),
-        (
-            "summary_system_prompt",
-            config.summary_system_prompt.clone(),
-        ),
-        ("optimize_engine", config.optimize_engine.clone()),
-        (
-            "openai_optimize_model",
-            config.openai_optimize_model.clone(),
-        ),
-        (
-            "gemini_optimize_model",
-            config.gemini_optimize_model.clone(),
-        ),
-        (
-            "optimize_system_prompt",
-            config.optimize_system_prompt.clone(),
-        ),
-        ("recognition_engine", config.recognition_engine.clone()),
-        ("translation_engine", config.translation_engine.clone()),
-        ("transcribe_source", config.transcribe_source.clone()),
-        ("soniox_api_key", config.soniox_api_key.clone()),
-        ("dashscope_api_key", config.dashscope_api_key.clone()),
-        ("qwen3_asr_model", config.qwen3_asr_model.clone()),
-        ("enable_translation", config.enable_translation.to_string()),
-        ("translate_language", config.translate_language.clone()),
-        ("translation_mode", config.translation_mode.clone()),
-        ("smart_language1", config.smart_language1.clone()),
-        ("smart_language2", config.smart_language2.clone()),
-        ("transcribe_language", config.transcribe_language.clone()),
-        (
-            "silence_rms_threshold",
-            config.silence_rms_threshold.to_string(),
-        ),
-        (
-            "min_silence_seconds",
-            config.min_silence_seconds.to_string(),
-        ),
-        ("theater_mode", config.theater_mode.to_string()),
-        ("app_language", config.app_language.clone()),
-        (
-            "voice_input_enabled",
-            config.voice_input_enabled.to_string(),
-        ),
-        ("voice_input_hotkey", config.voice_input_hotkey.clone()),
-        ("voice_input_engine", config.voice_input_engine.clone()),
-        ("voice_input_language", config.voice_input_language.clone()),
-        (
-            "voice_input_translate",
-            config.voice_input_translate.to_string(),
-        ),
-        (
-            "voice_input_translate_language",
-            config.voice_input_translate_language.clone(),
-        ),
-        ("python_path", config.python_path.clone()),
-    ]
-}
-
-fn build_config_from_map(map: &mut HashMap<String, String>) -> AppConfig {
-    let mut config = AppConfig::default();
-
-    if let Some(value) = map.remove("openai_api_key") {
-        config.openai_api_key = value;
-    }
-    if let Some(value) = map.remove("openai_base_url") {
-        config.openai_base_url = value;
-    }
-    if let Some(value) = map.remove("openai_transcribe_model") {
-        config.openai_transcribe_model = value;
-    }
-    if let Some(value) = map.remove("openai_translate_model") {
-        config.openai_translate_model = value;
-    }
-    if let Some(value) = map.remove("gemini_api_key") {
-        config.gemini_api_key = value;
-    }
-    if let Some(value) = map.remove("gemini_translate_model") {
-        config.gemini_translate_model = value;
-    }
-    if let Some(value) = map.remove("gemini_translate_system_prompt") {
-        config.gemini_translate_system_prompt = value;
-    }
-    if let Some(value) = map.remove("conversation_title_system_prompt") {
-        config.conversation_title_system_prompt = value;
-    }
-    if let Some(value) = map.remove("summary_engine") {
-        config.summary_engine = value;
-    }
-    if let Some(value) = map.remove("openai_summary_model") {
-        config.openai_summary_model = value;
-    }
-    if let Some(value) = map.remove("gemini_summary_model") {
-        config.gemini_summary_model = value;
-    }
-    if let Some(value) = map.remove("summary_system_prompt") {
-        config.summary_system_prompt = value;
-    }
-    if let Some(value) = map.remove("optimize_engine") {
-        config.optimize_engine = value;
-    }
-    if let Some(value) = map.remove("openai_optimize_model") {
-        config.openai_optimize_model = value;
-    }
-    if let Some(value) = map.remove("gemini_optimize_model") {
-        config.gemini_optimize_model = value;
-    }
-    if let Some(value) = map.remove("optimize_system_prompt") {
-        config.optimize_system_prompt = value;
-    }
-    if let Some(value) = map.remove("recognition_engine") {
-        config.recognition_engine = value;
-    }
-    if let Some(value) = map.remove("translation_engine") {
-        config.translation_engine = value;
-    }
-    if let Some(value) = map.remove("transcribe_source") {
-        config.transcribe_source = value;
-    }
-    if let Some(value) = map.remove("soniox_api_key") {
-        config.soniox_api_key = value;
-    }
-    if let Some(value) = map.remove("dashscope_api_key") {
-        config.dashscope_api_key = value;
-    }
-    if let Some(value) = map.remove("qwen3_asr_model") {
-        config.qwen3_asr_model = value;
-    }
-    if let Some(value) = map.remove("enable_translation") {
-        config.enable_translation = parse_bool(&value, config.enable_translation);
-    }
-    if let Some(value) = map.remove("translate_language") {
-        config.translate_language = value;
-    }
-    if let Some(value) = map.remove("translation_mode") {
-        config.translation_mode = value;
-    }
-    if let Some(value) = map.remove("smart_language1") {
-        config.smart_language1 = value;
-    }
-    if let Some(value) = map.remove("smart_language2") {
-        config.smart_language2 = value;
-    }
-    if let Some(value) = map.remove("transcribe_language") {
-        config.transcribe_language = value;
-    }
-    if let Some(value) = map.remove("silence_rms_threshold") {
-        if let Ok(parsed) = value.parse::<f32>() {
-            config.silence_rms_threshold = parsed;
+        if self.gemini_translate_system_prompt.trim().is_empty() {
+            self.gemini_translate_system_prompt = DEFAULT_GEMINI_TRANSLATE_PROMPT.into();
         }
-    }
-    if let Some(value) = map.remove("min_silence_seconds") {
-        if let Ok(parsed) = value.parse::<f32>() {
-            config.min_silence_seconds = parsed;
+        if self.conversation_title_system_prompt.trim().is_empty() {
+            self.conversation_title_system_prompt = DEFAULT_CONVERSATION_TITLE_PROMPT.into();
         }
-    }
-    if let Some(value) = map.remove("theater_mode") {
-        config.theater_mode = parse_bool(&value, config.theater_mode);
-    }
-    if let Some(value) = map.remove("app_language") {
-        config.app_language = value;
-    }
-    if let Some(value) = map.remove("voice_input_enabled") {
-        config.voice_input_enabled = parse_bool(&value, config.voice_input_enabled);
-    }
-    if let Some(value) = map.remove("voice_input_hotkey") {
-        config.voice_input_hotkey = value;
-    }
-    if let Some(value) = map.remove("voice_input_engine") {
-        config.voice_input_engine = value;
-    }
-    if let Some(value) = map.remove("voice_input_language") {
-        config.voice_input_language = value;
-    }
-    if let Some(value) = map.remove("voice_input_translate") {
-        config.voice_input_translate = parse_bool(&value, config.voice_input_translate);
-    }
-    if let Some(value) = map.remove("voice_input_translate_language") {
-        config.voice_input_translate_language = value;
-    }
-    if let Some(value) = map.remove("python_path") {
-        config.python_path = value;
-    }
-
-    normalize_config(&mut config);
-    config
-}
-
-fn parse_bool(value: &str, fallback: bool) -> bool {
-    match value.trim().to_lowercase().as_str() {
-        "1" | "true" | "yes" | "on" => true,
-        "0" | "false" | "no" | "off" => false,
-        _ => fallback,
+        if self.summary_engine.trim().is_empty() {
+            self.summary_engine = self.translation_engine.clone();
+            if self.summary_engine.trim().is_empty() {
+                self.summary_engine = "openai".into();
+            }
+        }
+        if self.openai_summary_model.trim().is_empty() {
+            self.openai_summary_model = self.openai_translate_model.clone();
+            if self.openai_summary_model.trim().is_empty() {
+                self.openai_summary_model = "gpt-4o-mini".into();
+            }
+        }
+        if self.gemini_summary_model.trim().is_empty() {
+            self.gemini_summary_model = self.gemini_translate_model.clone();
+            if self.gemini_summary_model.trim().is_empty() {
+                self.gemini_summary_model = "gemini-2.0-flash".into();
+            }
+        }
+        if self.summary_system_prompt.trim().is_empty() {
+            self.summary_system_prompt = DEFAULT_SUMMARY_PROMPT.into();
+        }
+        if self.optimize_engine.trim().is_empty() {
+            self.optimize_engine = if !self.summary_engine.trim().is_empty() {
+                self.summary_engine.clone()
+            } else if !self.translation_engine.trim().is_empty() {
+                self.translation_engine.clone()
+            } else {
+                String::from("openai")
+            };
+        }
+        if self.openai_optimize_model.trim().is_empty() {
+            self.openai_optimize_model = if !self.openai_summary_model.trim().is_empty() {
+                self.openai_summary_model.clone()
+            } else {
+                String::from("gpt-4o-mini")
+            };
+        }
+        if self.gemini_optimize_model.trim().is_empty() {
+            self.gemini_optimize_model = if !self.gemini_summary_model.trim().is_empty() {
+                self.gemini_summary_model.clone()
+            } else {
+                String::from("gemini-2.0-flash")
+            };
+        }
+        if self.optimize_system_prompt.trim().is_empty() {
+            self.optimize_system_prompt = DEFAULT_OPTIMIZE_PROMPT.into();
+        }
+        if self.app_language.trim().is_empty() {
+            self.app_language = "en".into();
+        }
+        if self.recognition_engine.trim().is_empty() && !self.transcribe_source.trim().is_empty() {
+            self.recognition_engine = self.transcribe_source.clone();
+        }
+        if self.transcribe_source.trim().is_empty() && !self.recognition_engine.trim().is_empty() {
+            self.transcribe_source = self.recognition_engine.clone();
+        }
+        if self.voice_input_hotkey.trim().is_empty() {
+            self.voice_input_hotkey = "F3".into();
+        }
+        if self.voice_input_engine.trim().is_empty() {
+            self.voice_input_engine = self.recognition_engine.clone();
+            if self.voice_input_engine.trim().is_empty() {
+                self.voice_input_engine = "openai".into();
+            }
+        }
+        if self.voice_input_language.trim().is_empty() {
+            self.voice_input_language = "auto".into();
+        }
+        if self.voice_input_translate_language.trim().is_empty() {
+            self.voice_input_translate_language = self.translate_language.clone();
+            if self.voice_input_translate_language.trim().is_empty() {
+                self.voice_input_translate_language = "Chinese".into();
+            }
+        }
     }
 }
