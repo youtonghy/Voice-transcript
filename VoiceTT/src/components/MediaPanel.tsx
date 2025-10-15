@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useTranslation } from "react-i18next";
+import { useTranslation } from "../i18n";
 import { open } from "@tauri-apps/plugin-dialog";
 import "./MediaPanel.css";
 

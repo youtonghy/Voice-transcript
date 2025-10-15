@@ -1,7 +1,37 @@
-import i18n from "i18next";
-import { initReactI18next } from "react-i18next";
+import {
+  createContext,
+  ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 
-const resources = {
+type TranslationValue = string | TranslationMap;
+type TranslationMap = Record<string, TranslationValue>;
+
+type TranslationResources = Record<string, { translation: TranslationMap }>;
+
+type InterpolationValues = Record<string, string | number | undefined>;
+
+interface TranslateOptions {
+  defaultValue?: string;
+  [key: string]: unknown;
+}
+
+interface I18nInstance {
+  language: string;
+  changeLanguage: (language: string) => Promise<void>;
+}
+
+interface I18nContextValue {
+  language: string;
+  setLanguage: (language: string) => void;
+  resources: TranslationResources;
+}
+
+const resources: TranslationResources = {
   en: {
     translation: {
       app: {
@@ -218,15 +248,109 @@ const resources = {
       },
     },
   },
-} as const;
+};
 
-void i18n.use(initReactI18next).init({
+function deepGet(map: TranslationMap, path: string[]): TranslationValue | undefined {
+  let current: TranslationValue = map;
+  for (const key of path) {
+    if (typeof current === "string") {
+      return undefined;
+    }
+    if (!(key in current)) {
+      return undefined;
+    }
+    current = current[key];
+  }
+  return current;
+}
+
+function interpolate(template: string, values?: InterpolationValues): string {
+  if (!values) return template;
+  return template.replace(/{{\s*(\w+)\s*}}/g, (_, token: string) => {
+    const value = values[token];
+    return value === undefined || value === null ? "" : String(value);
+  });
+}
+
+function translateKey(
+  resourcesMap: TranslationResources,
+  language: string,
+  key: string,
+  options?: TranslateOptions,
+): string {
+  const segments = key.split(".");
+  const primary = resourcesMap[language]?.translation;
+  const fallback = resourcesMap.en.translation;
+
+  const lookup = (map?: TranslationMap) => {
+    if (!map) return undefined;
+    const value = deepGet(map, segments);
+    return typeof value === "string" ? value : undefined;
+  };
+
+  const raw = lookup(primary) ?? lookup(fallback) ?? options?.defaultValue ?? key;
+  const interpolationValues = Object.fromEntries(
+    Object.entries(options ?? {}).filter(([token]) => token !== "defaultValue"),
+  );
+  return interpolate(raw, interpolationValues);
+}
+
+const I18nContext = createContext<I18nContextValue>({
+  language: "zh-CN",
+  setLanguage: () => {},
   resources,
-  lng: "zh-CN",
-  fallbackLng: "en",
-  interpolation: {
-    escapeValue: false,
-  },
 });
 
-export default i18n;
+export function I18nProvider({
+  children,
+  defaultLanguage = "zh-CN",
+}: {
+  children: ReactNode;
+  defaultLanguage?: string;
+}) {
+  const [language, setLanguage] = useState<string>(defaultLanguage);
+
+  useEffect(() => {
+    setLanguage(defaultLanguage);
+  }, [defaultLanguage]);
+
+  const value = useMemo(
+    () => ({
+      language,
+      setLanguage,
+      resources,
+    }),
+    [language],
+  );
+
+  return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
+}
+
+export function useTranslation() {
+  const ctx = useContext(I18nContext);
+
+  const t = useCallback(
+    (key: string, options?: TranslateOptions) =>
+      translateKey(ctx.resources, ctx.language, key, options),
+    [ctx.language, ctx.resources],
+  );
+
+  const i18n = useMemo<I18nInstance>(
+    () => ({
+      language: ctx.language,
+      changeLanguage: async (language: string) => {
+        ctx.setLanguage(language);
+      },
+    }),
+    [ctx],
+  );
+
+  return { t, i18n };
+}
+
+export function createFixedT(language: string) {
+  return (key: string, options?: TranslateOptions) =>
+    translateKey(resources, language, key, options);
+}
+
+export const availableLanguages = Object.keys(resources);

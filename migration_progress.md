@@ -21,7 +21,7 @@
 - `useTranscriptionEvents` hook subscribes to backend events (`transcription-event`, `media-event`).
 - Design tokens and layout updated (`App.css`, component-level CSS).
 - Old Electron-inspired React code removed.
-- React app now initializes `i18next` with Simplified Chinese defaults, wraps UI strings in translations, and reacts to `app_language` changes from config.
+- React app now ships a lightweight built-in i18n layer with Simplified Chinese defaults, wraps UI strings in translations, and reacts to `app_language` changes from config.
 - Recording actions optimistically select the freshly created conversation and rely on event-driven status updates to avoid redundant status fetches.
 
 ## Outstanding / Follow-up
@@ -32,7 +32,7 @@
 - Audit warnings (unused struct fields/methods) and prune or wire remaining functionality.
 - Eventually reintroduce icons/resources in Tauri bundle (currently removed).
 - Expand translation resources beyond Simplified Chinese, add language switcher UI, and localize remaining dynamic strings/notifications.
-- Run `pnpm install` (or `pnpm update`) to sync new `i18next`/`react-i18next` dependencies into the lockfile in this environment.
+- If moving to a richer localization stack later, consider reintroducing an external i18n library once package installation is available.
 
 ## Verification
 - `cargo check` (without `native-audio`) passes (rerun after status/i18n updates).
