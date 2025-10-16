@@ -5,20 +5,21 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title data-i18n="media.pageTitle">Media Transcription &amp; Translation</title>
     <style>
-        * {
+        .media-page,
+        .media-page * {
             box-sizing: border-box;
-            margin: 0;
-            padding: 0;
         }
 
         .media-page {
+            margin: 0;
+            padding: 0;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Apple Color Emoji', 'Noto Color Emoji', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
             background: #ffffff;
             color: #333;
             min-height: 100vh;
         }
 
-        .nav-bar {
+        .media-page .nav-bar {
             position: sticky;
             top: 0;
             background: #ffffff;
@@ -28,7 +29,7 @@
             height: 60px;
         }
 
-        .nav-content {
+        .media-page .nav-content {
             display: flex;
             align-items: center;
             justify-content: space-between;
@@ -38,13 +39,13 @@
             margin: 0 auto;
         }
 
-        .nav-left {
+        .media-page .nav-left {
             display: flex;
             align-items: center;
             gap: 15px;
         }
 
-        .back-btn {
+        .media-page .back-btn {
             display: inline-flex;
             align-items: center;
             gap: 8px;
@@ -61,31 +62,31 @@
             font-weight: 500;
         }
 
-        .back-btn:hover {
+        .media-page .back-btn:hover {
             border-color: #333;
             color: #111;
             background: #f5f5f5;
         }
 
-        .back-btn-icon {
+        .media-page .back-btn-icon {
             font-size: 1rem;
             line-height: 1;
         }
 
-        .nav-title {
+        .media-page .nav-title {
             font-size: 1.2rem;
             font-weight: 600;
             color: #333;
         }
 
-        .main-content {
+        .media-page .main-content {
             padding-top: 60px;
             display: flex;
             flex-direction: column;
             min-height: 0;
         }
 
-        .content-wrapper {
+        .media-page .content-wrapper {
             flex: 1;
             display: flex;
             gap: 20px;
@@ -94,7 +95,7 @@
             min-height: 0;
         }
 
-        .settings-panel {
+        .media-page .settings-panel {
             width: 350px;
             background: #ffffff;
             border: 1px solid #e5e5e5;
@@ -109,15 +110,20 @@
         }
 
         .media-page.media-page-embedded {
-            min-height: auto;
+            min-height: 100%;
+            display: flex;
+            flex-direction: column;
         }
 
         .media-page.media-page-embedded .main-content {
-            height: auto;
+            flex: 1;
+            padding-top: 24px;
         }
 
         .media-page.media-page-embedded .content-wrapper {
-            max-height: none;
+            flex: 1;
+            padding: 24px;
+            overflow: auto;
         }
 
         .media-page.media-page-embedded .settings-panel,
@@ -125,52 +131,53 @@
             max-height: none;
         }
 
-        .panel-section {
+        .media-page .panel-section {
             display: flex;
             flex-direction: column;
             gap: 12px;
         }
 
-        .panel-title {
+        .media-page .panel-title {
             font-size: 1.1rem;
             font-weight: 600;
             color: #333;
             margin-bottom: 8px;
         }
 
-        .input-group {
+        .media-page .input-group {
             display: flex;
             flex-direction: column;
             gap: 8px;
         }
 
-        .input-label {
+        .media-page .input-label {
             font-size: 0.9rem;
             color: #333;
             font-weight: 500;
         }
 
-        .input-hint {
+        .media-page .input-hint {
             font-size: 0.8rem;
             color: #888;
             line-height: 1.4;
         }
 
-        .text-input {
+        .media-page .text-input {
             width: 100%;
             padding: 12px;
             border: 1px solid #e5e5e5;
             border-radius: 8px;
             font-size: 0.9rem;
             transition: border 0.2s ease;
+            background: #ffffff;
         }
 
-        .text-input:focus {
+        .media-page .text-input:focus {
             border-color: #333;
             outline: none;
         }
 
-        .upload-area {
+        .media-page .upload-area {
             border: 2px dashed #e5e5e5;
             border-radius: 12px;
             padding: 30px 20px;
@@ -180,34 +187,34 @@
             background: #fafbfc;
         }
 
-        .upload-area:hover {
+        .media-page .upload-area:hover {
             border-color: #333;
             background: #f5f5f5;
         }
 
-        .upload-area.dragover {
+        .media-page .upload-area.dragover {
             border-color: #333;
             background: #f0f9ff;
         }
 
-        .upload-icon {
+        .media-page .upload-icon {
             font-size: 2.5rem;
             color: #666;
             margin-bottom: 12px;
         }
 
-        .upload-text {
+        .media-page .upload-text {
             color: #666;
             font-size: 0.9rem;
             line-height: 1.5;
         }
 
-        .upload-text .primary {
+        .media-page .upload-text .primary {
             color: #333;
             font-weight: 500;
         }
 
-        .file-info {
+        .media-page .file-info {
             display: flex;
             flex-direction: column;
             gap: 6px;
@@ -217,19 +224,19 @@
             padding: 12px;
         }
 
-        .file-name {
+        .media-page .file-name {
             font-size: 0.9rem;
             color: #333;
             font-weight: 500;
             word-break: break-all;
         }
 
-        .file-size {
+        .media-page .file-size {
             font-size: 0.8rem;
             color: #888;
         }
 
-        .setting-group {
+        .media-page .setting-group {
             display: flex;
             flex-direction: column;
             gap: 12px;
@@ -239,14 +246,14 @@
             background: #fafbfc;
         }
 
-        .setting-item {
+        .media-page .setting-item {
             display: flex;
             align-items: center;
             gap: 12px;
             cursor: pointer;
         }
 
-        .checkbox {
+        .media-page .checkbox {
             width: 22px;
             height: 22px;
             border: 1px solid #ccc;
@@ -255,28 +262,29 @@
             align-items: center;
             justify-content: center;
             transition: all 0.2s ease;
-            background: #fff;
+            background: #ffffff;
+            color: transparent;
         }
 
-        .checkbox.checked {
+        .media-page .checkbox.checked {
             background: #333;
             border-color: #333;
             color: #fff;
         }
 
-        .setting-label {
+        .media-page .setting-label {
             font-size: 0.9rem;
             color: #333;
         }
 
-        .action-buttons {
+        .media-page .action-buttons {
             display: flex;
             flex-direction: column;
             gap: 10px;
             margin-top: auto;
         }
 
-        .btn {
+        .media-page .btn {
             padding: 12px 20px;
             border: none;
             border-radius: 8px;
@@ -287,31 +295,31 @@
             text-align: center;
         }
 
-        .btn-primary {
+        .media-page .btn-primary {
             background: #333;
-            color: white;
+            color: #ffffff;
         }
 
-        .btn-primary:hover:not(:disabled) {
+        .media-page .btn-primary:hover:not(:disabled) {
             background: #000;
         }
 
-        .btn-primary:disabled {
+        .media-page .btn-primary:disabled {
             background: #ccc;
             cursor: not-allowed;
         }
 
-        .btn-secondary {
+        .media-page .btn-secondary {
             background: #f5f5f5;
             color: #333;
             border: 1px solid #e5e5e5;
         }
 
-        .btn-secondary:hover:not(:disabled) {
+        .media-page .btn-secondary:hover:not(:disabled) {
             background: #e5e5e5;
         }
 
-        .results-panel {
+        .media-page .results-panel {
             flex: 1;
             background: #ffffff;
             border: 1px solid #e5e5e5;
@@ -321,7 +329,7 @@
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
         }
 
-        .results-header {
+        .media-page .results-header {
             padding: 20px;
             border-bottom: 1px solid #e5e5e5;
             display: flex;
@@ -329,51 +337,51 @@
             justify-content: space-between;
         }
 
-        .results-title {
+        .media-page .results-title {
             font-size: 1rem;
             font-weight: 600;
             color: #333;
         }
 
-        .export-btn {
+        .media-page .export-btn {
             padding: 8px 16px;
             font-size: 0.85rem;
             border-radius: 6px;
             border: none;
             background: #333;
-            color: white;
+            color: #ffffff;
             cursor: pointer;
             transition: background 0.2s ease;
         }
 
-        .export-btn:hover:not(:disabled) {
+        .media-page .export-btn:hover:not(:disabled) {
             background: #000;
         }
 
-        .export-btn:disabled {
+        .media-page .export-btn:disabled {
             background: #ccc;
             cursor: not-allowed;
         }
 
-        .results-content {
+        .media-page .results-content {
             flex: 1;
             padding: 20px;
             overflow-y: auto;
             min-height: 0;
         }
 
-        .progress-container {
+        .media-page .progress-container {
             padding: 20px;
             text-align: center;
         }
 
-        .progress-text {
+        .media-page .progress-text {
             color: #666;
             font-size: 0.9rem;
             margin-bottom: 12px;
         }
 
-        .progress-bar {
+        .media-page .progress-bar {
             width: 100%;
             height: 6px;
             background: #e5e5e5;
@@ -381,14 +389,14 @@
             overflow: hidden;
         }
 
-        .progress-fill {
+        .media-page .progress-fill {
             height: 100%;
             background: #333;
             transition: width 0.3s ease;
             border-radius: 3px;
         }
 
-        .empty-state {
+        .media-page .empty-state {
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -399,11 +407,11 @@
             height: 100%;
         }
 
-        .empty-icon {
+        .media-page .empty-icon {
             font-size: 2rem;
         }
 
-        .result-item {
+        .media-page .result-item {
             background: #f8f9fa;
             border: 1px solid #e5e5e5;
             border-radius: 8px;
@@ -411,29 +419,29 @@
             margin-bottom: 12px;
         }
 
-        .result-header {
+        .media-page .result-header {
             display: flex;
             align-items: center;
             justify-content: space-between;
             margin-bottom: 12px;
         }
 
-        .segment-number {
+        .media-page .segment-number {
             font-size: 0.8rem;
             color: #666;
             font-weight: 500;
         }
 
-        .result-text {
+        .media-page .result-text {
             margin-bottom: 8px;
         }
 
-        .transcription {
+        .media-page .transcription {
             color: #333;
             line-height: 1.5;
         }
 
-        .translation {
+        .media-page .translation {
             margin-top: 8px;
             padding-top: 8px;
             border-top: 1px dashed #ddd;
@@ -441,22 +449,21 @@
         }
 
         @media (max-width: 960px) {
-            .content-wrapper {
+            .media-page .content-wrapper {
                 flex-direction: column;
             }
 
-            .settings-panel {
+            .media-page .settings-panel {
                 width: 100%;
                 max-height: 260px;
             }
         }
 
         @media (max-width: 600px) {
-            .nav-content {
+            .media-page .nav-content {
                 padding: 0 15px;
             }
         }
-    
     </style>
 </head>
 <body class="media-page">

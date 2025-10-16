@@ -5,46 +5,246 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title data-i18n="voice.pageTitle">Voice Input Settings</title>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    .voice-page {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Apple Color Emoji', 'Noto Color Emoji', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
-      background: #ffffff; color: #333; min-height: 100vh;
+    .voice-page,
+    .voice-page * {
+      box-sizing: border-box;
     }
 
-    .nav-bar { position: sticky; top: 0; height: 60px; background: #fff; border-bottom: 1px solid #e5e5e5; box-shadow: 0 1px 3px rgba(0,0,0,0.1); z-index: 1000; }
-    .nav-content { height: 100%; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; max-width: 1100px; margin: 0 auto; }
-    .nav-left { display: flex; align-items: center; gap: 12px; }
-    .back-btn { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; border: 1px solid #e5e5e5; border-radius: 8px; background: #fff; color: #333; cursor: pointer; text-decoration: none; transition: all .2s ease; font-size: 0.95rem; line-height: 1.2; font-weight: 500; }
-    .back-btn:hover { border-color: #333; color: #111; background: #f5f5f5; }
-    .back-btn-icon { font-size: 1rem; line-height: 1; }
-    .nav-title { font-size: 1.2rem; font-weight: 600; color: #333; }
+    .voice-page {
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Apple Color Emoji', 'Noto Color Emoji', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      background: #ffffff;
+      color: #333;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
 
-    .settings-container { max-width: 700px; margin: 100px auto 40px; background: #ffffff; border: 1px solid #e5e5e5; border-radius: 12px; padding: 30px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05); }
-    .section-title { color: #333; font-size: 1.1rem; font-weight: 600; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid #e5e5e5; }
-    .form-group { margin-bottom: 25px; }
-    .form-group label { display: block; color: #333; font-weight: 500; margin-bottom: 8px; font-size: 0.95rem; }
-    .form-group input, .form-group select { width: 100%; padding: 12px 16px; border: 1px solid #e5e5e5; border-radius: 8px; font-size: 0.95rem; transition: all 0.2s ease; background: white; }
-    .checkbox-group { display: flex; align-items: center; margin-bottom: 0; }
-    .checkbox-group input[type="checkbox"] { width: auto; margin-right: 12px; transform: scale(1.2); }
-    .checkbox-group label { margin-bottom: 0; cursor: pointer; }
-    .form-note { font-size: 0.85rem; color: #666; margin-top: 5px; line-height: 1.4; }
+    .voice-page .nav-bar {
+      position: sticky;
+      top: 0;
+      height: 60px;
+      background: #ffffff;
+      border-bottom: 1px solid #e5e5e5;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      z-index: 1000;
+    }
 
-    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-    @media (max-width: 720px) { .grid { grid-template-columns: 1fr; } }
+    .voice-page .nav-content {
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 20px;
+      max-width: 960px;
+      margin: 0 auto;
+    }
 
-    .buttons { display: flex; gap: 12px; margin-top: 16px; justify-content: flex-end; }
-    .btn { flex: 0 0 auto; padding: 12px 16px; border: 1px solid #e5e5e5; border-radius: 8px; font-weight: 600; cursor: pointer; transition: all .2s ease; }
-    .btn-primary { background: #333; color: #fff; border-color: #333; }
-    .btn-primary:hover { background: #000; border-color: #000; }
-    .btn-secondary { background: #fff; color: #333; }
-    .btn-secondary:hover { background: #f5f5f5; border-color: #333; }
+    .voice-page .nav-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
 
-    .top-notification { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: #5352ed; color: #fff; padding: 10px 16px; border-radius: 6px; z-index: 10000; box-shadow: 0 4px 12px rgba(0,0,0,0.15); font-size: 14px; }
+    .voice-page .back-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 12px;
+      border: 1px solid #e5e5e5;
+      border-radius: 8px;
+      background: #ffffff;
+      color: #333;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.2s ease;
+      font-size: 0.95rem;
+      line-height: 1.2;
+      font-weight: 500;
+    }
 
-    .voice-page.voice-page-embedded { min-height: auto; }
-    .voice-page.voice-page-embedded .settings-container { margin: 80px auto 32px; }
-    .voice-page.voice-page-embedded .nav-bar { left: 0; right: 0; }
-  
+    .voice-page .back-btn:hover {
+      border-color: #333;
+      color: #111;
+      background: #f5f5f5;
+    }
+
+    .voice-page .back-btn-icon {
+      font-size: 1rem;
+      line-height: 1;
+    }
+
+    .voice-page .nav-title {
+      font-size: 1.2rem;
+      font-weight: 600;
+      color: #333;
+    }
+
+    .voice-page .settings-container {
+      width: min(820px, 100%);
+      margin: 32px auto;
+      background: #ffffff;
+      border: 1px solid #e5e5e5;
+      border-radius: 12px;
+      padding: 32px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    .voice-page.voice-page-embedded {
+      min-height: 100%;
+    }
+
+    .voice-page.voice-page-embedded .settings-container {
+      margin: 24px auto 32px;
+      width: min(820px, calc(100% - 48px));
+    }
+
+    .voice-page .section-title {
+      color: #333;
+      font-size: 1.1rem;
+      font-weight: 600;
+      padding-bottom: 12px;
+      border-bottom: 1px solid #e5e5e5;
+    }
+
+    .voice-page #voiceForm {
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    .voice-page .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .voice-page .form-group label {
+      color: #333;
+      font-weight: 500;
+      font-size: 0.95rem;
+    }
+
+    .voice-page .form-group input,
+    .voice-page .form-group select {
+      width: 100%;
+      padding: 12px 16px;
+      border: 1px solid #e5e5e5;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+      background: #ffffff;
+    }
+
+    .voice-page .form-group input:focus,
+    .voice-page .form-group select:focus {
+      border-color: #333;
+      outline: none;
+      box-shadow: 0 0 0 2px rgba(51, 51, 51, 0.12);
+    }
+
+    .voice-page .checkbox-group {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .voice-page .checkbox-group input[type="checkbox"] {
+      width: auto;
+      margin: 0;
+      transform: scale(1.15);
+    }
+
+    .voice-page .checkbox-group label {
+      margin: 0;
+      cursor: pointer;
+    }
+
+    .voice-page .form-note {
+      font-size: 0.85rem;
+      color: #666;
+      line-height: 1.4;
+    }
+
+    .voice-page .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 18px;
+    }
+
+    .voice-page .buttons {
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+      margin-top: 8px;
+    }
+
+    .voice-page .btn {
+      flex: 0 0 auto;
+      padding: 12px 16px;
+      border: 1px solid #e5e5e5;
+      border-radius: 8px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      background: #ffffff;
+      color: #333;
+    }
+
+    .voice-page .btn-primary {
+      background: #333;
+      color: #ffffff;
+      border-color: #333;
+    }
+
+    .voice-page .btn-primary:hover {
+      background: #000;
+      border-color: #000;
+    }
+
+    .voice-page .btn-secondary:hover {
+      background: #f5f5f5;
+      border-color: #333;
+    }
+
+    .voice-page .top-notification {
+      position: fixed;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #5352ed;
+      color: #ffffff;
+      padding: 10px 16px;
+      border-radius: 6px;
+      z-index: 10000;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      font-size: 14px;
+    }
+
+    @media (max-width: 720px) {
+      .voice-page .nav-content {
+        padding: 0 16px;
+      }
+
+      .voice-page .settings-container {
+        margin: 16px auto 24px;
+        width: calc(100% - 32px);
+        padding: 24px;
+      }
+
+      .voice-page .buttons {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .voice-page .btn {
+        width: 100%;
+      }
+    }
   </style>
   </head>
   <body class="voice-page">
