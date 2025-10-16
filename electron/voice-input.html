@@ -47,6 +47,11 @@
       gap: 12px;
     }
 
+    .voice-page .nav-right {
+      display: flex;
+      align-items: center;
+    }
+
     .voice-page .back-btn {
       display: inline-flex;
       align-items: center;
@@ -251,11 +256,13 @@
     <div class="nav-bar">
       <div class="nav-content">
         <div class="nav-left">
+          <div class="nav-title" data-i18n="voice.nav.title" id="voiceModalTitle">Voice Input Settings</div>
+        </div>
+        <div class="nav-right">
           <a href="#" class="back-btn" title="Back to Home" data-i18n-title="voice.nav.backTooltip" data-modal-dismiss="voice">
             <span class="back-btn-icon" aria-hidden="true">&#8592;</span>
             <span data-i18n="common.backLink">Back</span>
           </a>
-          <div class="nav-title" data-i18n="voice.nav.title" id="voiceModalTitle">Voice Input Settings</div>
         </div>
       </div>
     </div>

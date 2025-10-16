@@ -42,7 +42,12 @@
         .media-page .nav-left {
             display: flex;
             align-items: center;
-            gap: 15px;
+            gap: 12px;
+        }
+
+        .media-page .nav-right {
+            display: flex;
+            align-items: center;
         }
 
         .media-page .back-btn {
@@ -470,11 +475,13 @@
     <div class="nav-bar">
         <div class="nav-content">
             <div class="nav-left">
+                <div class="nav-title" data-i18n="media.nav.title" id="mediaModalTitle">Media Transcription</div>
+            </div>
+            <div class="nav-right">
                 <a href="#" class="back-btn" title="Back to Home" data-i18n-title="media.nav.backTooltip" data-modal-dismiss="media">
                     <span class="back-btn-icon" aria-hidden="true">&#8592;</span>
                     <span data-i18n="common.backLink">Back</span>
                 </a>
-                <div class="nav-title" data-i18n="media.nav.title" id="mediaModalTitle">Media Transcription</div>
             </div>
         </div>
     </div>

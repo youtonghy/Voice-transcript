@@ -42,7 +42,12 @@
         .nav-left {
             display: flex;
             align-items: center;
-            gap: 15px;
+            gap: 12px;
+        }
+
+        .nav-right {
+            display: flex;
+            align-items: center;
         }
 
         .back-btn {
@@ -502,11 +507,13 @@
     <div class="nav-bar">
         <div class="nav-content">
             <div class="nav-left">
+                <div class="nav-title" data-i18n="settings.nav.title" id="settingsModalTitle">Settings</div>
+            </div>
+            <div class="nav-right">
                 <a href="#" class="back-btn" title="Back to Home" data-i18n-title="settings.nav.backTooltip" data-modal-dismiss="settings">
                     <span class="back-btn-icon" aria-hidden="true">&#8592;</span>
                     <span data-i18n="common.backLink">Back</span>
                 </a>
-                <div class="nav-title" id="settingsModalTitle">Settings</div>
             </div>
         </div>
     </div>
@@ -850,7 +857,5 @@
     <script src="settings.js"></script>
 </body>
 </html>
-
-
 
 
