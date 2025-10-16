@@ -1161,7 +1161,15 @@
             animation: none;
         }
         .record-control .record-icon {
-            font-size: 1.5rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .record-control .record-icon svg {
+            width: 28px;
+            height: 28px;
+            stroke: currentColor;
         }
         .record-control .record-label {
             position: absolute;
@@ -1834,133 +1842,24 @@
 
 
         .history-create-btn {
-
-
-
-
-
-
-
-          width: 32px;
-
-
-
-
-
-
-
-          height: 32px;
-
-
-
-
-
-
-
-          display: inline-flex;
-
-
-
-
-
-
-
-          align-items: center;
-
-
-
-
-
-
-
-          justify-content: center;
-
-
-
-
-
-
-
-          padding: 0;
-
-
-
-
-
-
-
-          border-radius: 6px;
-
-
-
-
-
-
-
-          border: 1px solid #e5e5e5;
-
-
-
-
-
-
-
-          background: #ffffff;
-
-
-
-
-
-
-
-          color: #333;
-
-
-
-
-
-
-
-          cursor: pointer;
-
-
-
-
-
-
-
-          font-size: 1.25rem;
-
-
-
-
-
-
-
-          font-weight: 600;
-
-
-
-
-
-
-
-          line-height: 1;
-
-
-
-
-
-
-
-          transition: all 0.2s ease;
-
-
-
-
-
-
-
+            width: 32px;
+            height: 32px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+            border-radius: 6px;
+            border: 1px solid #e5e5e5;
+            background: #ffffff;
+            color: #333;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .history-create-btn svg {
+            width: 18px;
+            height: 18px;
+            stroke: currentColor;
         }
 
 
@@ -2018,126 +1917,27 @@
 
 
         .history-toggle-btn {
-
-
-
-
-
-
-
-          width: 32px;
-
-
-
-
-
-
-
-          height: 32px;
-
-
-
-
-
-
-
-          display: inline-flex;
-
-
-
-
-
-
-
-          align-items: center;
-
-
-
-
-
-
-
-          justify-content: center;
-
-
-
-
-
-
-
-          padding: 0;
-
-
-
-
-
-
-
-          border-radius: 6px;
-
-
-
-
-
-
-
-          border: 1px solid #e5e5e5;
-
-
-
-
-
-
-
-          background: #ffffff;
-
-
-
-
-
-
-
-          color: #333;
-
-
-
-
-
-
-
-          cursor: pointer;
-
-
-
-
-
-
-
-          font-size: 1rem;
-
-
-
-
-
-
-
-          transition: all 0.2s ease;
-
-
-
-
-
-
-
-          flex-shrink: 0;
-
-
-
-
-
-
-
+            width: 32px;
+            height: 32px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+            border-radius: 6px;
+            border: 1px solid #e5e5e5;
+            background: #ffffff;
+            color: #333;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            flex-shrink: 0;
         }
+
+        .history-toggle-btn svg {
+            width: 18px;
+            height: 18px;
+            stroke: currentColor;
+        }
+
 
 
 
@@ -5929,7 +5729,7 @@
 
 
 
-            font-size: 1rem;
+            font-size: 1.25rem;
 
 
 
@@ -8025,6 +7825,12 @@
 
 
 
+        .summary-btn span svg {
+            width: 20px;
+            height: 20px;
+            stroke: currentColor;
+        }
+
     </style>
 
 
@@ -8241,21 +8047,11 @@
 
 
           <button type="button" class="history-create-btn" id="newConversationButton" aria-label="New Conversation" title="New Conversation" data-i18n-ariaLabel="index.history.newConversation" data-i18n-title="index.history.newConversation">
-
-
-
-
-
-
-
-            <span aria-hidden="true">+</span>
-
-
-
-
-
-
-
+            <span aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <path d="M6 12H12M18 12H12M12 12V6M12 12V18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path>
+              </svg>
+            </span>
           </button>
 
 
@@ -8264,7 +8060,13 @@
 
 
 
-          <button type="button" class="history-toggle-btn" id="toggleHistoryButton" aria-label="Hide History" title="Hide History">&#x2190;</button>
+          <button type="button" class="history-toggle-btn" id="toggleHistoryButton" aria-label="Hide History" title="Hide History">
+            <span aria-hidden="true">
+              <svg class="history-toggle-icon" viewBox="0 0 24 24" fill="none" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <path d="M21 12L3 12M3 12L11.5 3.5M3 12L11.5 20.5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path>
+              </svg>
+            </span>
+          </button>
 
 
 
@@ -8408,7 +8210,7 @@
 
 
 
-            <span class="record-icon" aria-hidden="true">&#x1F3A4;</span>
+            <span class="record-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></rect><path d="M5 10V11C5 14.866 8.13401 18 12 18C15.866 18 19 14.866 19 11V10" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path><path d="M12 18V22M12 22H9M12 22H15" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path></svg></span>
 
 
 
@@ -8480,7 +8282,15 @@
 
 
 
-        <button type="button" id="summaryButton" class="summary-btn" onclick="summarizeConversation()" title="Summarize" aria-label="Summarize" data-i18n-title="index.buttons.summaryTooltip" data-i18n-ariaLabel="index.buttons.summaryTooltip"><span aria-hidden="true">💫</span></button>
+        <button type="button" id="summaryButton" class="summary-btn" onclick="summarizeConversation()" title="Summarize" aria-label="Summarize" data-i18n-title="index.buttons.summaryTooltip" data-i18n-ariaLabel="index.buttons.summaryTooltip">
+          <span aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <path d="M3 21L13 11M18 6L15.5 8.5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path>
+              <path d="M9.5 2L10.4453 4.55468L13 5.5L10.4453 6.44532L9.5 9L8.55468 6.44532L6 5.5L8.55468 4.55468L9.5 2Z" stroke="currentColor" stroke-linejoin="round"></path>
+              <path d="M19 10L19.5402 11.4598L21 12L19.5402 12.5402L19 14L18.4598 12.5402L17 12L18.4598 11.4598L19 10Z" stroke="currentColor" stroke-linejoin="round"></path>
+            </svg>
+          </span>
+        </button>
 
 
 
@@ -8809,4 +8619,3 @@
 
 
 </html>
-

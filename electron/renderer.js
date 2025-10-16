@@ -123,10 +123,14 @@ const SILENCE_PLACEHOLDER_DB = (VOLUME_MIN_DB + VOLUME_MAX_DB) / 2;
 let silenceMarkerDb = null;
 
 const DEFAULT_LANGUAGE = 'en';
-const RECORD_ICON_MIC = String.fromCodePoint(0x1F3A4);
-const RECORD_ICON_STOP = String.fromCodePoint(0x23F9, 0xFE0F);
-const HISTORY_TOGGLE_ICON_EXPANDED = String.fromCodePoint(0x2190);
-const HISTORY_TOGGLE_ICON_COLLAPSED = String.fromCodePoint(0x2192);
+const RECORD_ICON_MIC_IDLE = 'mic-idle';
+const RECORD_ICON_MIC_RECORDING = 'mic-recording';
+const RECORD_ICON_MARKUP = {
+    [RECORD_ICON_MIC_IDLE]: '<svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg"><rect x="9" y="2" width="6" height="12" rx="3" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></rect><path d="M5 10V11C5 14.866 8.13401 18 12 18C15.866 18 19 14.866 19 11V10" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path><path d="M12 18V22M12 22H9M12 22H15" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path></svg>',
+    [RECORD_ICON_MIC_RECORDING]: '<svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg"><rect x="9" y="2" width="6" height="12" rx="3" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></rect><path d="M5 3V5M1 2V6M19 3V5M23 2V6" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path><path d="M5 10V11C5 14.866 8.13401 18 12 18C15.866 18 19 14.866 19 11V10" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path><path d="M12 18V22M12 22H9M12 22H15" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path></svg>'
+};
+const HISTORY_TOGGLE_ICON_EXPANDED = `<svg aria-hidden="true" class="history-toggle-icon" viewBox="0 0 24 24" fill="none" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg"><path d="M21 12L3 12M3 12L11.5 3.5M3 12L11.5 20.5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path></svg>`;
+const HISTORY_TOGGLE_ICON_COLLAPSED = `<svg aria-hidden="true" class="history-toggle-icon" viewBox="0 0 24 24" fill="none" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg"><path d="M3 12L21 12M21 12L12.5 3.5M21 12L12.5 20.5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path></svg>`;
 
 function formatSilenceLabel(db) {
     const template = t('index.volume.silenceRangeLabel');
@@ -211,9 +215,11 @@ function setRecordButtonVisual(icon, labelKey) {
         return;
     }
     if (recordButtonIconEl) {
-        recordButtonIconEl.textContent = icon;
-    } else {
-        recordButton.textContent = icon;
+        const markup = RECORD_ICON_MARKUP[icon] || RECORD_ICON_MARKUP[RECORD_ICON_MIC_IDLE];
+        recordButtonIconEl.innerHTML = markup;
+        recordButtonIconEl.setAttribute('data-icon', icon);
+    } else if (recordButton) {
+        recordButton.innerHTML = RECORD_ICON_MARKUP[icon] || RECORD_ICON_MARKUP[RECORD_ICON_MIC_IDLE];
     }
     if (labelKey && recordButtonLabel) {
         recordButtonLabel.textContent = t(labelKey);
@@ -547,7 +553,7 @@ function updateHistoryToggleUI() {
     const key = historyCollapsed ? 'index.history.show' : 'index.history.hide';
     const label = t(key);
     const icon = historyCollapsed ? HISTORY_TOGGLE_ICON_COLLAPSED : HISTORY_TOGGLE_ICON_EXPANDED;
-    toggleHistoryButton.textContent = icon;
+    toggleHistoryButton.innerHTML = icon;
     toggleHistoryButton.title = label;
     toggleHistoryButton.setAttribute('aria-label', label);
     toggleHistoryButton.setAttribute('aria-expanded', historyCollapsed ? 'false' : 'true');
@@ -2529,7 +2535,7 @@ function updateServiceStatus(status) {
 
     if (status !== 'running') {
         recordButton.disabled = true;
-        setRecordButtonVisual(RECORD_ICON_MIC, 'index.buttons.recordPreparing');
+        setRecordButtonVisual(RECORD_ICON_MIC_IDLE, 'index.buttons.recordPreparing');
         recordButton.title = t('index.recordButton.starting');
         recordButton.setAttribute('aria-label', recordButton.title);
         recordButton.className = 'record-control record-btn start disabled';
@@ -2591,7 +2597,7 @@ async function stopRecording() {
 
 function updateUI() {
     if (isRecording) {
-        setRecordButtonVisual(RECORD_ICON_STOP, 'index.buttons.recordActive');
+        setRecordButtonVisual(RECORD_ICON_MIC_RECORDING, 'index.buttons.recordActive');
         recordButton.title = t('index.tooltips.recordStop');
         recordButton.setAttribute('aria-label', recordButton.title);
         if (isVoiceActive) {
@@ -2606,7 +2612,7 @@ function updateUI() {
             statusText.textContent = t('index.statusText.recording');
         }
     } else {
-        setRecordButtonVisual(RECORD_ICON_MIC, 'index.buttons.recordIdle');
+        setRecordButtonVisual(RECORD_ICON_MIC_IDLE, 'index.buttons.recordIdle');
         recordButton.title = t('index.tooltips.recordStart');
         recordButton.setAttribute('aria-label', recordButton.title);
         recordButton.className = 'record-control record-btn start';
@@ -4042,7 +4048,6 @@ function openKeyboardSettings() {
 }
 
 window.copyLastResult = copyLastResult;
-
 
 
 
