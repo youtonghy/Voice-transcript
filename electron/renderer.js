@@ -118,6 +118,8 @@ const activeConversationNameEl = document.getElementById('activeConversationName
 const historySearchInput = document.getElementById('historySearchInput');
 
 const toggleHistoryButton = document.getElementById('toggleHistoryButton');
+const toggleHistoryButtonIcon = toggleHistoryButton ? toggleHistoryButton.querySelector('.history-action-icon') : null;
+const toggleHistoryButtonLabel = toggleHistoryButton ? toggleHistoryButton.querySelector('.history-action-label') : null;
 const summaryButton = document.getElementById('summaryButton');
 
 const VOLUME_MIN_DB = -60;
@@ -257,12 +259,10 @@ function ensureRecordVisualizerAnimation() {
                 needsContinue = true;
             }
             recordVisualizerValues[i] = Math.max(0, Math.min(1, nextValue));
-            const baseHeight = 14;
-            const amplitude = 46;
-            const height = baseHeight + recordVisualizerValues[i] * amplitude;
-            bar.style.height = `${height}px`;
-            const translate = 32 - height / 2;
-            bar.style.transform = `translateY(${translate}px)`;
+            const baseScale = 0.25;
+            const amplitude = 3.25;
+            const scale = baseScale + recordVisualizerValues[i] * amplitude;
+            bar.style.transform = `scaleY(${scale})`;
         }
         if (needsContinue || recordVisualizerIsActive) {
             recordVisualizerAnimationFrame = window.requestAnimationFrame(step);
@@ -756,7 +756,12 @@ function updateHistoryToggleUI() {
     const key = historyCollapsed ? 'index.history.show' : 'index.history.hide';
     const label = t(key);
     const icon = historyCollapsed ? HISTORY_TOGGLE_ICON_COLLAPSED : HISTORY_TOGGLE_ICON_EXPANDED;
-    toggleHistoryButton.innerHTML = icon;
+    if (toggleHistoryButtonIcon) {
+        toggleHistoryButtonIcon.innerHTML = icon;
+    }
+    if (toggleHistoryButtonLabel) {
+        toggleHistoryButtonLabel.textContent = label;
+    }
     toggleHistoryButton.title = label;
     toggleHistoryButton.setAttribute('aria-label', label);
     toggleHistoryButton.setAttribute('aria-expanded', historyCollapsed ? 'false' : 'true');
@@ -4263,7 +4268,3 @@ function openKeyboardSettings() {
 }
 
 window.copyLastResult = copyLastResult;
-
-
-
-

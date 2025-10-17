@@ -299,52 +299,53 @@
           border-color: #333;
           box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.06);
         }
-        .history-create-btn {
-            width: 32px;
-            height: 32px;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            padding: 0;
-            border-radius: 6px;
-            border: 1px solid #e5e5e5;
-            background: #ffffff;
-            color: #333;
-            cursor: pointer;
-            transition: all 0.2s ease;
-        }
-        .history-create-btn svg {
-            width: 18px;
-            height: 18px;
-            stroke: currentColor;
-        }
-        .history-create-btn:hover {
-          background: #f1f3f5;
-          border-color: #333;
-        }
+        .history-create-btn,
         .history-toggle-btn {
-            width: 32px;
-            height: 32px;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            padding: 0;
-            border-radius: 6px;
-            border: 1px solid #e5e5e5;
-            background: #ffffff;
-            color: #333;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            flex-shrink: 0;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+          padding: 0 12px;
+          height: 34px;
+          border-radius: 8px;
+          border: 1px solid #e0e5ef;
+          background: #ffffff;
+          color: #333;
+          font-size: 0.82rem;
+          font-weight: 500;
+          line-height: 1;
+          cursor: pointer;
+          transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+          box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+          flex-shrink: 0;
         }
+        .history-create-btn .history-action-icon,
+        .history-toggle-btn .history-action-icon {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .history-create-btn svg,
         .history-toggle-btn svg {
-            width: 18px;
-            height: 18px;
-            stroke: currentColor;
+          width: 18px;
+          height: 18px;
+          stroke: currentColor;
         }
+        .history-create-btn .history-action-label,
+        .history-toggle-btn .history-action-label {
+          white-space: nowrap;
+        }
+        .history-create-btn:hover,
         .history-toggle-btn:hover {
           background: #f1f3f5;
           border-color: #333;
+          box-shadow: 0 4px 14px rgba(17, 24, 39, 0.12);
+        }
+        .history-create-btn:focus-visible,
+        .history-toggle-btn:focus-visible {
+          outline: none;
+          box-shadow: 0 0 0 2px rgba(76, 110, 245, 0.25);
+          border-color: #4c6ef5;
         }
         .history-list {
           margin-top: 18px;
@@ -360,6 +361,14 @@
           min-width: 54px;
           padding: 16px 10px;
           align-items: center;
+        }
+        .main-content.history-collapsed .history-toggle-btn {
+          width: 36px;
+          padding: 0;
+          gap: 0;
+        }
+        .main-content.history-collapsed .history-toggle-btn .history-action-label {
+          display: none;
         }
         .main-content.history-collapsed .history-header {
           flex-direction: column;
@@ -684,14 +693,14 @@
         .record-visualizer-card {
             position: relative;
             display: flex;
-            align-items: flex-end;
+            align-items: center;
             justify-content: center;
-            padding: 12px 14px;
-            height: 62px;
-            border-radius: 14px;
-            background: linear-gradient(135deg, #1f2937, #111827);
-            border: 1px solid rgba(255, 255, 255, 0.05);
-            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03), 0 12px 24px rgba(15, 23, 42, 0.28);
+            padding: 14px 20px;
+            height: 76px;
+            border-radius: 16px;
+            background: #ffffff;
+            border: 1px solid #dfe4ee;
+            box-shadow: 0 14px 32px rgba(15, 23, 42, 0.12);
             overflow: hidden;
         }
         .record-visualizer-card::before {
@@ -701,7 +710,7 @@
             right: 14px;
             top: 50%;
             height: 1px;
-            background: repeating-linear-gradient(90deg, rgba(148, 163, 184, 0.25) 0, rgba(148, 163, 184, 0.25) 3px, transparent 3px, transparent 8px);
+            background: repeating-linear-gradient(90deg, rgba(148, 163, 184, 0.5) 0, rgba(148, 163, 184, 0.5) 2px, transparent 2px, transparent 8px);
             transform: translateY(-50%);
         }
         .record-visualizer-wave {
@@ -709,20 +718,24 @@
             width: 100%;
             height: 100%;
             display: flex;
-            align-items: flex-end;
-            gap: 4px;
+            align-items: center;
+            gap: 3px;
         }
         .record-visualizer-wave .wave-bar {
             flex: 1;
-            max-width: 6px;
+            max-width: 5px;
             border-radius: 999px;
-            background: linear-gradient(180deg, rgba(255, 255, 255, 0.85), rgba(209, 213, 219, 0.25));
-            height: 14px;
-            transform: translateY(18px);
-            transition: transform 0.12s ease, height 0.12s ease, background 0.2s ease;
+            background: linear-gradient(180deg, rgba(59, 130, 246, 0.85), rgba(14, 116, 144, 0.45));
+            height: 6px;
+            transform: scaleY(0.25);
+            transform-origin: center;
+            transition: transform 0.14s ease, background 0.2s ease, box-shadow 0.2s ease;
+            box-shadow: 0 8px 20px rgba(37, 99, 235, 0.18);
+            will-change: transform;
         }
         .record-visualizer-wave .wave-bar.marker {
-            background: linear-gradient(180deg, #f97316, rgba(249, 115, 22, 0.2));
+            background: linear-gradient(180deg, #f97316, rgba(249, 115, 22, 0.45));
+            box-shadow: 0 10px 24px rgba(249, 115, 22, 0.22);
         }
         .record-visualizer-meta {
             display: flex;
@@ -1122,18 +1135,20 @@
         <h2 data-i18n="index.history.title">History</h2>
         <div class="history-actions">
           <button type="button" class="history-create-btn" id="newConversationButton" aria-label="New Conversation" title="New Conversation" data-i18n-ariaLabel="index.history.newConversation" data-i18n-title="index.history.newConversation">
-            <span aria-hidden="true">
+            <span class="history-action-icon" aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
                 <path d="M6 12H12M18 12H12M12 12V6M12 12V18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path>
               </svg>
             </span>
+            <span class="history-action-label" data-i18n="index.history.newConversation">New Conversation</span>
           </button>
           <button type="button" class="history-toggle-btn" id="toggleHistoryButton" aria-label="Hide History" title="Hide History">
-            <span aria-hidden="true">
+            <span class="history-action-icon" aria-hidden="true">
               <svg class="history-toggle-icon" viewBox="0 0 24 24" fill="none" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
                 <path d="M21 12L3 12M3 12L11.5 3.5M3 12L11.5 20.5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path>
               </svg>
             </span>
+            <span class="history-action-label">Hide History</span>
           </button>
         </div>
       </div>
