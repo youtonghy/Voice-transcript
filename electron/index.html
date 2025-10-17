@@ -1,1121 +1,130 @@
 ﻿<!DOCTYPE html>
-
-
-
-
-
-
-
 <html lang="en">
-
-
-
-
-
-
-
 <head>
-
-
-
-
-
-
-
     <meta charset="UTF-8">
-
-
-
-
-
-
-
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-
-
-
-
-
-
     <title data-i18n="index.title">Voice Transcript Studio</title>
-
-
-
-
-
-
-
     <style>
-
-
-
-
-
-
-
         * {
-
-
-
-
-
-
-
             box-sizing: border-box;
-
-
-
-
-
-
-
             margin: 0;
-
-
-
-
-
-
-
             padding: 0;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         :root {
-
-
-
-
-
-
-
             --titlebar-height: 40px;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         body {
-
-
-
-
-
-
-
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Apple Color Emoji', 'Noto Color Emoji', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'Helvetica Neue', Helvetica, Arial, sans-serif;
-
-
-
-
-
-
-
             background: #ffffff;
-
-
-
-
-
-
-
             margin: 0;
-
-
-
-
-
-
-
             padding: 0;
-
-
-
-
-
-
-
             height: 100vh;
-
-
-
-
-
-
-
             overflow: hidden;
-
-
-
-
-
-
-
             color: #333;
-
-
-
-
-
-
-
             padding-top: var(--titlebar-height);
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .title-bar {
-
-
-
-
-
-
-
             position: fixed;
-
-
-
-
-
-
-
             top: 0;
-
-
-
-
-
-
-
             left: 0;
-
-
-
-
-
-
-
             right: 0;
-
-
-
-
-
-
-
             height: var(--titlebar-height);
-
-
-
-
-
-
-
             display: flex;
-
-
-
-
-
-
-
             align-items: center;
-
-
-
-
-
-
-
             justify-content: space-between;
-
-
-
-
-
-
-
             padding: 0 12px;
-
-
-
-
-
-
-
             background: transparent;
-
-
-
-
-
-
-
             border-bottom: none;
-
-
-
-
-
-
-
             -webkit-app-region: drag;
-
-
-
-
-
-
-
             z-index: 1200;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .title-bar-title {
-
-
-
-
-
-
-
             display: flex;
-
-
-
-
-
-
-
             align-items: center;
-
-
-
-
-
-
-
             gap: 8px;
-
-
-
-
-
-
-
             font-size: 0.95rem;
-
-
-
-
-
-
-
             font-weight: 500;
-
-
-
-
-
-
-
             color: #2f3645;
-
-
-
-
-
-
-
             pointer-events: none;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .title-bar-buttons {
-
-
-
-
-
-
-
             display: flex;
-
-
-
-
-
-
-
             align-items: center;
-
-
-
-
-
-
-
             gap: 8px;
-
-
-
-
-
-
-
             -webkit-app-region: no-drag;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .title-bar-button {
-
-
-
-
-
-
-
             width: 36px;
-
-
-
-
-
-
-
             height: 28px;
-
-
-
-
-
-
-
             border: none;
-
-
-
-
-
-
-
             background: transparent;
-
-
-
-
-
-
-
             cursor: pointer;
-
-
-
-
-
-
-
             display: inline-flex;
-
-
-
-
-
-
-
             align-items: center;
-
-
-
-
-
-
-
             justify-content: center;
-
-
-
-
-
-
-
             position: relative;
-
-
-
-
-
-
-
             padding: 0;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .title-bar-button::before {
-
-
-
-
-
-
-
             content: '';
-
-
-
-
-
-
-
             display: block;
-
-
-
-
-
-
-
             width: 16px;
-
-
-
-
-
-
-
             height: 16px;
-
-
-
-
-
-
-
             transition: transform 0.2s ease, filter 0.2s ease;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .title-bar-button:hover::before {
-
-
-
-
-
-
-
             transform: scale(1.08);
-
-
-
-
-
-
-
             filter: brightness(1.05);
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .title-bar-button:active::before {
-
-
-
-
-
-
-
             transform: scale(0.95);
-
-
-
-
-
-
-
             filter: brightness(0.9);
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .title-bar-button.minimize::before {
-
-
-
-
-
-
-
             background: #34c759;
-
-
-
-
-
-
-
             border-radius: 9999px;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .title-bar-button.maximize::before {
-
-
-
-
-
-
-
             background: #2563eb;
-
-
-
-
-
-
-
             border-radius: 4px;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .title-bar-button.maximize.is-maximized::before {
-
-
-
-
-
-
-
             box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.65);
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .title-bar-button.close::before {
-
-
-
-
-
-
-
             background: #ef4444;
-
-
-
-
-
-
-
             -webkit-clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
-
-
-
-
-
-
-
             clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .log-header-actions {
-
-
-
-
-
-
-
             display: flex;
-
-
-
-
-
-
-
             align-items: center;
-
-
-
-
-
-
-
             gap: 12px;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .control-bar-btn {
-
-
-
-
-
-
-
             width: 45px;
-
-
-
-
-
-
-
             height: 45px;
-
-
-
-
-
-
-
             font-size: 1.6rem;
-
-
-
-
-
-
-
             cursor: pointer;
-
-
-
-
-
-
-
             transition: color 0.2s ease, transform 0.2s ease;
-
-
-
-
-
-
-
             display: flex;
-
-
-
-
-
-
-
             align-items: center;
-
-
-
-
-
-
-
             justify-content: center;
-
-
-
-
-
-
-
             position: relative;
-
-
-
-
-
-
-
             background: transparent;
-
-
-
-
-
-
-
             border: none;
-
-
-
-
-
-
-
             border-radius: 0;
-
-
-
-
-
-
-
             color: #666;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .control-bar-btn svg {
             width: 26px;
             height: 26px;
             stroke: currentColor;
         }
-
         .control-bar-btn:hover {
-
-
-
-
-
-
-
             color: #111;
-
-
-
-
-
-
-
             transform: translateY(-1px);
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
                 .record-control {
             display: inline-flex;
             align-items: center;
@@ -1165,7 +174,6 @@
             align-items: center;
             justify-content: center;
         }
-
         .record-control .record-icon svg {
             width: 28px;
             height: 28px;
@@ -1183,24 +191,8 @@
             white-space: nowrap;
             border: 0;
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .settings-btn, .media-btn, .keyboard-btn { color: #666; }
         .settings-btn:hover, .media-btn:hover, .keyboard-btn:hover { color: #111; }
-
         .modal-overlay {
             position: fixed;
             inset: 0;
@@ -1214,12 +206,10 @@
             pointer-events: none;
             transition: opacity 0.2s ease;
         }
-
         .modal-overlay.active {
             opacity: 1;
             pointer-events: auto;
         }
-
         .modal-dialog {
             width: min(1100px, 100%);
             max-height: 100%;
@@ -1229,7 +219,6 @@
             overflow: hidden;
             background: transparent;
         }
-
         .modal-scroll {
             background: #ffffff;
             border-radius: 16px;
@@ -1238,610 +227,78 @@
             max-height: 100%;
             position: relative;
         }
-
         .modal-scroll::-webkit-scrollbar {
             width: 10px;
         }
-
         .modal-scroll::-webkit-scrollbar-thumb {
             background: rgba(0, 0, 0, 0.18);
             border-radius: 999px;
         }
-
         body.modal-open {
             overflow: hidden;
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        
-
-
-
-
-
-
-
         @keyframes record-gradient-flow {
-
-
-
-
-
-
-
             0% { background-position: 0% 50%; }
-
-
-
-
-
-
-
             50% { background-position: 100% 50%; }
-
-
-
-
-
-
-
             100% { background-position: 0% 50%; }
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .main-content {
-
-
-
-
-
-
-
           --volume-offset: 72px;
-
-
-
-
-
-
-
           display: flex;
-
-
-
-
-
-
-
           gap: 16px;
-
-
-
-
-
-
-
           align-items: stretch;
-
-
-
-
-
-
-
           padding-top: 16px;
-
-
-
-
-
-
-
           padding-right: 88px;
-
-
-
-
-
-
-
           padding-bottom: var(--volume-offset);
-
-
-
-
-
-
-
           padding-left: 16px;
-
-
-
-
-
-
-
           transition: padding-bottom 0.25s ease;
-
-
-
-
-
-
-
           height: calc(100vh - var(--titlebar-height));
-
-
-
-
-
-
-
           overflow: hidden;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .history-panel {
-
-
-
-
-
-
-
           flex: 0 0 260px;
-
-
-
-
-
-
-
           min-width: 220px;
-
-
-
-
-
-
-
           display: flex;
-
-
-
-
-
-
-
           flex-direction: column;
-
-
-
-
-
-
-
           background: #f8f9fb;
-
-
-
-
-
-
-
           border-right: 1px solid #e0e5ef;
-
-
-
-
-
-
-
           border-radius: 0 12px 12px 0;
-
-
-
-
-
-
-
           padding: 20px 18px 20px 16px;
-
-
-
-
-
-
-
           height: calc(100vh - var(--titlebar-height) - var(--volume-offset) - 32px);
-
-
-
-
-
-
-
           overflow: hidden;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .history-header {
-
-
-
-
-
-
-
           display: flex;
-
-
-
-
-
-
-
           align-items: center;
-
-
-
-
-
-
-
           justify-content: space-between;
-
-
-
-
-
-
-
           gap: 8px;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .history-header h2 {
-
-
-
-
-
-
-
           font-size: 1.1rem;
-
-
-
-
-
-
-
           font-weight: 600;
-
-
-
-
-
-
-
           color: #333;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .history-actions {
-
-
-
-
-
-
-
           display: flex;
-
-
-
-
-
-
-
           align-items: center;
-
-
-
-
-
-
-
           gap: 8px;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .history-search {
-
-
-
-
-
-
-
           margin-top: 12px;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .history-search input {
-
-
-
-
-
-
-
           width: 100%;
-
-
-
-
-
-
-
           padding: 8px 12px;
-
-
-
-
-
-
-
           border: 1px solid #e5e5e5;
-
-
-
-
-
-
-
           border-radius: 6px;
-
-
-
-
-
-
-
           font-size: 0.85rem;
-
-
-
-
-
-
-
           transition: border-color 0.2s ease, box-shadow 0.2s ease;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .history-search input:focus {
-
-
-
-
-
-
-
           outline: none;
-
-
-
-
-
-
-
           border-color: #333;
-
-
-
-
-
-
-
           box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.06);
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .history-create-btn {
             width: 32px;
             height: 32px;
@@ -1856,67 +313,15 @@
             cursor: pointer;
             transition: all 0.2s ease;
         }
-
         .history-create-btn svg {
             width: 18px;
             height: 18px;
             stroke: currentColor;
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .history-create-btn:hover {
-
-
-
-
-
-
-
           background: #f1f3f5;
-
-
-
-
-
-
-
           border-color: #333;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .history-toggle-btn {
             width: 32px;
             height: 32px;
@@ -1932,4705 +337,601 @@
             transition: all 0.2s ease;
             flex-shrink: 0;
         }
-
         .history-toggle-btn svg {
             width: 18px;
             height: 18px;
             stroke: currentColor;
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .history-toggle-btn:hover {
-
-
-
-
-
-
-
           background: #f1f3f5;
-
-
-
-
-
-
-
           border-color: #333;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .history-list {
-
-
-
-
-
-
-
           margin-top: 18px;
-
-
-
-
-
-
-
           flex: 1;
-
-
-
-
-
-
-
           overflow-y: auto;
-
-
-
-
-
-
-
           display: flex;
-
-
-
-
-
-
-
           flex-direction: column;
-
-
-
-
-
-
-
           gap: 12px;
-
-
-
-
-
-
-
           padding-right: 6px;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
         .main-content.history-collapsed .history-panel {
-
-
-
-
-
-
-
           flex: 0 0 54px;
-
-
-
-
-
-
-
           min-width: 54px;
-
-
-
-
-
-
-
           padding: 16px 10px;
-
-
-
-
-
-
-
           align-items: center;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .main-content.history-collapsed .history-header {
-
-
-
-
-
-
-
           flex-direction: column;
-
-
-
-
-
-
-
           align-items: center;
-
-
-
-
-
-
-
           gap: 12px;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .main-content.history-collapsed .history-header h2,
-
-
-
-
-
-
-
         .main-content.history-collapsed .history-actions .history-create-btn,
-
-
-
-
-
-
-
         .main-content.history-collapsed .history-search,
-
-
-
-
-
-
-
         .main-content.history-collapsed .history-list {
-
-
-
-
-
-
-
           display: none;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .main-content.history-collapsed .history-actions {
-
-
-
-
-
-
-
           flex-direction: column;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        
-
-
-
-
-
-
-
         .history-item {
-
-
-
-
-
-
-
           display: flex;
-
-
-
-
-
-
-
           align-items: center;
-
-
-
-
-
-
-
           gap: 12px;
-
-
-
-
-
-
-
           padding: 12px 14px;
-
-
-
-
-
-
-
           border-radius: 10px;
-
-
-
-
-
-
-
           border: 1px solid transparent;
-
-
-
-
-
-
-
           background: #eef2f7;
-
-
-
-
-
-
-
           cursor: pointer;
-
-
-
-
-
-
-
           font-size: 0.88rem;
-
-
-
-
-
-
-
           transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
-
-
-
-
-
-
-
           text-align: left;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .history-item:hover {
-
-
-
-
-
-
-
           background: #e4e9f3;
-
-
-
-
-
-
-
           border-color: #d0d7e7;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .history-item:focus {
-
-
-
-
-
-
-
           outline: none;
-
-
-
-
-
-
-
           border-color: #4c6ef5;
-
-
-
-
-
-
-
           box-shadow: 0 0 0 1px rgba(76, 110, 245, 0.25);
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .history-item.active {
-
-
-
-
-
-
-
           border-color: #4c6ef5;
-
-
-
-
-
-
-
           background: #dfe6f8;
-
-
-
-
-
-
-
           box-shadow: 0 0 0 1px rgba(76, 110, 245, 0.2);
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .history-item.active:hover {
-
-
-
-
-
-
-
           background: #dae2f6;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .history-item.pinned {
-
-
-
-
-
-
-
           border-color: #f59e0b;
-
-
-
-
-
-
-
           background: #fff3e0;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .history-item.pinned:hover {
-
-
-
-
-
-
-
           background: #ffe8c7;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .history-item-header {
-
-
-
-
-
-
-
           display: flex;
-
-
-
-
-
-
-
           align-items: center;
-
-
-
-
-
-
-
           gap: 8px;
-
-
-
-
-
-
-
           flex: 1;
-
-
-
-
-
-
-
           min-width: 0;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .history-name {
-
-
-
-
-
-
-
           font-weight: 600;
-
-
-
-
-
-
-
           color: #1f2937;
-
-
-
-
-
-
-
           flex: 1;
-
-
-
-
-
-
-
           min-width: 0;
-
-
-
-
-
-
-
           overflow: hidden;
-
-
-
-
-
-
-
           text-overflow: ellipsis;
-
-
-
-
-
-
-
           white-space: nowrap;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .history-detail {
-
-
-
-
-
-
-
           margin-left: auto;
-
-
-
-
-
-
-
           font-size: 0.75rem;
-
-
-
-
-
-
-
           color: #6b7280;
-
-
-
-
-
-
-
           white-space: nowrap;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .history-item.pinned .history-name {
-
-
-
-
-
-
-
           color: #b45309;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .history-pin {
-
-
-
-
-
-
-
           font-size: 0.9rem;
-
-
-
-
-
-
-
           color: #b45309;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .history-date-divider {
-
-
-
-
-
-
-
           display: flex;
-
-
-
-
-
-
-
           align-items: center;
-
-
-
-
-
-
-
           gap: 12px;
-
-
-
-
-
-
-
           font-size: 0.75rem;
-
-
-
-
-
-
-
           color: #8b94a7;
-
-
-
-
-
-
-
           margin: 6px 0 2px;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .history-date-divider::before,
-
-
-
-
-
-
-
         .history-date-divider::after {
-
-
-
-
-
-
-
           content: '';
-
-
-
-
-
-
-
           flex: 1;
-
-
-
-
-
-
-
           height: 1px;
-
-
-
-
-
-
-
           background: #d5dae5;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .history-date-divider::before {
-
-
-
-
-
-
-
           margin-right: 4px;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .history-date-divider::after {
-
-
-
-
-
-
-
           margin-left: 4px;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .history-date-label {
-
-
-
-
-
-
-
           white-space: nowrap;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .history-empty {
-
-
-
-
-
-
-
           font-size: 0.85rem;
-
-
-
-
-
-
-
           color: #888;
-
-
-
-
-
-
-
           margin-top: 32px;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        
-
-
-
-
-
-
-
         .right-sidebar {
-
-
-
-
-
-
-
           position: fixed;
-
-
-
-
-
-
-
           top: calc(var(--titlebar-height) + 16px);
-
-
-
-
-
-
-
           right: 0;
-
-
-
-
-
-
-
           bottom: 0;
-
-
-
-
-
-
-
           width: 72px;
-
-
-
-
-
-
-
           background: #ffffff;
-
-
-
-
-
-
-
           border-left: 1px solid #e5e5e5;
-
-
-
-
-
-
-
           display: flex;
-
-
-
-
-
-
-
           flex-direction: column;
-
-
-
-
-
-
-
           align-items: center;
-
-
-
-
-
-
-
           gap: 12px;
-
-
-
-
-
-
-
           padding: 12px 12px;
-
-
-
-
-
-
-
           box-shadow: 0 0 0 rgba(0,0,0,0);
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        
-
-
-
-
-
-
-
         .volume-panel {
-
-
-
-
-
-
-
           position: fixed;
-
-
-
-
-
-
-
           left: 0;
-
-
-
-
-
-
-
           right: 0;
-
-
-
-
-
-
-
           bottom: 0;
-
-
-
-
-
-
-
           background: #ffffff;
-
-
-
-
-
-
-
           border-top: 1px solid #e5e5e5;
-
-
-
-
-
-
-
           box-shadow: 0 -1px 3px rgba(0, 0, 0, 0.05);
-
-
-
-
-
-
-
           padding: 14px 24px;
-
-
-
-
-
-
-
           display: flex;
-
-
-
-
-
-
-
           flex-direction: column;
-
-
-
-
-
-
-
           gap: 10px;
-
-
-
-
-
-
-
           z-index: 900;
-
-
-
-
-
-
-
           transition: transform 0.2s ease, padding 0.2s ease, max-height 0.25s ease;
-
-
-
-
-
-
-
           max-height: 260px;
-
-
-
-
-
-
-
           overflow: hidden;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .volume-panel.collapsed {
-
-
-
-
-
-
-
           padding-top: 12px;
-
-
-
-
-
-
-
           padding-bottom: 12px;
-
-
-
-
-
-
-
           gap: 0;
-
-
-
-
-
-
-
           max-height: 64px;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .volume-panel.collapsed .volume-header {
-
-
-
-
-
-
-
           margin-bottom: 0;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .volume-panel.collapsed .volume-body {
-
-
-
-
-
-
-
           display: none;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .volume-panel.expanded {
-
-
-
-
-
-
-
           box-shadow: 0 -6px 18px rgba(0, 0, 0, 0.12);
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .volume-body {
-
-
-
-
-
-
-
           display: flex;
-
-
-
-
-
-
-
           flex-direction: column;
-
-
-
-
-
-
-
           gap: 10px;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .volume-header {
-
-
-
-
-
-
-
           display: flex;
-
-
-
-
-
-
-
           justify-content: space-between;
-
-
-
-
-
-
-
           align-items: center;
-
-
-
-
-
-
-
           font-size: 0.9rem;
-
-
-
-
-
-
-
           color: #555;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .volume-title {
-
-
-
-
-
-
-
           display: flex;
-
-
-
-
-
-
-
           flex-direction: column;
-
-
-
-
-
-
-
           gap: 2px;
-
-
-
-
-
-
-
           line-height: 1.2;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .volume-header span:first-child {
-
-
-
-
-
-
-
           font-weight: 600;
-
-
-
-
-
-
-
           color: #333;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .volume-toggle-btn {
-
-
-
-
-
-
-
           border: 1px solid #d8d8d8;
-
-
-
-
-
-
-
           background: #f7f7f7;
-
-
-
-
-
-
-
           color: #555;
-
-
-
-
-
-
-
           font-size: 0.8rem;
-
-
-
-
-
-
-
           border-radius: 16px;
-
-
-
-
-
-
-
           padding: 4px 12px;
-
-
-
-
-
-
-
           cursor: pointer;
-
-
-
-
-
-
-
           display: inline-flex;
-
-
-
-
-
-
-
           align-items: center;
-
-
-
-
-
-
-
           justify-content: center;
-
-
-
-
-
-
-
           transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .volume-toggle-icon {
             display: inline-flex;
             align-items: center;
             justify-content: center;
         }
-
         .volume-toggle-icon svg {
             width: 18px;
             height: 18px;
             stroke: currentColor;
             transition: transform 0.2s ease;
         }
-
         .volume-toggle-btn:hover {
-
-
-
-
-
-
-
           background: #ececec;
-
-
-
-
-
-
-
           color: #333;
-
-
-
-
-
-
-
           border-color: #c8c8c8;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .volume-toggle-btn:focus-visible {
-
-
-
-
-
-
-
           outline: 2px solid #1976d2;
-
-
-
-
-
-
-
           outline-offset: 2px;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .volume-bar-wrapper {
-
-
-
-
-
-
-
           display: flex;
-
-
-
-
-
-
-
           flex-direction: column;
-
-
-
-
-
-
-
           gap: 6px;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .volume-scale {
-
-
-
-
-
-
-
           display: flex;
-
-
-
-
-
-
-
           justify-content: space-between;
-
-
-
-
-
-
-
           font-size: 0.72rem;
-
-
-
-
-
-
-
           color: #999;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .volume-bar {
-
-
-
-
-
-
-
           position: relative;
-
-
-
-
-
-
-
           height: 18px;
-
-
-
-
-
-
-
           border-radius: 9px;
-
-
-
-
-
-
-
           border: 1px solid #d8d8d8;
-
-
-
-
-
-
-
           background: linear-gradient(90deg, #e8f5e9 0%, #fffde7 50%, #ffebee 100%);
-
-
-
-
-
-
-
           overflow: hidden;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .volume-silence {
-
-
-
-
-
-
-
           position: absolute;
-
-
-
-
-
-
-
           top: 0;
-
-
-
-
-
-
-
           bottom: 0;
-
-
-
-
-
-
-
           left: 0;
-
-
-
-
-
-
-
           background: rgba(158, 158, 158, 0.18);
-
-
-
-
-
-
-
           display: flex;
-
-
-
-
-
-
-
           align-items: center;
-
-
-
-
-
-
-
           justify-content: flex-start;
-
-
-
-
-
-
-
           padding-left: 8px;
-
-
-
-
-
-
-
           font-size: 0.7rem;
-
-
-
-
-
-
-
           color: #666;
-
-
-
-
-
-
-
           pointer-events: none;
-
-
-
-
-
-
-
           transition: width 0.1s ease-out;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .volume-level {
-
-
-
-
-
-
-
           position: absolute;
-
-
-
-
-
-
-
           top: 0;
-
-
-
-
-
-
-
           bottom: 0;
-
-
-
-
-
-
-
           left: 0;
-
-
-
-
-
-
-
           width: 0%;
-
-
-
-
-
-
-
           border-radius: 9px;
-
-
-
-
-
-
-
           transition: width 0.08s ease-out, background-color 0.08s ease-out;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .volume-level.low {
-
-
-
-
-
-
-
           background-color: #4caf50;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .volume-level.medium {
-
-
-
-
-
-
-
           background-color: #ffb300;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .volume-level.high {
-
-
-
-
-
-
-
           background-color: #f44336;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .volume-level.idle {
-
-
-
-
-
-
-
           background-color: #bdbdbd;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .volume-values {
-
-
-
-
-
-
-
           display: flex;
-
-
-
-
-
-
-
           gap: 16px;
-
-
-
-
-
-
-
           font-size: 0.85rem;
-
-
-
-
-
-
-
           color: #555;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .volume-panel.inactive .volume-level {
-
-
-
-
-
-
-
           background-color: #bdbdbd;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .volume-panel.inactive .volume-header span:last-child {
-
-
-
-
-
-
-
           color: #999;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        
-
-
-
-
-
-
-
         .right-sidebar .control-bar-btn {
-
-
-
-
-
-
-
           width: 45px;
-
-
-
-
-
-
-
           height: 45px;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .log-panel {
-
-
-
-
-
-
-
             flex: 1;
-
-
-
-
-
-
-
             min-width: 0;
-
-
-
-
-
-
-
             height: calc(100vh - var(--titlebar-height) - var(--volume-offset) - 32px);
-
-
-
-
-
-
-
             background: white;
-
-
-
-
-
-
-
             padding: 20px 24px;
-
-
-
-
-
-
-
             display: flex;
-
-
-
-
-
-
-
             flex-direction: column;
-
-
-
-
-
-
-
             box-sizing: border-box;
-
-
-
-
-
-
-
             overflow: hidden;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
         .log-header {
-
-
-
-
-
-
-
             display: flex;
-
-
-
-
-
-
-
             align-items: center;
-
-
-
-
-
-
-
             justify-content: space-between;
-
-
-
-
-
-
-
             gap: 12px;
-
-
-
-
-
-
-
             margin-bottom: 12px;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .log-header-info {
-
-
-
-
-
-
-
             display: flex;
-
-
-
-
-
-
-
             flex-direction: column;
-
-
-
-
-
-
-
             gap: 4px;
-
-
-
-
-
-
-
             min-width: 0;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        .active-conversation-name {
-
-
-
-
-
-
-
-            font-size: 0.85rem;
-
-
-
-
-
-
-
-            color: #666;
-
-
-
-
-
-
-
-            white-space: nowrap;
-
-
-
-
-
-
-
-            text-overflow: ellipsis;
-
-
-
-
-
-
-
-            overflow: hidden;
-
-
-
-
-
-
-
-        }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        .log-panel h2 {
-
-
-
-
-
-
-
-            color: #333;
-
-
-
-
-
-
-
-            margin: 0;
-
-
-
-
-
-
-
-            font-weight: 600;
-
-
-
-
-
-
-
-            font-size: 1.2rem;
-
-
-
-
-
-
-
-        }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        .log-container {
-
-
-
-
-
-
-
+        .record-visualizer {
             flex: 1;
-
-
-
-
-
-
-
-            background: #ffffff;
-
-
-
-
-
-
-
-            border: 1px solid #e5e5e5;
-
-
-
-
-
-
-
-            border-radius: 8px;
-
-
-
-
-
-
-
-            padding: 15px;
-
-
-
-
-
-
-
-            overflow-y: auto;
-
-
-
-
-
-
-
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-
-
-
-
-
-
-
-            font-size: 0.9rem;
-
-
-
-
-
-
-
-            line-height: 1.4;
-
-
-
-
-
-
-
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            min-width: 220px;
+            transition: opacity 0.25s ease, transform 0.25s ease;
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        .log-entry {
-
-
-
-
-
-
-
-            margin-bottom: 6px;
-
-
-
-
-
-
-
-            padding: 8px 14px;
-
-
-
-
-
-
-
-            border-radius: 16px;
-
-
-
-
-
-
-
-            background: #f8f9fa;
-
-
-
-
-
-
-
-            color: #333;
-
-
-
-
-
-
-
-            border: 1px solid #e5e5e5;
-
-
-
-
-
-
-
-            display: block;
-
-
-
-
-
-
-
+        .record-visualizer.idle {
+            opacity: 0.72;
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        .log-entry .recording-meta {
-
-
-
-
-
-
-
-            display: none;
-
-
-
-
-
-
-
-            margin-top: 6px;
-
-
-
-
-
-
-
-            font-size: 0.75rem;
-
-
-
-
-
-
-
-            color: #f5deb3;
-
-
-
-
-
-
-
+        .record-visualizer.recording {
+            opacity: 1;
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        .log-entry:hover .recording-meta {
-
-
-
-
-
-
-
-            display: block;
-
-
-
-
-
-
-
-        }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        
-
-
-
-
-
-
-
-        .result-entry {
-
-
-
-
-
-
-
-            background: #ffffff;
-
-
-
-
-
-
-
-            border: 1px solid #e5e5e5;
-
-
-
-
-
-
-
-            border-radius: 8px;
-
-
-
-
-
-
-
-            padding: 10px 12px;
-
-
-
-
-
-
-
-            box-shadow: 0 1px 2px rgba(0,0,0,0.04);
-
-
-
-
-
-
-
-        }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        .summary-entry {
-
-
-
-
-
-
-
+        .record-visualizer-card {
             position: relative;
-
-
-
-
-
-
-
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            padding: 12px 14px;
+            height: 62px;
             border-radius: 14px;
-
-
-
-
-
-
-
-            padding: 16px 18px;
-
-
-
-
-
-
-
-            border: 1px solid rgba(148, 163, 184, 0.35);
-
-
-
-
-
-
-
-            background: linear-gradient(135deg, rgba(224, 242, 255, 0.92), rgba(252, 231, 243, 0.92));
-
-
-
-
-
-
-
-            box-shadow: 0 8px 26px rgba(59, 130, 246, 0.12);
-
-
-
-
-
-
-
-            color: #1f2937;
-
-
-
-
-
-
-
+            background: linear-gradient(135deg, #1f2937, #111827);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.03), 0 12px 24px rgba(15, 23, 42, 0.28);
             overflow: hidden;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        .summary-entry::before {
-
-
-
-
-
-
-
+        .record-visualizer-card::before {
             content: '';
-
-
-
-
-
-
-
             position: absolute;
-
-
-
-
-
-
-
-            inset: 0;
-
-
-
-
-
-
-
-            pointer-events: none;
-
-
-
-
-
-
-
-            background: radial-gradient(circle at 15% 15%, rgba(236, 72, 153, 0.18), transparent 55%),
-
-
-
-
-
-
-
-                radial-gradient(circle at 85% 20%, rgba(59, 130, 246, 0.18), transparent 45%),
-
-
-
-
-
-
-
-                radial-gradient(circle at 30% 85%, rgba(16, 185, 129, 0.16), transparent 45%);
-
-
-
-
-
-
-
+            left: 14px;
+            right: 14px;
+            top: 50%;
+            height: 1px;
+            background: repeating-linear-gradient(90deg, rgba(148, 163, 184, 0.25) 0, rgba(148, 163, 184, 0.25) 3px, transparent 3px, transparent 8px);
+            transform: translateY(-50%);
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        .summary-entry .summary-header {
-
-
-
-
-
-
-
+        .record-visualizer-wave {
             position: relative;
-
-
-
-
-
-
-
+            width: 100%;
+            height: 100%;
             display: flex;
-
-
-
-
-
-
-
-            align-items: center;
-
-
-
-
-
-
-
-            gap: 10px;
-
-
-
-
-
-
-
-            margin-bottom: 10px;
-
-
-
-
-
-
-
-            font-weight: 600;
-
-
-
-
-
-
-
-            color: #0f172a;
-
-
-
-
-
-
-
+            align-items: flex-end;
+            gap: 4px;
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        .summary-entry .summary-icon {
-
-
-
-
-
-
-
-            font-size: 1.25rem;
-
-
-
-
-
-
-
-        }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        .summary-entry .summary-label {
-
-
-
-
-
-
-
-            font-size: 1.25rem;
-
-
-
-
-
-
-
-        }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        .summary-entry .summary-meta {
-
-
-
-
-
-
-
-            margin-left: auto;
-
-
-
-
-
-
-
-            font-size: 0.72rem;
-
-
-
-
-
-
-
-            color: #475569;
-
-
-
-
-
-
-
-            text-transform: uppercase;
-
-
-
-
-
-
-
-            letter-spacing: 0.04em;
-
-
-
-
-
-
-
-        }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        .summary-entry .summary-content {
-
-
-
-
-
-
-
-            position: relative;
-
-
-
-
-
-
-
-            font-size: 0.95rem;
-
-
-
-
-
-
-
-            line-height: 1.6;
-
-
-
-
-
-
-
-            white-space: pre-wrap;
-
-
-
-
-
-
-
-            word-break: break-word;
-
-
-
-
-
-
-
-            color: #0f172a;
-
-
-
-
-
-
-
-        }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        .summary-entry.pending .summary-content {
-
-
-
-
-
-
-
-            color: #475569;
-
-
-
-
-
-
-
-            font-style: italic;
-
-
-
-
-
-
-
-            animation: pulse-text 1.6s ease-in-out infinite;
-
-
-
-
-
-
-
-        }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        .summary-entry.error {
-
-
-
-
-
-
-
-            border-color: rgba(248, 113, 113, 0.45);
-
-
-
-
-
-
-
-            background: linear-gradient(135deg, rgba(254, 226, 226, 0.94), rgba(255, 241, 242, 0.94));
-
-
-
-
-
-
-
-            box-shadow: 0 6px 20px rgba(248, 113, 113, 0.18);
-
-
-
-
-
-
-
-        }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        .summary-entry.error .summary-meta {
-
-
-
-
-
-
-
-            color: #b91c1c;
-
-
-
-
-
-
-
-        }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        .summary-entry.error .summary-content {
-
-
-
-
-
-
-
-            color: #991b1b;
-
-
-
-
-
-
-
-        }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        .result-entry .result-part {
-
-
-
-
-
-
-
-            white-space: pre-wrap;
-
-
-
-
-
-
-
-            word-break: break-word;
-
-
-
-
-
-
-
-            color: #1f2937;
-
-
-
-
-
-
-
-            font-size: 0.95rem;
-
-
-
-
-
-
-
-            line-height: 1.5;
-
-
-
-
-
-
-
-        }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        .result-entry .result-part.translation {
-
-
-
-
-
-
-
-            color: #111827;
-
-
-
-
-
-
-
-        }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        .result-entry .result-part.translation.pending {
-
-
-
-
-
-
-
-            color: #9ca3af;
-
-
-
-
-
-
-
-            font-style: italic;
-
-
-
-
-
-
-
-            animation: pulse-text 1.5s ease-in-out infinite;
-
-
-
-
-
-
-
-        }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        .result-entry .result-part.optimized {
-
-
-
-
-
-
-
-            color: #0f172a;
-
-
-
-
-
-
-
-            font-size: 0.92rem;
-
-
-
-
-
-
-
-            line-height: 1.5;
-
-
-
-
-
-
-
-        }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        .result-entry .result-part.optimized::before {
-
-
-
-
-
-
-
-            content: attr(data-label);
-
-
-
-
-
-
-
-            display: block;
-
-
-
-
-
-
-
-            font-size: 0.72rem;
-
-
-
-
-
-
-
-            letter-spacing: 0.05em;
-
-
-
-
-
-
-
-            text-transform: uppercase;
-
-
-
-
-
-
-
-            color: #64748b;
-
-
-
-
-
-
-
-            margin-bottom: 4px;
-
-
-
-
-
-
-
-        }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        .result-entry .result-part.optimized.pending {
-
-
-
-
-
-
-
-            color: #9ca3af;
-
-
-
-
-
-
-
-            font-style: italic;
-
-
-
-
-
-
-
-            animation: pulse-text 1.5s ease-in-out infinite;
-
-
-
-
-
-
-
-        }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        .result-entry .result-part.optimized.error {
-
-
-
-
-
-
-
-            color: #b91c1c;
-
-
-
-
-
-
-
-        }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        @keyframes pulse-text {
-
-
-
-
-
-
-
-            0%, 100% { opacity: 1; }
-
-
-
-
-
-
-
-            50% { opacity: 0.6; }
-
-
-
-
-
-
-
-        }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        .result-entry .result-separator {
-
-
-
-
-
-
-
-            border-top: 1px solid #e5e5e5;
-
-
-
-
-
-
-
-            margin: 8px 0;
-
-
-
-
-
-
-
-        }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        .timestamp {
-
-
-
-
-
-
-
-            color: #888;
-
-
-
-
-
-
-
-            font-size: 0.75rem;
-
-
-
-
-
-
-
-            margin-right: 8px;
-
-
-
-
-
-
-
-        }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        .log-controls {
-
-
-
-
-
-
-
-            display: flex;
-
-
-
-
-
-
-
-            gap: 8px;
-
-
-
-
-
-
-
-            margin-top: 12px;
-
-
-
-
-
-
-
-        }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        .log-controls button {
-
-
-
-
-
-
-
-            padding: 8px 16px;
-
-
-
-
-
-
-
-            border: 1px solid #d1d5db;
-
-
-
-
-
-
-
+        .record-visualizer-wave .wave-bar {
+            flex: 1;
+            max-width: 6px;
             border-radius: 999px;
-
-
-
-
-
-
-
-            background: #ffffff;
-
-
-
-
-
-
-
-            color: #334155;
-
-
-
-
-
-
-
-            cursor: pointer;
-
-
-
-
-
-
-
-            font-size: 0.85rem;
-
-
-
-
-
-
-
-            font-weight: 500;
-
-
-
-
-
-
-
-            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
-
-
-
-
-
-
-
-            transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
-
-
-
-
-
-
-
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.85), rgba(209, 213, 219, 0.25));
+            height: 14px;
+            transform: translateY(18px);
+            transition: transform 0.12s ease, height 0.12s ease, background 0.2s ease;
         }
-
+        .record-visualizer-wave .wave-bar.marker {
+            background: linear-gradient(180deg, #f97316, rgba(249, 115, 22, 0.2));
+        }
+        .record-visualizer-meta {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.85rem;
+            color: #4b5563;
+            font-variant-numeric: tabular-nums;
+        }
+        .record-visualizer-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #a1a1aa;
+            box-shadow: 0 0 0 0 rgba(249, 115, 22, 0);
+            transition: background 0.25s ease, box-shadow 0.25s ease;
+        }
+        .record-visualizer.recording .record-visualizer-dot {
+            background: #f97316;
+            box-shadow: 0 0 0 6px rgba(249, 115, 22, 0.18);
+        }
+        .record-visualizer-timer {
+            font-weight: 600;
+            color: #1f2937;
+        }
+        .record-visualizer.idle .record-visualizer-timer {
+            color: #6b7280;
+        }
+.active-conversation-name {
+            font-size: 0.85rem;
+            color: #666;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+            overflow: hidden;
+        }
+        .log-panel h2 {
+            color: #333;
+            margin: 0;
+            font-weight: 600;
+            font-size: 1.2rem;
+        }
+        .log-container {
+            flex: 1;
+            background: #ffffff;
+            border: 1px solid #e5e5e5;
+            border-radius: 8px;
+            padding: 15px;
+            overflow-y: auto;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-size: 0.9rem;
+            line-height: 1.4;
+        }
+        .log-entry {
+            margin-bottom: 6px;
+            padding: 8px 14px;
+            border-radius: 16px;
+            background: #f8f9fa;
+            color: #333;
+            border: 1px solid #e5e5e5;
+            display: block;
+        }
+        .log-entry .recording-meta {
+            display: none;
+            margin-top: 6px;
+            font-size: 0.75rem;
+            color: #f5deb3;
+        }
+        .log-entry:hover .recording-meta {
+            display: block;
+        }
+        .result-entry {
+            background: #ffffff;
+            border: 1px solid #e5e5e5;
+            border-radius: 8px;
+            padding: 10px 12px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+        }
+        .summary-entry {
+            position: relative;
+            border-radius: 14px;
+            padding: 16px 18px;
+            border: 1px solid rgba(148, 163, 184, 0.35);
+            background: linear-gradient(135deg, rgba(224, 242, 255, 0.92), rgba(252, 231, 243, 0.92));
+            box-shadow: 0 8px 26px rgba(59, 130, 246, 0.12);
+            color: #1f2937;
+            overflow: hidden;
+        }
+        .summary-entry::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            background: radial-gradient(circle at 15% 15%, rgba(236, 72, 153, 0.18), transparent 55%),
+                radial-gradient(circle at 85% 20%, rgba(59, 130, 246, 0.18), transparent 45%),
+                radial-gradient(circle at 30% 85%, rgba(16, 185, 129, 0.16), transparent 45%);
+        }
+        .summary-entry .summary-header {
+            position: relative;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+            font-weight: 600;
+            color: #0f172a;
+        }
+        .summary-entry .summary-icon {
+            font-size: 1.25rem;
+        }
+        .summary-entry .summary-label {
+            font-size: 1.25rem;
+        }
+        .summary-entry .summary-meta {
+            margin-left: auto;
+            font-size: 0.72rem;
+            color: #475569;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+        .summary-entry .summary-content {
+            position: relative;
+            font-size: 0.95rem;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            word-break: break-word;
+            color: #0f172a;
+        }
+        .summary-entry.pending .summary-content {
+            color: #475569;
+            font-style: italic;
+            animation: pulse-text 1.6s ease-in-out infinite;
+        }
+        .summary-entry.error {
+            border-color: rgba(248, 113, 113, 0.45);
+            background: linear-gradient(135deg, rgba(254, 226, 226, 0.94), rgba(255, 241, 242, 0.94));
+            box-shadow: 0 6px 20px rgba(248, 113, 113, 0.18);
+        }
+        .summary-entry.error .summary-meta {
+            color: #b91c1c;
+        }
+        .summary-entry.error .summary-content {
+            color: #991b1b;
+        }
+        .result-entry .result-part {
+            white-space: pre-wrap;
+            word-break: break-word;
+            color: #1f2937;
+            font-size: 0.95rem;
+            line-height: 1.5;
+        }
+        .result-entry .result-part.translation {
+            color: #111827;
+        }
+        .result-entry .result-part.translation.pending {
+            color: #9ca3af;
+            font-style: italic;
+            animation: pulse-text 1.5s ease-in-out infinite;
+        }
+        .result-entry .result-part.optimized {
+            color: #0f172a;
+            font-size: 0.92rem;
+            line-height: 1.5;
+        }
+        .result-entry .result-part.optimized::before {
+            content: attr(data-label);
+            display: block;
+            font-size: 0.72rem;
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            color: #64748b;
+            margin-bottom: 4px;
+        }
+        .result-entry .result-part.optimized.pending {
+            color: #9ca3af;
+            font-style: italic;
+            animation: pulse-text 1.5s ease-in-out infinite;
+        }
+        .result-entry .result-part.optimized.error {
+            color: #b91c1c;
+        }
+        @keyframes pulse-text {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+        .result-entry .result-separator {
+            border-top: 1px solid #e5e5e5;
+            margin: 8px 0;
+        }
+        .timestamp {
+            color: #888;
+            font-size: 0.75rem;
+            margin-right: 8px;
+        }
+        .log-controls {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+        }
+        .log-controls button {
+            padding: 8px 16px;
+            border: 1px solid #d1d5db;
+            border-radius: 999px;
+            background: #ffffff;
+            color: #334155;
+            cursor: pointer;
+            font-size: 0.85rem;
+            font-weight: 500;
+            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+            transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+        }
         .log-controls .icon-button {
             padding: 8px;
             width: 38px;
@@ -6640,1290 +941,154 @@
             align-items: center;
             justify-content: center;
         }
-
         .log-controls .icon-button svg {
             width: 18px;
             height: 18px;
             stroke: currentColor;
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .log-controls button:hover:not(:disabled) {
-
-
-
-
-
-
-
             background: #f8fafc;
-
-
-
-
-
-
-
             border-color: #94a3b8;
-
-
-
-
-
-
-
             box-shadow: 0 4px 10px rgba(148, 163, 184, 0.18);
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .log-controls button:disabled {
-
-
-
-
-
-
-
             opacity: 0.6;
-
-
-
-
-
-
-
             cursor: not-allowed;
-
-
-
-
-
-
-
             box-shadow: none;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .result-context-menu {
-
-
-
-
-
-
-
             position: fixed;
-
-
-
-
-
-
-
             z-index: 2000;
-
-
-
-
-
-
-
             background: #ffffff;
-
-
-
-
-
-
-
             border: 1px solid rgba(226, 232, 240, 0.9);
-
-
-
-
-
-
-
             border-radius: 10px;
-
-
-
-
-
-
-
             box-shadow: 0 16px 40px rgba(15, 23, 42, 0.18);
-
-
-
-
-
-
-
             padding: 6px 0;
-
-
-
-
-
-
-
             min-width: 180px;
-
-
-
-
-
-
-
             backdrop-filter: blur(6px);
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .result-context-menu.hidden {
-
-
-
-
-
-
-
             display: none;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .result-context-menu-item {
-
-
-
-
-
-
-
             display: block;
-
-
-
-
-
-
-
             width: 100%;
-
-
-
-
-
-
-
             padding: 9px 18px;
-
-
-
-
-
-
-
             background: transparent;
-
-
-
-
-
-
-
             border: none;
-
-
-
-
-
-
-
             text-align: left;
-
-
-
-
-
-
-
             font-size: 0.92rem;
-
-
-
-
-
-
-
             color: #0f172a;
-
-
-
-
-
-
-
             cursor: pointer;
-
-
-
-
-
-
-
             transition: background 0.15s ease, color 0.15s ease;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .result-context-menu-item:hover {
-
-
-
-
-
-
-
             background: rgba(59, 130, 246, 0.08);
-
-
-
-
-
-
-
             color: #1d4ed8;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .result-context-menu-item.disabled {
-
-
-
-
-
-
-
             color: #94a3b8;
-
-
-
-
-
-
-
             cursor: not-allowed;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .result-context-menu-item.disabled:hover {
-
-
-
-
-
-
-
             background: transparent;
-
-
-
-
-
-
-
             color: #94a3b8;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .history-context-menu {
-
-
-
-
-
-
-
             position: fixed;
-
-
-
-
-
-
-
             z-index: 2100;
-
-
-
-
-
-
-
             min-width: 180px;
-
-
-
-
-
-
-
             padding: 6px 0;
-
-
-
-
-
-
-
             background: #ffffff;
-
-
-
-
-
-
-
             border: 1px solid rgba(226, 232, 240, 0.9);
-
-
-
-
-
-
-
             border-radius: 10px;
-
-
-
-
-
-
-
             box-shadow: 0 16px 40px rgba(15, 23, 42, 0.18);
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .history-context-menu.hidden {
-
-
-
-
-
-
-
             display: none;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .history-context-menu-item {
-
-
-
-
-
-
-
             display: block;
-
-
-
-
-
-
-
             width: 100%;
-
-
-
-
-
-
-
             padding: 9px 18px;
-
-
-
-
-
-
-
             background: transparent;
-
-
-
-
-
-
-
             border: none;
-
-
-
-
-
-
-
             text-align: left;
-
-
-
-
-
-
-
             font-size: 0.92rem;
-
-
-
-
-
-
-
             color: #0f172a;
-
-
-
-
-
-
-
             cursor: pointer;
-
-
-
-
-
-
-
             transition: background 0.15s ease, color 0.15s ease;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .history-context-menu-item:hover {
-
-
-
-
-
-
-
             background: rgba(249, 115, 22, 0.12);
-
-
-
-
-
-
-
             color: #b45309;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .summary-btn {
-
-
-
-
-
-
-
             display: inline-flex;
-
-
-
-
-
-
-
             align-items: center;
-
-
-
-
-
-
-
             justify-content: center;
-
-
-
-
-
-
-
             min-width: 44px;
-
-
-
-
-
-
-
             height: 38px;
-
-
-
-
-
-
-
             padding: 6px 14px;
-
-
-
-
-
-
-
             font-size: 1.2rem;
-
-
-
-
-
-
-
             line-height: 1;
-
-
-
-
-
-
-
             position: relative;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .summary-btn:disabled {
-
-
-
-
-
-
-
             cursor: not-allowed;
-
-
-
-
-
-
-
             opacity: 0.65;
-
-
-
-
-
-
-
             box-shadow: none;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .summary-btn.loading::after {
-
-
-
-
-
-
-
             content: '';
-
-
-
-
-
-
-
             position: absolute;
-
-
-
-
-
-
-
             width: 16px;
-
-
-
-
-
-
-
             height: 16px;
-
-
-
-
-
-
-
             border-radius: 50%;
-
-
-
-
-
-
-
             border: 2px solid rgba(148, 163, 184, 0.8);
-
-
-
-
-
-
-
             border-top-color: rgba(59, 130, 246, 0.9);
-
-
-
-
-
-
-
             animation: summary-spin 0.9s linear infinite;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         .summary-btn.loading span {
-
-
-
-
-
-
-
             visibility: hidden;
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         @keyframes summary-spin {
-
-
-
-
-
-
-
             0% { transform: rotate(0deg); }
-
-
-
-
-
-
-
             100% { transform: rotate(360deg); }
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        
-
-
-
-
-
-
-
         @media (max-width: 768px) {
-
-
-
-
-
-
-
             .control-bar-btn {
-
-
-
-
-
-
-
                 width: 40px;
-
-
-
-
-
-
-
                 height: 40px;
-
-
-
-
-
-
-
                 font-size: 1.3rem;
-
-
-
-
-
-
-
             }
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
         @media (max-width: 480px) {
-
-
-
-
-
-
-
             .control-bar-btn {
-
-
-
-
-
-
-
                 width: 35px;
-
-
-
-
-
-
-
                 height: 35px;
-
-
-
-
-
-
-
                 font-size: 1.2rem;
-
-
-
-
-
-
-
             }
-
-
-
-
-
-
-
         }
-
-
-
-
-
-
-
         .summary-btn span svg {
             width: 20px;
             height: 20px;
             stroke: currentColor;
         }
-
     </style>
-
-
-
-
-
-
-
 </head>
-
-
-
-
-
-
-
 <body>
-
-
-
-
-
-
-
   <div class="title-bar">
-
-
-
-
-
-
-
     <div class="title-bar-title">
-
-
-
-
-
-
-
       <span data-i18n="index.title">Voice Transcript Studio</span>
-
-
-
-
-
-
-
     </div>
-
-
-
-
-
-
-
     <div class="title-bar-buttons">
-
-
-
-
-
-
-
       <button type="button" class="title-bar-button minimize" id="windowControlMinimize" aria-label="Minimize Window" title="Minimize Window"></button>
-
-
-
-
-
-
-
       <button type="button" class="title-bar-button maximize" id="windowControlMaximize" aria-label="Maximize Window" title="Maximize Window"></button>
-
-
-
-
-
-
-
       <button type="button" class="title-bar-button close" id="windowControlClose" aria-label="Close Window" title="Close Window"></button>
-
-
-
-
-
-
-
     </div>
-
-
-
-
-
-
-
   </div>
-
-
-
-
-
-
-
   <div class="right-sidebar">
-
-
-
-
-
-
-
     <button class="control-bar-btn keyboard-btn" onclick="openKeyboardSettings()" title="Voice Input Settings" data-i18n-title="index.tooltips.voiceInput">
       <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
         <path d="M12 6L12 18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path>
@@ -7937,26 +1102,12 @@
         <path d="M18 21H21V18" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path>
       </svg>
     </button>
-
-
-
-
-
-
-
     <button class="control-bar-btn settings-btn" onclick="openSettings()" title="Settings" data-i18n-title="index.tooltips.settings">
       <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
         <path d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path>
         <path d="M19.6224 10.3954L18.5247 7.7448L20 6L18 4L16.2647 5.48295L13.5578 4.36974L12.9353 2H10.981L10.3491 4.40113L7.70441 5.51596L6 4L4 6L5.45337 7.78885L4.3725 10.4463L2 11V13L4.40111 13.6555L5.51575 16.2997L4 18L6 20L7.79116 18.5403L10.397 19.6123L11 22H13L13.6045 19.6132L16.2551 18.5155C16.6969 18.8313 18 20 18 20L20 18L18.5159 16.2494L19.6139 13.598L21.9999 12.9772L22 11L19.6224 10.3954Z" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path>
       </svg>
     </button>
-
-
-
-
-
-
-
     <button class="control-bar-btn media-btn" onclick="openMediaTranscribe()" title="Media File Transcription" data-i18n-title="index.tooltips.media">
       <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
         <path d="M22 12.6V20.4C22 20.7314 21.7314 21 21.4 21H13.6C13.2686 21 13 20.7314 13 20.4V12.6C13 12.2686 13.2686 12 13.6 12H21.4C21.7314 12 22 12.2686 22 12.6Z" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path>
@@ -7964,69 +1115,12 @@
         <path d="M2 10V3.6C2 3.26863 2.26863 3 2.6 3H8.77805C8.92127 3 9.05977 3.05124 9.16852 3.14445L12.3315 5.85555C12.4402 5.94876 12.5787 6 12.722 6H21.4C21.7314 6 22 6.26863 22 6.6V9M2 10V18.4C2 18.7314 2.26863 19 2.6 19H10M2 10H10" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path>
       </svg>
     </button>
-
-
-
-
-
-
-
   </div>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
   <div class="main-content">
-
-
-
-
-
-
-
     <div class="history-panel" id="historyPanel">
-
-
-
-
-
-
-
       <div class="history-header">
-
-
-
-
-
-
-
         <h2 data-i18n="index.history.title">History</h2>
-
-
-
-
-
-
-
         <div class="history-actions">
-
-
-
-
-
-
-
           <button type="button" class="history-create-btn" id="newConversationButton" aria-label="New Conversation" title="New Conversation" data-i18n-ariaLabel="index.history.newConversation" data-i18n-title="index.history.newConversation">
             <span aria-hidden="true">
               <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -8034,13 +1128,6 @@
               </svg>
             </span>
           </button>
-
-
-
-
-
-
-
           <button type="button" class="history-toggle-btn" id="toggleHistoryButton" aria-label="Hide History" title="Hide History">
             <span aria-hidden="true">
               <svg class="history-toggle-icon" viewBox="0 0 24 24" fill="none" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -8048,205 +1135,39 @@
               </svg>
             </span>
           </button>
-
-
-
-
-
-
-
         </div>
-
-
-
-
-
-
-
       </div>
-
-
-
-
-
-
-
       <div class="history-search">
-
-
-
-
-
-
-
         <input type="text" id="historySearchInput" placeholder="Search transcripts" data-i18n-placeholder="index.history.searchPlaceholder" />
-
-
-
-
-
-
-
       </div>
-
-
-
-
-
-
-
       <div class="history-list" id="historyList">
-
-
-
-
-
-
-
         <div class="history-empty" data-i18n="index.history.empty">No conversations yet</div>
-
-
-
-
-
-
-
       </div>
-
-
-
-
-
-
-
     </div>
-
-
-
-
-
-
-
     <div class="log-panel">
-
-
-
-
-
-
-
       <div class="log-header">
-
-
-
-
-
-
-
         <div class="log-header-info">
-
-
-
-
-
-
-
           <h2 data-i18n="index.logTitle">Real-Time Logs</h2>
-
-
-
-
-
-
-
           <span class="active-conversation-name" id="activeConversationName"></span>
-
-
-
-
-
-
-
         </div>
-
-
-
-
-
-
-
-        <div class="log-header-actions">
-
-
-
-
-
-
-
+          <div class="record-visualizer idle" id="recordVisualizer">
+            <div class="record-visualizer-card">
+              <div class="record-visualizer-wave" id="recordVisualizerWave"></div>
+            </div>
+            <div class="record-visualizer-meta" aria-live="polite">
+              <span class="record-visualizer-dot" aria-hidden="true"></span>
+              <span class="record-visualizer-timer" id="recordingTimer">00:00</span>
+            </div>
+          </div>
+          <div class="log-header-actions">
           <button type="button" class="record-control record-btn start" id="recordButton" title="Start Recording" aria-label="Start Recording" data-i18n-title="index.tooltips.recordStart" data-i18n-ariaLabel="index.tooltips.recordStart">
-
-
-
-
-
-
-
             <span class="record-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></rect><path d="M5 10V11C5 14.866 8.13401 18 12 18C15.866 18 19 14.866 19 11V10" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path><path d="M12 18V22M12 22H9M12 22H15" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path></svg></span>
-
-
-
-
-
-
-
             <span class="record-label" data-i18n="index.buttons.recordIdle">Start Recording</span>
-
-
-
-
-
-
-
           </button>
-
-
-
-
-
-
-
         </div>
-
-
-
-
-
-
-
       </div>
-
-
-
-
-
-
-
       <div class="log-container" id="logContainer"></div>
-
-
-
-
-
-
-
       <div class="log-controls">
-
-
-
-
-
-
-
         <button type="button" class="icon-button" onclick="exportLogs()" title="Export logs" aria-label="Export logs" data-i18n-title="index.buttons.exportLogs" data-i18n-ariaLabel="index.buttons.exportLogs">
           <span aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -8257,13 +1178,6 @@
             </svg>
           </span>
         </button>
-
-
-
-
-
-
-
         <button type="button" class="icon-button" onclick="clearLogs()" title="Clear logs" aria-label="Clear logs" data-i18n-title="index.buttons.clearLogs" data-i18n-ariaLabel="index.buttons.clearLogs">
           <span aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -8271,13 +1185,6 @@
             </svg>
           </span>
         </button>
-
-
-
-
-
-
-
         <button type="button" id="summaryButton" class="summary-btn" onclick="summarizeConversation()" title="Summarize" aria-label="Summarize" data-i18n-title="index.buttons.summaryTooltip" data-i18n-ariaLabel="index.buttons.summaryTooltip">
           <span aria-hidden="true">
             <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -8287,93 +1194,15 @@
             </svg>
           </span>
         </button>
-
-
-
-
-
-
-
       </div>
-
-
-
-
-
-
-
     </div>
-
-
-
-
-
-
-
   </div>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
   <div class="volume-panel inactive collapsed" id="volumePanel">
-
-
-
-
-
-
-
     <div class="volume-header">
-
-
-
-
-
-
-
       <div class="volume-title">
-
-
-
-
-
-
-
         <span data-i18n="index.volume.current">Current Volume</span>
-
-
-
-
-
-
-
         <span id="volumeStatusText" data-i18n="index.volume.waiting">Waiting For Recording</span>
-
-
-
-
-
-
-
       </div>
-
-
-
-
-
-
-
       <button class="volume-toggle-btn" id="volumeToggleBtn" type="button" aria-expanded="false" aria-controls="volumeBody" data-expanded="false" title="Expand" aria-label="Expand">
         <span class="volume-toggle-label sr-only" data-i18n="index.volume.expand">Expand</span>
         <span class="volume-toggle-icon" aria-hidden="true">
@@ -8383,243 +1212,47 @@
           </svg>
         </span>
       </button>
-
-
-
-
-
-
-
     </div>
-
-
-
-
-
-
-
     <div class="volume-body" id="volumeBody">
-
-
-
-
-
-
-
       <div class="volume-bar-wrapper">
-
-
-
-
-
-
-
         <div class="volume-scale">
-
-
-
-
-
-
-
           <span data-i18n="index.volume.scaleMinus60">-60 dB</span>
-
-
-
-
-
-
-
           <span data-i18n="index.volume.scaleMinus40">-40 dB</span>
-
-
-
-
-
-
-
           <span data-i18n="index.volume.scaleMinus20">-20 dB</span>
-
-
-
-
-
-
-
           <span data-i18n="index.volume.scaleMinus10">-10 dB</span>
-
-
-
-
-
-
-
           <span data-i18n="index.volume.scale0">0 dB</span>
-
-
-
-
-
-
-
         </div>
-
-
-
-
-
-
-
         <div class="volume-bar">
-
-
-
-
-
-
-
           <div class="volume-silence" id="volumeSilence" data-i18n="index.volume.silenceRange">Silence Range</div>
-
-
-
-
-
-
-
           <div class="volume-level idle" id="volumeLevel"></div>
-
-
-
-
-
-
-
         </div>
-
-
-
-
-
-
-
       </div>
-
-
-
-
-
-
-
       <div class="volume-values">
-
-
-
-
-
-
-
         <span id="volumeDbValue">-inf dB</span>
-
-
-
-
-
-
-
         <span id="volumeRmsValue">RMS 0.000</span>
-
-
-
-
-
-
-
       </div>
-
-
-
-
-
-
-
     </div>
-
-
-
-
-
-
-
   </div>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
   <div id="settingsModal" class="modal-overlay settings-modal" aria-hidden="true">
     <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="settingsModalTitle">
       <div id="settingsModalScroll" class="modal-scroll"></div>
     </div>
   </div>
-
   <div id="voiceModal" class="modal-overlay voice-modal" aria-hidden="true">
     <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="voiceModalTitle">
       <div id="voiceModalScroll" class="modal-scroll"></div>
     </div>
   </div>
-
   <div id="mediaModal" class="modal-overlay media-modal" aria-hidden="true">
     <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="mediaModalTitle">
       <div id="mediaModalScroll" class="modal-scroll"></div>
     </div>
   </div>
-
   <script src="i18n.js"></script>
-
-
-
-
-
-
-
   <script src="locales/base.i18n.js"></script>
-
-
-
-
-
-
-
   <script src="settings.js" data-auto-init="false"></script>
-
   <script src="voice-input.js" data-auto-init="false"></script>
-
   <script src="media-transcribe-renderer.js" data-auto-init="false"></script>
-
   <script src="renderer.js"></script>
-
-
-
-
-
-
-
 </body>
-
-
-
-
-
-
-
 </html>

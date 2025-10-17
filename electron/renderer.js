@@ -97,6 +97,9 @@ const volumeDbValue = document.getElementById('volumeDbValue');
 const volumeRmsValue = document.getElementById('volumeRmsValue');
 const volumeStatusText = document.getElementById('volumeStatusText');
 const volumeToggleBtn = document.getElementById('volumeToggleBtn');
+const recordVisualizer = document.getElementById('recordVisualizer');
+const recordVisualizerWave = document.getElementById('recordVisualizerWave');
+const recordingTimerEl = document.getElementById('recordingTimer');
 const mainContent = document.querySelector('.main-content');
 const settingsModal = document.getElementById('settingsModal');
 const settingsModalScroll = document.getElementById('settingsModalScroll');
@@ -134,6 +137,17 @@ const HISTORY_TOGGLE_ICON_COLLAPSED = `<svg aria-hidden="true" class="history-to
 
 const VOLUME_TOGGLE_ICON_EXPAND = `<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg"><path d="M14.5 13.25L12 10.75L9.5 13.25" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path><path d="M6 5H18C20.2091 5 22 6.79086 22 9V15C22 17.2091 20.2091 19 18 19H6C3.79086 19 2 17.2091 2 15V9C2 6.79086 3.79086 5 6 5Z" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path></svg>`;
 const VOLUME_TOGGLE_ICON_COLLAPSE = `<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg"><path d="M6 5H18C20.2091 5 22 6.79086 22 9V15C22 17.2091 20.2091 19 18 19H6C3.79086 19 2 17.2091 2 15V9C2 6.79086 3.79086 5 6 5Z" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path><path d="M14.5 10.75L12 13.25L9.5 10.75" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path></svg>`;
+
+const RECORD_VISUALIZER_BAR_COUNT = 32;
+const RECORD_VISUALIZER_DECAY_MIN = 0.02;
+const RECORD_VISUALIZER_DECAY_MAX = 0.06;
+let recordVisualizerBars = [];
+let recordVisualizerValues = [];
+let recordVisualizerTargets = [];
+let recordVisualizerAnimationFrame = null;
+let recordVisualizerIsActive = false;
+let recordingTimerInterval = null;
+let recordingTimerStartMs = null;
 
 function formatSilenceLabel(db) {
     const template = t('index.volume.silenceRangeLabel');
@@ -197,6 +211,192 @@ function renderVolumeValues() {
     }
     if (volumeRmsValue) {
         volumeRmsValue.textContent = formatRmsDisplay(lastVolumeRms);
+    }
+}
+
+function initializeRecordVisualizer() {
+    if (!recordVisualizerWave) {
+        return;
+    }
+    if (recordVisualizerWave.childElementCount === 0) {
+        const fragment = document.createDocumentFragment();
+        for (let i = 0; i < RECORD_VISUALIZER_BAR_COUNT; i += 1) {
+            const bar = document.createElement('span');
+            bar.className = `wave-bar${i === RECORD_VISUALIZER_BAR_COUNT - 1 ? ' marker' : ''}`;
+            fragment.appendChild(bar);
+        }
+        recordVisualizerWave.appendChild(fragment);
+    }
+    recordVisualizerBars = Array.from(recordVisualizerWave.querySelectorAll('.wave-bar'));
+    recordVisualizerValues = new Array(recordVisualizerBars.length).fill(0);
+    recordVisualizerTargets = new Array(recordVisualizerBars.length).fill(0);
+    if (recordVisualizer) {
+        recordVisualizer.classList.toggle('recording', false);
+        recordVisualizer.classList.toggle('idle', true);
+    }
+    setRecordVisualizerIdleTargets();
+    updateRecordingTimerDisplay(0);
+}
+
+function ensureRecordVisualizerAnimation() {
+    if (recordVisualizerAnimationFrame !== null) {
+        return;
+    }
+    const step = () => {
+        let needsContinue = false;
+        for (let i = 0; i < recordVisualizerBars.length; i += 1) {
+            const bar = recordVisualizerBars[i];
+            if (!bar) {
+                continue;
+            }
+            const current = recordVisualizerValues[i] || 0;
+            const target = recordVisualizerTargets[i] || 0;
+            const delta = target - current;
+            const nextValue = Math.abs(delta) > 0.003 ? current + delta * 0.18 : target;
+            if (Math.abs(nextValue - target) > 0.002) {
+                needsContinue = true;
+            }
+            recordVisualizerValues[i] = Math.max(0, Math.min(1, nextValue));
+            const baseHeight = 14;
+            const amplitude = 46;
+            const height = baseHeight + recordVisualizerValues[i] * amplitude;
+            bar.style.height = `${height}px`;
+            const translate = 32 - height / 2;
+            bar.style.transform = `translateY(${translate}px)`;
+        }
+        if (needsContinue || recordVisualizerIsActive) {
+            recordVisualizerAnimationFrame = window.requestAnimationFrame(step);
+        } else {
+            recordVisualizerAnimationFrame = null;
+        }
+    };
+    recordVisualizerAnimationFrame = window.requestAnimationFrame(step);
+}
+
+function setRecordVisualizerTargets(level) {
+    if (!recordVisualizerBars.length) {
+        return;
+    }
+    const normalized = Math.max(0, Math.min(1, level));
+    const count = recordVisualizerTargets.length;
+    for (let i = 0; i < count; i += 1) {
+        const progress = count <= 1 ? 0 : i / (count - 1);
+        const envelope = Math.pow(Math.sin(progress * Math.PI), 0.85);
+        const jitter = 0.55 + Math.random() * 0.45;
+        const base = normalized * 0.2;
+        recordVisualizerTargets[i] = Math.min(1, (base + normalized * envelope * jitter));
+    }
+    if (count > 0) {
+        recordVisualizerTargets[count - 1] = Math.min(1, normalized * 1.1);
+    }
+    ensureRecordVisualizerAnimation();
+}
+
+function setRecordVisualizerIdleTargets() {
+    if (!recordVisualizerBars.length) {
+        return;
+    }
+    const count = recordVisualizerTargets.length;
+    for (let i = 0; i < count; i += 1) {
+        const idleNoise = RECORD_VISUALIZER_DECAY_MIN + Math.random() * (RECORD_VISUALIZER_DECAY_MAX - RECORD_VISUALIZER_DECAY_MIN);
+        recordVisualizerTargets[i] = idleNoise;
+    }
+    ensureRecordVisualizerAnimation();
+}
+
+function setRecordVisualizerActive(active) {
+    if (!recordVisualizer) {
+        return;
+    }
+    if (recordVisualizerIsActive === active) {
+        if (!active) {
+            setRecordVisualizerIdleTargets();
+        }
+        return;
+    }
+    recordVisualizerIsActive = active;
+    recordVisualizer.classList.toggle('recording', active);
+    recordVisualizer.classList.toggle('idle', !active);
+    if (active) {
+        ensureRecordVisualizerAnimation();
+    } else {
+        setRecordVisualizerIdleTargets();
+    }
+}
+
+function updateRecordVisualizerLevel(db) {
+    if (!recordVisualizerIsActive || !recordVisualizerBars.length) {
+        return;
+    }
+    if (typeof db !== 'number' || !Number.isFinite(db)) {
+        setRecordVisualizerIdleTargets();
+        return;
+    }
+    const clampedDb = Math.min(VOLUME_MAX_DB, Math.max(VOLUME_MIN_DB, db));
+    const normalized = (clampedDb - VOLUME_MIN_DB) / (VOLUME_MAX_DB - VOLUME_MIN_DB);
+    setRecordVisualizerTargets(normalized);
+}
+
+function updateRecordingTimerDisplay(elapsedSeconds) {
+    if (!recordingTimerEl) {
+        return;
+    }
+    const totalSeconds = Math.max(0, Math.floor(elapsedSeconds));
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    if (hours > 0) {
+        const text = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        recordingTimerEl.textContent = text;
+    } else {
+        const text = `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        recordingTimerEl.textContent = text;
+    }
+}
+
+function startRecordingTimer() {
+    if (!recordingTimerEl) {
+        return;
+    }
+    if (recordingTimerStartMs !== null) {
+        return;
+    }
+    recordingTimerStartMs = Date.now();
+    updateRecordingTimerDisplay(0);
+    if (recordingTimerInterval) {
+        window.clearInterval(recordingTimerInterval);
+    }
+    recordingTimerInterval = window.setInterval(() => {
+        if (recordingTimerStartMs === null) {
+            return;
+        }
+        const elapsed = (Date.now() - recordingTimerStartMs) / 1000;
+        updateRecordingTimerDisplay(elapsed);
+    }, 250);
+}
+
+function stopRecordingTimer() {
+    if (recordingTimerInterval) {
+        window.clearInterval(recordingTimerInterval);
+        recordingTimerInterval = null;
+    }
+    recordingTimerStartMs = null;
+    updateRecordingTimerDisplay(0);
+}
+
+function syncRecordVisualizer() {
+    if (!recordVisualizer) {
+        return;
+    }
+    if (recordVisualizerBars.length === 0 && recordVisualizerWave) {
+        initializeRecordVisualizer();
+    }
+    if (isRecording) {
+        setRecordVisualizerActive(true);
+        startRecordingTimer();
+    } else {
+        setRecordVisualizerActive(false);
+        stopRecordingTimer();
     }
 }
 
@@ -2336,6 +2536,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initializeHistoryCollapsedState();
     setupEventListeners();
     initializeVolumePanel();
+    initializeRecordVisualizer();
     syncVolumePanelOffset();
     // Initialize service status without logging output
     updateServiceStatus('starting');
@@ -2636,6 +2837,7 @@ function updateUI() {
         }
     }
 
+    syncRecordVisualizer();
     setVolumeRecordingState(isRecording);
 }
 
@@ -2803,6 +3005,7 @@ function updateVolumeMeter(payload) {
     const rmsValue = hasRms ? payload.rms : 0;
     lastVolumeRms = rmsValue;
     renderVolumeValues();
+    updateRecordVisualizerLevel(rawDb);
 
     if (volumeSilenceEl) {
         const silenceDbRaw = typeof payload.silence_db === 'number' && isFinite(payload.silence_db)
@@ -4060,15 +4263,6 @@ function openKeyboardSettings() {
 }
 
 window.copyLastResult = copyLastResult;
-
-
-
-
-
-
-
-
-
 
 
 
