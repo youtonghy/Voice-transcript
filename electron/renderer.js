@@ -132,6 +132,9 @@ const RECORD_ICON_MARKUP = {
 const HISTORY_TOGGLE_ICON_EXPANDED = `<svg aria-hidden="true" class="history-toggle-icon" viewBox="0 0 24 24" fill="none" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg"><path d="M21 12L3 12M3 12L11.5 3.5M3 12L11.5 20.5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path></svg>`;
 const HISTORY_TOGGLE_ICON_COLLAPSED = `<svg aria-hidden="true" class="history-toggle-icon" viewBox="0 0 24 24" fill="none" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg"><path d="M3 12L21 12M21 12L12.5 3.5M21 12L12.5 20.5" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path></svg>`;
 
+const VOLUME_TOGGLE_ICON_EXPAND = `<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg"><path d="M14.5 13.25L12 10.75L9.5 13.25" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path><path d="M6 5H18C20.2091 5 22 6.79086 22 9V15C22 17.2091 20.2091 19 18 19H6C3.79086 19 2 17.2091 2 15V9C2 6.79086 3.79086 5 6 5Z" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path></svg>`;
+const VOLUME_TOGGLE_ICON_COLLAPSE = `<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg"><path d="M6 5H18C20.2091 5 22 6.79086 22 9V15C22 17.2091 20.2091 19 18 19H6C3.79086 19 2 17.2091 2 15V9C2 6.79086 3.79086 5 6 5Z" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path><path d="M14.5 10.75L12 13.25L9.5 10.75" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path></svg>`;
+
 function formatSilenceLabel(db) {
     const template = t('index.volume.silenceRangeLabel');
     if (template && template !== 'index.volume.silenceRangeLabel' && template.includes('{value}') && typeof db === 'number' && isFinite(db)) {
@@ -2715,8 +2718,17 @@ function updateVolumeToggleState(expanded) {
         const expandedValue = expanded ? 'true' : 'false';
         volumeToggleBtn.setAttribute('aria-expanded', expandedValue);
         volumeToggleBtn.dataset.expanded = expandedValue;
-        volumeToggleBtn.textContent = expanded ? t('index.volume.collapse') : t('index.volume.expand');
+        const labelText = expanded ? t('index.volume.collapse') : t('index.volume.expand');
+        const labelElement = volumeToggleBtn.querySelector('.volume-toggle-label');
+        if (labelElement) {
+            labelElement.textContent = labelText;
+        }
+        volumeToggleBtn.setAttribute('aria-label', labelText);
         volumeToggleBtn.title = expanded ? t('index.volume.collapseTooltip') : t('index.volume.expandTooltip');
+        const iconElement = volumeToggleBtn.querySelector('.volume-toggle-icon');
+        if (iconElement) {
+            iconElement.innerHTML = expanded ? VOLUME_TOGGLE_ICON_COLLAPSE : VOLUME_TOGGLE_ICON_EXPAND;
+        }
     }
 
     syncVolumePanelOffset();

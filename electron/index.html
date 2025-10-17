@@ -1171,7 +1171,8 @@
             height: 28px;
             stroke: currentColor;
         }
-        .record-control .record-label {
+        .record-control .record-label,
+        .sr-only {
             position: absolute;
             width: 1px;
             height: 1px;
@@ -3897,7 +3898,7 @@
 
 
 
-          gap: 6px;
+          justify-content: center;
 
 
 
@@ -3928,6 +3929,19 @@
 
 
 
+
+        .volume-toggle-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .volume-toggle-icon svg {
+            width: 18px;
+            height: 18px;
+            stroke: currentColor;
+            transition: transform 0.2s ease;
+        }
 
         .volume-toggle-btn:hover {
 
@@ -4017,31 +4031,6 @@
 
 
 
-        .volume-toggle-btn[data-expanded="true"]::after {
-
-
-
-
-
-
-
-          content: '\25B2';
-
-
-
-
-
-
-
-          font-size: 0.65rem;
-
-
-
-
-
-
-
-        }
 
 
 
@@ -4057,31 +4046,6 @@
 
 
 
-        .volume-toggle-btn[data-expanded="false"]::after {
-
-
-
-
-
-
-
-          content: '\25BC';
-
-
-
-
-
-
-
-          font-size: 0.65rem;
-
-
-
-
-
-
-
-        }
 
 
 
@@ -6667,6 +6631,23 @@
 
         }
 
+        .log-controls .icon-button {
+            padding: 8px;
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .log-controls .icon-button svg {
+            width: 18px;
+            height: 18px;
+            stroke: currentColor;
+        }
+
+
 
 
 
@@ -8266,7 +8247,16 @@
 
 
 
-        <button type="button" onclick="exportLogs()" data-i18n="index.buttons.exportLogs">Export</button>
+        <button type="button" class="icon-button" onclick="exportLogs()" title="Export logs" aria-label="Export logs" data-i18n-title="index.buttons.exportLogs" data-i18n-ariaLabel="index.buttons.exportLogs">
+          <span aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <path d="M19 16V22M19 22L22 19M19 22L16 19" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path>
+              <path d="M4 6V12C4 12 4 15 11 15C18 15 18 12 18 12V6" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path>
+              <path d="M11 3C18 3 18 6 18 6C18 6 18 9 11 9C4 9 4 6 4 6C4 6 4 3 11 3Z" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path>
+              <path d="M11 21C4 21 4 18 4 18V12" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path>
+            </svg>
+          </span>
+        </button>
 
 
 
@@ -8274,7 +8264,13 @@
 
 
 
-        <button type="button" onclick="clearLogs()" data-i18n="index.buttons.clearLogs">Clear</button>
+        <button type="button" class="icon-button" onclick="clearLogs()" title="Clear logs" aria-label="Clear logs" data-i18n-title="index.buttons.clearLogs" data-i18n-ariaLabel="index.buttons.clearLogs">
+          <span aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+              <path d="M6.75827 17.2426L12.0009 12M17.2435 6.75736L12.0009 12M12.0009 12L6.75827 6.75736M12.0009 12L17.2435 17.2426" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path>
+            </svg>
+          </span>
+        </button>
 
 
 
@@ -8378,7 +8374,15 @@
 
 
 
-      <button class="volume-toggle-btn" id="volumeToggleBtn" type="button" aria-expanded="false" aria-controls="volumeBody" data-expanded="false" data-i18n="index.volume.expand">Expand</button>
+      <button class="volume-toggle-btn" id="volumeToggleBtn" type="button" aria-expanded="false" aria-controls="volumeBody" data-expanded="false" title="Expand" aria-label="Expand">
+        <span class="volume-toggle-label sr-only" data-i18n="index.volume.expand">Expand</span>
+        <span class="volume-toggle-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M14.5 13.25L12 10.75L9.5 13.25" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path>
+            <path d="M6 5H18C20.2091 5 22 6.79086 22 9V15C22 17.2091 20.2091 19 18 19H6C3.79086 19 2 17.2091 2 15V9C2 6.79086 3.79086 5 6 5Z" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"></path>
+          </svg>
+        </span>
+      </button>
 
 
 
