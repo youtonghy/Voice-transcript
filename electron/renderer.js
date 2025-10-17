@@ -118,8 +118,7 @@ const activeConversationNameEl = document.getElementById('activeConversationName
 const historySearchInput = document.getElementById('historySearchInput');
 
 const toggleHistoryButton = document.getElementById('toggleHistoryButton');
-const toggleHistoryButtonIcon = toggleHistoryButton ? toggleHistoryButton.querySelector('.history-action-icon') : null;
-const toggleHistoryButtonLabel = toggleHistoryButton ? toggleHistoryButton.querySelector('.history-action-label') : null;
+const toggleHistoryButtonIcon = toggleHistoryButton ? toggleHistoryButton.querySelector('.history-button-icon') : null;
 const summaryButton = document.getElementById('summaryButton');
 
 const VOLUME_MIN_DB = -60;
@@ -758,9 +757,6 @@ function updateHistoryToggleUI() {
     const icon = historyCollapsed ? HISTORY_TOGGLE_ICON_COLLAPSED : HISTORY_TOGGLE_ICON_EXPANDED;
     if (toggleHistoryButtonIcon) {
         toggleHistoryButtonIcon.innerHTML = icon;
-    }
-    if (toggleHistoryButtonLabel) {
-        toggleHistoryButtonLabel.textContent = label;
     }
     toggleHistoryButton.title = label;
     toggleHistoryButton.setAttribute('aria-label', label);
